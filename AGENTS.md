@@ -2,9 +2,7 @@
 
 ## Project overview
 
-GitAmida is currently an experimental TypeScript extension for Cursor and VS Code. It keeps Git history in a bottom Panel View and opens selected file comparisons in the editor's native diff view.
-
-This branch exists to compare an editor-native interaction with the Go terminal prototype. Do not combine the implementations until the comparison checkpoint in `ROADMAP.md` is complete.
+GitAmida is a TypeScript extension for Cursor and VS Code focused on navigating Git history. Repository History is the singleton center; users can open several independent File History tabs and inspect changes in the editor's native diff.
 
 Read `README.md`, `DESIGN.md`, and `ROADMAP.md` before implementation.
 
@@ -28,11 +26,12 @@ Do not create append-only completion histories, ADR directories, or per-feature 
 - Prefer the smallest relevant change and avoid unrelated refactoring.
 - Build the smallest interaction that can validate user value.
 - Do not retain unused features merely because they were expensive to build.
-- Keep the Webview limited to rendering and input; Git execution and trusted state belong to the Extension Host.
-- Keep the Git adapter independent of VS Code types.
+- Keep the Webview limited to rendering and input; trusted repository and navigation state belong to the Extension Host.
+- Keep the Git adapter independent of VS Code and Webview types.
 - Provide an equivalent keyboard action for every mouse action.
 - Reflow safely when the View is moved to a narrow container.
-- Do not add operations that change Git history without an explicit design change.
+- Keep branch switching behind a separate mutation boundary from all history queries.
+- Do not add history-editing operations without an explicit design change.
 
 ## Directory structure
 
@@ -45,13 +44,34 @@ test/           Node tests for parsing and temporary repositories
 
 Do not introduce a framework, bundler, domain package, or nested extension workspace until a current feature requires it.
 
+## Repository History UI
+
+- Keep exactly one pinned, non-closable Repository History tab.
+- Render each commit on one row and never wrap row content.
+- Show graph, subject, refs, author, and date as responsive columns.
+- Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
+- Split the right side into changed files above and resizable, collapsible commit details below.
+- Keep Flat and Tree file presentation as explicit user-selectable modes.
+- Make the full commit hash easy to copy; do not provide arbitrary commit switching.
+- Preserve selection and scroll state while File History tabs or native diffs are active.
+
+## File History UI
+
+- Permit several closable File History tabs while Repository History remains a singleton.
+- Deduplicate tabs by repository identity and file identity.
+- Preserve selected revision and scroll state per tab.
+- Open File History from changed files, Explorer resources, and editor resources.
+- Let a revision reveal and select its commit in Repository History without closing the file tab.
+- Single-click may update a preview diff; Enter and double-click must provide the explicit open or pin action.
+- Handle renamed and deleted paths as identity transitions, not display-only labels.
+
 ## Node.js and dependency safety
 
 - Use the Node.js and npm versions declared by `mise.toml` and `packageManager`.
 - Use npm and commit `package-lock.json`.
 - Use `npm ci` for clean and CI installs.
 - Keep `.npmrc` supply-chain protections enabled.
-- Prefer no runtime dependencies. Inspect the source, lifecycle scripts, provenance, and transitive graph before adding any dependency.
+- Prefer no runtime dependencies. Inspect source, lifecycle scripts, provenance, and the transitive graph before adding a dependency.
 - Do not approve an install script broadly. Add an exact package version to `allowScripts` only after review.
 - Do not run untrusted scripts with broad access to credentials, the home directory, synced storage, or external storage.
 
@@ -62,10 +82,18 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Disable color, pagers, and external diffs for parsed output.
 - Use NUL-delimited path output.
 - Preserve useful Git stderr and translate it into concise user-facing errors.
-- Apply history, output, and time limits to potentially large operations.
-- Do not depend on the user's aliases, pager, color, external diff, or path-quoting settings.
-- Permit only read-only Git commands in the initial scope.
+- Apply operation-specific history, output, and time limits.
+- Do not depend on user aliases, pager, color, external diff, or path-quoting settings.
 - Accept commit hashes and paths for follow-up operations only from parsed Extension Host state, never directly from untrusted Webview state.
+
+## Branch switching safety
+
+- Support named branch switching separately from read-only Git queries.
+- Do not provide arbitrary commit switching or hide detached HEAD behind ordinary switch wording.
+- Before switching, inspect dirty tracked files, untracked conflicts, in-progress Git operations, submodules, and worktree branch occupancy.
+- Never stash, discard, force, or save editor contents automatically.
+- If safety is uncertain, leave the repository unchanged and explain the blocker.
+- Refresh all repository and history state after a successful switch.
 
 ## Webview and editor integration
 
@@ -90,13 +118,15 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Test Git parsing with fixed byte sequences and temporary repositories.
 - Never mutate the user's real repositories or global Git configuration in tests.
 - Test root commits, merges, renames, deletions, binary files, and paths with spaces or non-ASCII characters as those behaviors are added.
-- Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on snapshots of HTML.
+- Test navigation state independently: Repository History singleton, File History tab deduplication, selection retention, and reveal-in-log.
+- Test branch switching only in temporary repositories and cover every refusal state before success paths.
+- Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on HTML snapshots.
 - Run `npm ci`, `npm run check`, `npm test`, and `npm run package:inspect` at each checkpoint.
-- Manually verify mouse, keyboard, resizing, Panel persistence, and native diff opening in Cursor and VS Code.
+- Manually verify mouse, keyboard, resizing, focus, Panel persistence, and native diff opening in Cursor and VS Code.
 
 ## UI and intellectual-property considerations
 
-- Abstract useful workflow ideas from existing IDEs into GitAmida's own requirements.
+- Abstract useful workflow ideas from existing history tools into GitAmida's own requirements.
 - Do not faithfully reproduce a specific product's layout, wording, icons, colors, or imagery.
 - Do not import JetBrains source code, assets, or screenshots without permission.
 - Do not imply affiliation or official compatibility through naming or presentation.

@@ -2,123 +2,116 @@
 
 ## Purpose
 
-GitAmida helps people review several Git commits as one coherent unit of change. The immediate experiment is narrower: determine whether an editor-native history panel provides substantially better review ergonomics than a terminal UI.
+GitAmida is a focused history navigator for understanding how a repository and its files changed over time.
 
-The key interaction is keeping the commit history and changed-file context visible while detailed diffs open in the editor area.
+The central experience is Repository History: scan a compact commit graph, inspect changed files and commit details, and open native diffs without hiding the log. File histories branch from that center as independent investigation tabs and can link back to the relevant repository commit.
 
-## Current product hypothesis
+Reviewing multiple commits as one coherent change remains a distinctive goal, but it belongs inside this broader history-navigation model rather than defining a separate tool.
 
-Cursor and VS Code are the primary environments for this branch. GitAmida contributes a View Container to the bottom Panel, alongside Terminal, Problems, and Output.
+## Product surface
 
-This is an editor-native comparison MVP, not yet an irreversible product decision. The Go terminal prototype remains isolated on its own branch. Do not combine both frontends or create a shared cross-language core before hands-on comparison identifies which experience should survive.
+Cursor and VS Code are the primary environments. GitAmida contributes one View Container to the bottom Panel, alongside Terminal, Problems, and Output.
 
-Evaluate the two approaches using concrete interaction costs:
+The GitAmida view owns two kinds of internal tabs:
 
-- How easy GitAmida is to discover and reopen
-- Whether history remains useful while source files and diffs are inspected
-- The number of actions from commit selection to a readable diff
-- Mouse and keyboard comfort during repeated use
-- Layout clarity at realistic Panel heights and widths
-- Responsiveness on an everyday repository
-- The real value lost by tying this implementation to Cursor and VS Code
+- **Repository History**: exactly one pinned, non-closable tab
+- **File History**: zero or more closable tabs, one per repository path
 
-## Primary layout
+Opening the same file history twice focuses its existing tab. File-history tabs preserve their selected revision and scroll position while another tab is active. Repository History preserves its selected commit and file state when a file-history tab is opened.
 
-```text
-┌──────────────────── Cursor / VS Code ────────────────────┐
-│ Editor area                                               │
-│ ┌────────────────────┬────────────────────┐               │
-│ │ Parent revision    │ Selected revision  │ native diff   │
-│ └────────────────────┴────────────────────┘               │
-├──────────────────────────┬───────────────────────────────┤
-│ GitAmida Panel           │                               │
-│ Commit graph and history │ Changed files                 │
-│ ● Fix header             │ M src/header.ts              │
-│ ● Update navigation      │ A src/navigation.ts          │
-├──────────────────────────┴───────────────────────────────┤
-│ Problems  Output  Terminal  GitAmida                      │
-└───────────────────────────────────────────────────────────┘
-```
+Detailed text comparisons open in the editor's native diff view instead of consuming the limited height of the bottom Panel.
 
-The Panel contains the graph/history and changed files side by side. Selecting a commit updates the file list. Double-clicking a file, or pressing Enter while it is focused, opens the built-in `vscode.diff` editor and leaves the Panel available.
+## Repository History
 
-When the View is moved to a narrow sidebar, the two lists stack vertically rather than overflowing.
+### Commit list
 
-## Technology choices
+The commit list is optimized for scanning a large history.
 
-### TypeScript extension
+- Render every commit on exactly one row
+- Never wrap subject or metadata inside a history row
+- Show graph, subject, refs, author, and date as columns
+- Give the subject flexible width and truncate it with an accessible full-value label
+- Keep graph alignment stable while optional columns appear or disappear
+- Hide lower-priority columns responsively before allowing horizontal overflow
+- Keep the selected row visually distinct without relying on color alone
 
-Implement the product experiment as one TypeScript extension.
+The full commit hash and other secondary metadata do not need permanent space in every row.
 
-- Cursor and VS Code already provide the Extension Host runtime to installed extensions
-- The View Container API makes GitAmida visible beside built-in Panel tools
-- The editor's native diff supplies selection, scrolling, syntax highlighting, accessibility, and familiar mouse behavior
-- A single frontend is faster to change while the interaction model is still being validated
+### Changed files and commit details
 
-Node.js is a development and build tool only. Do not add a requirement for extension users to install Node.js.
+The right side is split vertically:
 
-### Webview View in the Panel
+- Changed files above
+- Selected commit details below
 
-Use a Webview View for this MVP because a commit topology graph plus two independently scrollable horizontal panes cannot be represented well by one native Tree View. This exception must remain narrow:
+The divider is resizable. Commit details can be collapsed, but changed files must retain a usable minimum height.
 
-- Use VS Code theme tokens instead of imitating another product
-- Keep all scripts and styles local
-- Apply a restrictive Content Security Policy with a per-render nonce
-- Render Git data through DOM text nodes, never HTML interpolation
-- Validate every message at the Extension Host boundary
-- Preserve complete keyboard access for mouse actions
+Changed files initially support a flat full-path list. Add a user-controlled Tree mode for large changes, while retaining Flat mode for fast scanning and searching. Tree expansion state is presentation state and must not alter the selected files.
 
-If later usage shows that a simpler native Tree View is sufficient, prefer it over retaining custom Webview behavior.
+The details pane shows:
 
-### Native diff editor
+- Full commit subject
+- Full commit hash with an explicit copy action
+- Author name and email
+- Authored or committed time, with the chosen meaning labeled
+- Branch and tag refs
+- Parent commits
+- The active comparison parent for a merge commit
 
-Load the before and after Git blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command.
+Selecting a commit updates both changed files and details. Loading either area must not block or clear the other area unnecessarily.
+
+### Commit graph
+
+The current MVP displays Git's plain graph output. The intended graph uses a theme-aware lane model with distinct colors, connected branch and merge lines, and commit markers aligned with history rows.
+
+Derive the visual model from commit hashes and parents rather than depending on user-configured Git colors. Pagination must preserve active lane state across loaded batches.
+
+## File History
+
+A file history is an investigation opened from one of these entry points:
+
+- A changed-file context menu in Repository History
+- The Cursor or VS Code Explorer context menu
+- The active editor's title or context menu
+
+Several file histories may stay open simultaneously. Repository History remains a singleton because it is the stable navigation center; supporting several repository logs would add repository ownership, cache, and selection complexity without a demonstrated need.
+
+Each File History tab shows revisions that changed the file, follows renames where Git can determine them, and retains the path identity needed to compare historical blobs.
+
+- Single-clicking a revision updates a preview diff
+- Enter or double-click opens or pins the native diff
+- **Show in Repository History** activates the singleton Repository History tab, loads the commit if necessary, and selects it
+- Returning to Repository History never closes the originating File History tab
+
+Path history must handle additions, deletions, renames, merge simplification, and commits outside the initially loaded repository-history page explicitly.
+
+## Branch switching
+
+GitAmida plans to support switching to a named branch. It does not provide direct switching to an arbitrary commit.
+
+- Use `git switch` with an argument array and no shell
+- Check working-tree changes, untracked conflicts, in-progress Git operations, submodules, and worktree branch occupancy before switching
+- Never stash, discard, force, or save editor contents automatically
+- Explain why switching is blocked and leave the repository unchanged
+- Refresh HEAD, branch, history, changed files, details, and relevant file histories after a successful switch
+
+The commit hash remains copyable so an informed user can run `git switch --detach <hash>` manually. Do not label a detached-HEAD action as ordinary switching.
+
+Branch switching changes the working tree but not Git history. Keep it behind a separate application boundary from all read-only history queries and test it independently.
+
+## Native diff editor
+
+Load before and after Git blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command.
 
 For a single commit:
 
 - Compare an ordinary commit with its first parent
 - Compare a root commit with Git's empty tree
-- Show the first-parent behavior explicitly before merge-parent selection is added
+- Show the active parent for merge commits and later allow explicit parent selection
 
-The current virtual-document path assumes text content. Binary and image diffs report that the MVP does not support them instead of sending invalid text to the editor.
-
-### Git CLI
-
-Invoke the locally installed Git CLI from the Extension Host instead of parsing `.git` directly.
-
-- Run `execFile` with an argument array and never use a shell
-- Disable color, pagers, and external diff behavior
-- Use NUL-delimited output for changed paths
-- Keep all commands read-only
-- Limit initial history to 100 commits and command output to 16 MiB
-- Time out commands after 15 seconds
-
-Paths are passed as arguments, but Git's `ref:path` syntax is still required to read historical blobs. Commit hashes and changed paths used for diff opening must come from the Extension Host's current parsed state, not directly from Webview messages.
-
-## Logical architecture
-
-```text
-Panel View Container
-        │
-        ▼
-Webview View (rendering and input only)
-        │ validated messages
-        ▼
-Extension Host orchestration
-        ├── Git CLI adapter
-        ├── Current commit/file state
-        └── Virtual text content provider
-                         │
-                         ▼
-                   vscode.diff
-                   in editor area
-```
-
-The Webview does not execute Git or construct Git revisions. The Git adapter does not import VS Code APIs. Keep parsing independently testable and do not add packages until the implementation requires a real boundary.
+The current virtual-document path assumes text content. Binary and image diffs must report or route unsupported content explicitly instead of coercing it into text.
 
 ## Multiple-commit semantics
-
-These semantics remain the product goal after the single-commit interaction is validated.
 
 ### Contiguous range
 
@@ -132,14 +125,51 @@ Do not create a virtual tree by cherry-picking selected commits. Aggregate chang
 
 Treat the range from the merge base with an explicit or inferred base branch through the target branch as one change. Always allow correction of an inferred base.
 
+## Technology choices
+
+### TypeScript extension
+
+Implement GitAmida as one TypeScript extension.
+
+- Cursor and VS Code provide the Extension Host runtime to installed extensions
+- The View Container API makes GitAmida visible beside built-in Panel tools
+- The native diff supplies selection, scrolling, syntax highlighting, accessibility, and familiar mouse behavior
+- A single frontend avoids duplicating selection and navigation behavior
+
+Node.js is a development and build tool only. Extension users do not need to install Node.js.
+
+### Webview View
+
+Use a Webview View because a topology graph, compact data grid, resizable details split, and multiple internal history tabs exceed what one native Tree View represents well.
+
+- Use VS Code theme tokens instead of copying another product's presentation
+- Keep all scripts and styles local
+- Apply a restrictive Content Security Policy with a per-render nonce
+- Render Git data through DOM text nodes, never HTML interpolation
+- Validate every message at the Extension Host boundary
+- Provide complete keyboard equivalents and visible focus
+- Preserve responsive reflow and usable target sizes
+
+### Git CLI
+
+Invoke the locally installed Git CLI from the Extension Host instead of parsing `.git` directly.
+
+- Run `execFile` with an argument array and never use a shell
+- Disable color, pagers, and external diff behavior for parsed output
+- Use NUL-delimited output for paths
+- Apply operation-specific history, output, and time limits
+- Treat Git output and Webview messages as untrusted input
+
+The initial history loads 100 commits as an implementation limit, not a product limit. Additional history should load incrementally while preserving graph and selection state.
+
+## Logical architecture
+
+The Webview renders trusted view models and emits validated user intentions. Extension Host application services own repository state, Repository History, open File History sessions, Git queries, branch-switch preflight, and virtual diff documents. The Git adapter does not import VS Code or Webview types.
+
+Do not introduce a second frontend or shared cross-language core unless a current product requirement justifies it.
+
 ## Safety and independence
 
-The initial release is read-only. It does not provide commit, merge, rebase, reset, checkout, branch switching, or other repository-mutating operations.
+All history, file, and diff operations are read-only. Branch switching is the only planned working-tree mutation and follows the separate safety boundary above.
 
-GitAmida may learn from the general workflow of existing IDEs, but it must derive its screen and interactions from its own requirements. Do not reproduce JetBrains wording, icons, colors, assets, screenshots, or source code, and do not imply affiliation.
-
-## Conditions for choosing a long-term direction
-
-Do not merge this branch or the terminal prototype into `main` merely because either implementation is complete. Choose after both can be exercised on the same real repository.
-
-Prefer the editor-native direction if the persistent Panel and native diff materially reduce review friction and editor lock-in is acceptable in practice. Prefer the terminal direction if portability across Cursor, the Codex app, and standalone terminals proves more valuable than the editor-native interaction. Consider a different design only when both fail the central workflow for concrete, recurring reasons.
+GitAmida may learn from general history-viewer workflows, but it must derive its hierarchy and interactions from its own requirements. Do not reproduce JetBrains wording, icons, colors, assets, screenshots, or source code, and do not imply affiliation.
