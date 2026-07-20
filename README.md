@@ -35,6 +35,7 @@ GitAmidaは、複数のGitコミットを一つの変更単位として素早く
 - **Safe**: 履歴を書き換える操作を初期スコープへ含めない
 - **Fast**: 履歴とdiffを必要になった時点で遅延取得する
 - **Focused**: 汎用Gitクライアントではなく、変更確認に集中する
+- **Evidence-driven minimalism**: 小さな核から始め、実際に使いやすさが確認できた機能だけを残す
 
 ## 初期スコープ外
 
@@ -44,7 +45,7 @@ GitAmidaは、複数のGitコミットを一つの変更単位として素早く
 - branchの作成・削除
 - conflict解消
 - AIによる要約やレビュー
-- VS Code/CursorネイティブPanel
+- VS Code/CursorネイティブPanel（現在は計画しない）
 
 ブランチ切り替えは、閲覧機能が安定した後に安全性を確認して追加を検討します。
 
@@ -56,7 +57,9 @@ GitAmidaは、複数のGitコミットを一つの変更単位として素早く
 - Lip Gloss v2
 - Gitオブジェクトライブラリではなく、まずGit CLIを利用
 
-GitAmida本体は単一のGoバイナリにします。VS Code/CursorやKaleidoscopeとの連携は、外部diffオープナーとして本体から分離します。
+GitAmida本体は単一のGoバイナリにします。VS Code/CursorやKaleidoscopeとの連携は、本体から分離した小さなアダプターとして提供します。
+
+VS Code/Cursor向けには、Status Barから専用Terminalを作成・再表示する薄い拡張を早期に用意します。拡張側へGit解析やTUIを重複実装しません。
 
 ## ドキュメント
 

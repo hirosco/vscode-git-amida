@@ -6,11 +6,17 @@ GitAmidaの中心価値は、複数コミットを人が一つの変更単位と
 
 履歴ビューア自体がエディタ領域を占有すると、Gitログの文脈と作業ファイルを同時に見られない。GitAmidaはTerminal内に履歴と変更ファイル一覧を保ち、詳細diffだけを必要な表示先へ開く。
 
+## Evidence-driven minimalism
+
+GitAmidaは「Small core, proven features」を開発原則とする。
+
+予測で機能を増やさず、中心課題を解く最小単位から実装する。実際の利用で操作回数、理解しやすさ、安定性の改善が確認できた機能だけを製品へ残す。追加機能は既存の中心体験を複雑にせず、不要なら安全に削除できる境界へ置く。
+
 ## 優先する利用環境
 
 正本のUIはTerminal TUIとする。Cursor、VS Code、Codex app、Ghosttyなど、実行元が変わっても同じバイナリと操作体系を利用できることを優先する。
 
-VS Code/CursorネイティブPanelは初期スコープに含めない。PanelへのView Container登録自体は小さいが、コミットグラフ、選択、ファイルツリーを実装すると別フロントエンドになるためである。
+VS Code/CursorにはStatus BarとコマンドパレットからTUIを起動する薄い拡張だけを提供する。ネイティブPanelは計画しない。PanelへのView Container登録自体は小さくても、コミットグラフ、選択、ファイルツリーを実装すると別フロントエンドになり、中心機能が重複するためである。
 
 ## 基本画面
 
@@ -51,6 +57,18 @@ TUI本体にはGo、Bubble Tea v2、Bubbles v2、Lip Gloss v2を利用する。
 
 Rustは採用しない。画像diffは高度な画像TUIを自作せず、簡易プレビューと外部ツール連携で補うため、Ratatuiの画像Widgetを理由に言語を変更しない。
 
+### VS Code/Cursor起動拡張
+
+エディタ拡張はTypeScriptで実装するが、次の責務だけに限定する。
+
+- Gitリポジトリを開いているとき、左側のStatus Barへ`GitAmida`を表示する
+- Status Barまたは`GitAmida: Open`コマンドから専用Terminalを起動する
+- 既存のGitAmida Terminalがあれば新規作成せず再表示する
+- 現在のworkspaceまたはユーザーが選んだworkspace folderを`--repo`へ渡す
+- `git-amida`が見つからない場合に導入方法を案内する
+
+拡張はGitコマンドを実行せず、コミット、選択、diffの状態を持たない。Go本体と機能を二重実装しないことで、TypeScriptの混在を明確なプラットフォームアダプターに留める。
+
 ### Git CLI
 
 初期実装ではGitオブジェクトを直接解析せず、ローカルにあるGit CLIを実行する。
@@ -64,6 +82,9 @@ Git出力は機械解析向けの安定した形式を指定し、色、pager、
 ## 論理構成
 
 ```text
+Terminal / editor launcher
+        │
+        ▼
 CLI arguments / config
         │
         ▼
@@ -209,7 +230,6 @@ CursorのエディタCLIで同等の起動が安定して利用できるかを�
 
 - Terminalでは実現できない操作が中心価値になった
 - 画像diffが簡易プレビューではなく主要機能になった
-- VS Code/CursorネイティブPanelへの需要がTUIを上回った
 - Git CLIの起動・解析コストが測定上のボトルネックになった
 
-再評価まではGo TUIを正本とし、別言語のフロントエンドを並行実装しない。
+再評価まではGo TUIを正本とし、別言語のフロントエンドを並行実装しない。ネイティブPanelは要望だけで追加せず、Terminalでは解決できない具体的な利用上の問題が継続して確認された場合に、改めて設計判断する。

@@ -18,6 +18,9 @@ GitAmidaは、複数のGitコミットを一つの変更単位として確認す
 
 - 最小変更を優先し、無関係なリファクタリングを行わない
 - GitAmida本体はGoで完結させる
+- VS Code/Cursor拡張は起動アダプターに限定し、Git解析や画面ロジックを持たせない
+- 仮説だけで機能を増やさず、実利用で価値を確認できる最小単位から実装する
+- 使われない機能を実装コストだけを理由に残さず、安全に削除・縮小できる境界を保つ
 - UI、Git実行、ドメインロジック、外部ツール連携を分離する
 - Bubble Teaの`Update`をブロックせず、I/Oはキャンセル可能なコマンドとして実行する
 - マウス操作には必ず同等のキーボード操作を用意する
@@ -35,6 +38,7 @@ internal/tui/        Bubble Teaの画面、入力、描画
 internal/diff/       diffモデルと表示形式
 internal/opener/     内部・外部diffオープナー
 internal/config/     設定の読み込みと検証
+extensions/vscode/   Status BarとTerminal起動だけを担う任意拡張
 testdata/            解析用の固定fixture
 ```
 
