@@ -54,6 +54,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
 - Preserve selection and scroll state while File History tabs or native diffs are active.
+- Prefetch history automatically near the loaded end; do not use a routine **Load more** button. Offer retry only after a loading failure.
 
 ## File History UI
 

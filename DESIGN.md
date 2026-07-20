@@ -160,7 +160,7 @@ Invoke the locally installed Git CLI from the Extension Host instead of parsing 
 - Apply operation-specific history, output, and time limits
 - Treat Git output and Webview messages as untrusted input
 
-The initial history loads 100 commits as an implementation limit, not a product limit. Additional history should load incrementally while preserving graph and selection state.
+The initial history loads 100 commits as a page size, not a product limit. Prefetch the next page automatically before the user reaches the end of the current rows, preserve graph, selection, and scroll state, and continue until all reachable history is available. Do not require a routine **Load more** action. Show an explicit retry only when automatic loading fails.
 
 ## Logical architecture
 

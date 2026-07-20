@@ -49,7 +49,8 @@ This checkpoint is complete when users can investigate several files and always 
 - Make first-parent behavior visible for merge commits and allow another parent to be chosen
 - Handle renames, submodules, binary files, oversized blobs, detached HEAD, empty repositories, and non-Git folders explicitly
 - Cancel stale history and blob requests as selection changes
-- Load additional history incrementally instead of stopping at 100 commits
+- Prefetch additional history automatically near the current end instead of stopping at 100 commits or requiring a **Load more** action
+- Preserve the visible scroll position while pages append and show an explicit retry only after a loading failure
 - Replace the single-color graph text with a theme-aware lane graph while preserving pagination continuity
 - Test installation and behavior in both Cursor and VS Code
 
