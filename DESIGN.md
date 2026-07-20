@@ -1,24 +1,24 @@
 # GitAmida Design
 
-## 目的
+## Purpose
 
-GitAmidaの中心価値は、複数コミットを人が一つの変更単位として素早く確認できることにある。
+GitAmida's core value is helping people review multiple commits quickly as one unit of change.
 
-履歴ビューア自体がエディタ領域を占有すると、Gitログの文脈と作業ファイルを同時に見られない。GitAmidaはTerminal内に履歴と変更ファイル一覧を保ち、詳細diffだけを必要な表示先へ開く。
+When a history viewer occupies the editor area, users cannot see the Git log context and working files at the same time. GitAmida keeps history and changed files visible in the terminal and opens detailed diffs only where they are needed.
 
 ## Evidence-driven minimalism
 
-GitAmidaは「Small core, proven features」を開発原則とする。
+GitAmida follows the principle “Small core, proven features.”
 
-予測で機能を増やさず、中心課題を解く最小単位から実装する。実際の利用で操作回数、理解しやすさ、安定性の改善が確認できた機能だけを製品へ残す。追加機能は既存の中心体験を複雑にせず、不要なら安全に削除できる境界へ置く。
+Start with the smallest implementation that solves the central problem instead of accumulating features based on predictions. Retain features only after real use demonstrates improvements in interaction cost, comprehensibility, or reliability. Place additions behind boundaries that do not complicate the core experience and allow safe removal when they do not prove useful.
 
-## 優先する利用環境
+## Preferred environments
 
-正本のUIはTerminal TUIとする。Cursor、VS Code、Codex app、Ghosttyなど、実行元が変わっても同じバイナリと操作体系を利用できることを優先する。
+The terminal TUI is the canonical interface. The same binary and interaction model should work whether it is launched from Cursor, VS Code, the Codex app, Ghostty, or another terminal.
 
-VS Code/CursorにはStatus BarとコマンドパレットからTUIを起動する薄い拡張だけを提供する。ネイティブPanelは計画しない。PanelへのView Container登録自体は小さくても、コミットグラフ、選択、ファイルツリーを実装すると別フロントエンドになり、中心機能が重複するためである。
+VS Code and Cursor receive only a thin extension that launches the TUI from the status bar or command palette. A native panel is not planned. Registering a view container is small by itself, but implementing the commit graph, selection, and file tree would create a second frontend and duplicate core behavior.
 
-## 基本画面
+## Primary layout
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
@@ -38,48 +38,48 @@ VS Code/CursorにはStatus BarとコマンドパレットからTUIを起動す�
 └──────────────────────────────────────────────────────────┘
 ```
 
-コミットグラフを左、選択内容と変更ファイルツリーを右、内部diffを下に置く。内部diffは非表示または拡大できるようにし、外部diffを開いた後も履歴の選択状態を維持する。
+Place the commit graph on the left, the selection summary and changed-file tree on the right, and the internal diff below them. The internal diff can be hidden or expanded. Opening an external diff must preserve the history selection.
 
-## 技術選定
+## Technology choices
 
-### Go + Bubble Tea v2
+### Go and Bubble Tea v2
 
-TUI本体にはGo、Bubble Tea v2、Bubbles v2、Lip Gloss v2を利用する。
+Use Go, Bubble Tea v2, Bubbles v2, and Lip Gloss v2 for the TUI core.
 
-理由は次の通り。
+Reasons:
 
-- 単一バイナリとして配布しやすい
-- エディタやNode.jsランタイムへ依存しない
-- キーボード、マウス、画面サイズ変更、非同期処理を扱える
-- `Model / Update / View`によって状態遷移を一貫して管理できる
-- Git CLIを実行して解析する用途では、Rustの性能上の優位が決定要因にならない
-- Rust + Ratatuiより、初期実装と保守の認知負荷を抑えられる
+- Easy distribution as a single binary
+- No dependency on an editor or a Node.js runtime
+- Support for keyboard input, mouse input, terminal resizing, and asynchronous work
+- A consistent state-transition model through `Model / Update / View`
+- Rust's performance advantage is not decisive for a tool that invokes and parses the Git CLI
+- Lower implementation and maintenance overhead than Rust and Ratatui for this project
 
-Rustは採用しない。画像diffは高度な画像TUIを自作せず、簡易プレビューと外部ツール連携で補うため、Ratatuiの画像Widgetを理由に言語を変更しない。
+Do not adopt Rust. Image diffs use a lightweight preview plus external-tool integration rather than a sophisticated image TUI, so Ratatui's image widgets do not justify changing languages.
 
-### VS Code/Cursor起動拡張
+### VS Code/Cursor launch extension
 
-エディタ拡張はTypeScriptで実装するが、次の責務だけに限定する。
+Implement the editor extension in TypeScript, but limit it to these responsibilities:
 
-- Gitリポジトリを開いているとき、左側のStatus Barへ`GitAmida`を表示する
-- Status Barまたは`GitAmida: Open`コマンドから専用Terminalを起動する
-- 既存のGitAmida Terminalがあれば新規作成せず再表示する
-- 現在のworkspaceまたはユーザーが選んだworkspace folderを`--repo`へ渡す
-- `git-amida`が見つからない場合に導入方法を案内する
+- Show `GitAmida` on the left side of the status bar when a Git repository is open
+- Launch a dedicated terminal from the status bar item or the `GitAmida: Open` command
+- Reveal an existing GitAmida terminal instead of creating a duplicate
+- Pass the current workspace, or a workspace folder selected by the user, through `--repo`
+- Explain how to install GitAmida when the `git-amida` executable is unavailable
 
-拡張はGitコマンドを実行せず、コミット、選択、diffの状態を持たない。Go本体と機能を二重実装しないことで、TypeScriptの混在を明確なプラットフォームアダプターに留める。
+The extension does not run Git commands or own commit, selection, or diff state. Keeping it free of product behavior confines the TypeScript portion to an explicit platform adapter and avoids duplicating the Go core.
 
 ### Git CLI
 
-初期実装ではGitオブジェクトを直接解析せず、ローカルにあるGit CLIを実行する。
+The initial implementation invokes the locally installed Git CLI instead of reading Git objects directly.
 
-- Git自身のrevision、rename、diffの意味論を利用できる
-- Git利用者の環境で追加のネイティブライブラリを必要としない
-- 直接解析が必要になるまで実装範囲を抑えられる
+- Reuse Git's own revision, rename, and diff semantics
+- Avoid additional native libraries in an environment where Git is already available
+- Keep implementation scope small until direct object access becomes necessary
 
-Git出力は機械解析向けの安定した形式を指定し、色、pager、外部diffなどのユーザー設定を無効化する。
+Request stable, machine-readable output and disable user-controlled color, pagers, and external diffs.
 
-## 論理構成
+## Logical architecture
 
 ```text
 Terminal / editor launcher
@@ -100,136 +100,136 @@ Application services
                   ├── Internal TUI
                   ├── VS Code CLI
                   ├── Kaleidoscope ksdiff
-                  └── User configured command
+                  └── User-configured command
         │
         ▼
 Bubble Tea TUI
 ```
 
-ドメイン層はBubble TeaとGit CLIの型を受け取らない。これにより、選択ロジックを単体テストでき、将来別フロントエンドを追加する場合も再利用できる。
+The domain layer must not accept Bubble Tea or Git CLI types. This keeps selection logic independently testable and reusable if another frontend is ever justified.
 
-## コミット選択の意味論
+## Commit-selection semantics
 
-### 単一コミット
+### Single commit
 
-選択コミットの親と選択コミットを比較する。root commitはempty treeと比較する。merge commitの既定比較対象は初期検証で決定し、親を選べる余地を残す。
+Compare the selected commit with its parent. Compare a root commit with Git's empty tree. Determine the default parent for merge commits during the initial spike, while leaving room for explicit parent selection.
 
-### 連続範囲
+### Contiguous range
 
-選択したコミットが一つの祖先経路上で連続している場合、最古コミットの直前から最新コミットまでを一つの変更として扱う。
+When the selected commits are contiguous along one ancestry path, treat everything from immediately before the oldest commit through the newest commit as one change.
 
-表示するものは、範囲内コミット、重複排除した変更ファイル、範囲全体の最終差分、ファイルの最終状態である。
+Show the commits in the range, deduplicated changed files, the final diff for the whole range, and each file's final state.
 
-### 非連続選択
+### Non-contiguous selection
 
-選択コミットをcherry-pickした仮想ツリーは生成しない。
+Do not generate a virtual tree by cherry-picking the selected commits.
 
-変更ファイルを重複排除して集約し、ファイルごとに該当コミットを表示する。diffはコミット単位で時系列に確認する。
+Aggregate and deduplicate changed files, show the relevant commits for each file, and present per-commit diffs in chronological order.
 
-### ブランチ全体
+### Entire branch
 
-基準ブランチとのmerge-baseから対象ブランチまでを一つの変更として扱う。基準ブランチの自動判定には誤判定時の明示的な変更手段を用意する。
+Treat the range from the merge base with a base branch through the target branch as one change. When the base branch is inferred, provide an explicit way to correct a wrong guess.
 
-## diff
+## Diffs
 
-### テキスト
+### Text
 
-同じdiffモデルから次の表示形式を生成する。
+Generate these presentation modes from the same diff model:
 
 - Unified
 - Side-by-side
 - Word diff
 
-Side-by-sideを表示できない狭い端末ではUnifiedへ縮退する。表示形式はユーザーが明示的に切り替えられる。
+Degrade from side-by-side to unified when the terminal is too narrow. Users must also be able to select the presentation mode explicitly.
 
-空白の扱いは次から選べるようにする。
+Offer these whitespace modes:
 
-- 空白を含めて比較
-- 行末の空白を無視
-- 空白量の変更を無視
-- すべての空白を無視
-- 空行のみの変更を無視
+- Compare all whitespace
+- Ignore trailing whitespace
+- Ignore changes in the amount of whitespace
+- Ignore all whitespace
+- Ignore changes whose lines are all blank
 
-Git CLIのdiff条件と画面上の状態を一致させ、現在の空白設定を常に確認できるようにする。
+Keep Git CLI diff arguments consistent with the state shown on screen, and make the active whitespace mode visible at all times.
 
-### 画像
+### Images
 
-初期の画像diffは、対応端末で変更前と変更後を簡易表示する。高度なズーム、重ね合わせ、ピクセル差分は実装しない。
+The initial image diff shows lightweight before-and-after previews in supported terminals. Do not implement advanced zooming, overlays, or pixel-level comparison.
 
-詳細比較はKaleidoscopeの`ksdiff`へ渡せるようにする。対応端末または画像ライブラリの互換性が不十分な場合は、メタデータと外部ツールを開く操作だけを表示する。
+Delegate detailed comparison to Kaleidoscope through `ksdiff`. When terminal support or image-library compatibility is insufficient, show metadata and an action for opening an external tool instead.
 
-## 入力
+## Input
 
-キーボードを完全な操作手段とし、マウスを同等の近道として提供する。
+The keyboard is a complete interaction method. Mouse actions are equivalent shortcuts.
 
-- クリック: 行選択、フォーカス移動
-- 修飾クリックまたは選択トグル: 複数選択
-- 範囲選択操作: 連続範囲の選択
-- ダブルクリック: ファイルの既定diffを開く
-- ホイール: フォーカス中ペインをスクロール
-- ドラッグ: 初期スコープ外
+- Click: Select a row or move focus
+- Modified click or selection toggle: Select multiple items
+- Range-selection action: Select a contiguous range
+- Double-click: Open the default diff for a file
+- Wheel: Scroll the focused pane
+- Drag: Out of initial scope
 
-ダブルクリックは同じセルへの連続クリックを時間閾値で判定する。端末が修飾キーやマウス情報を十分に報告しない場合に備え、Space、Enter、範囲選択キーを必ず用意する。
+Detect a double-click as two clicks on the same cell within a time threshold. Always provide Space, Enter, and range-selection keys because some terminals do not report modifiers or mouse details reliably.
 
-## diffオープナー
+## Diff openers
 
-ファイルを開く操作は、Git解析やTUIから独立したオープナーへ委譲する。
+Delegate file-opening actions to openers that are independent of Git parsing and the TUI.
 
 ### Internal
 
-常に利用できる既定のフォールバック。Terminal内でテキストdiffまたは画像の概要を表示する。
+The always-available default fallback. Show a text diff or image summary inside the terminal.
 
 ### VS Code
 
-Git blobを専用の一時ファイルへ展開し、VS Code CLIの`--diff`で比較する。CLIが利用できない場合はエラーを説明し、内部diffへ戻れるようにする。
+Materialize Git blobs as dedicated temporary files and compare them with the VS Code CLI's `--diff` option. If the CLI is unavailable, explain the error and allow the user to return to the internal diff.
 
 ### Cursor
 
-CursorのエディタCLIで同等の起動が安定して利用できるかを実装前に検証する。未確認のCLI引数を前提にしない。
+Before implementation, verify whether Cursor's editor CLI can reliably launch the equivalent diff. Do not depend on unverified CLI arguments.
 
 ### Kaleidoscope
 
-`ksdiff`へ変更前後のファイルを渡す。画像の詳細比較で推奨するが、必須依存にはしない。
+Pass the before and after files to `ksdiff`. Recommend it for detailed image comparison, but never make it a required dependency.
 
 ### Custom
 
-将来、実行ファイルと引数テンプレートを設定可能にする。シェル文字列を評価せず、引数配列として検証・実行する。
+In the future, allow users to configure an executable and argument template. Validate and execute an argument array rather than evaluating a shell command string.
 
-一時ファイルは専用ディレクトリに置き、外部ツールが読み込みを完了する前に削除しない。ファイル名と表示ラベルからrevisionとpathを識別できるようにする。
+Place temporary files in a dedicated directory and do not delete them before the external tool has finished reading them. Make the revision and path identifiable from filenames and display labels.
 
-## パフォーマンス
+## Performance
 
-- 初回は現在ブランチ周辺の履歴を件数制限して取得する
-- スクロールに応じて履歴を追加取得する
-- ファイル一覧とdiffは選択後に遅延取得する
-- 過去ファイル探索は機能を開いたときだけ実行する
-- 大きなdiff、binary、submoduleを検出して自動展開を制限する
-- 長時間処理はキャンセル可能にする
-- 独自キャッシュを`.git`やリポジトリ内へ置かない
+- Initially load a limited number of commits around the current branch
+- Load additional history during scrolling
+- Load changed files and diffs lazily after selection
+- Run historical file exploration only when that feature is opened
+- Detect oversized diffs, binary files, and submodules before automatic expansion
+- Make long-running operations cancellable
+- Do not store custom caches inside `.git` or the repository
 
-## 安全性
+## Safety
 
-初期リリースはread-onlyとする。commit、merge、rebase、reset、checkoutなど、リポジトリ状態を変更する操作を持たない。
+The initial release is read-only. It does not provide commit, merge, rebase, reset, checkout, or other repository-mutating operations.
 
-ブランチ切り替えを追加する場合は独立したマイルストーンとし、未コミット変更、submodule、worktree、進行中のGit操作に対する安全性を先に定義する。
+Treat branch switching as a separate milestone if it is added. Define behavior for uncommitted changes, submodules, worktrees, and in-progress Git operations first.
 
-外部コマンドはシェルを介さず、引数を分離して実行する。Git出力、パス、コミットメッセージを信頼済みのシェル断片として扱わない。
+Run external commands without a shell and pass arguments separately. Never treat Git output, paths, or commit messages as trusted shell fragments.
 
-## 独自設計
+## Independent design
 
-既存IDEで有用だった「複数コミットをまとめて確認する」操作思想は参考にするが、特定製品のUIを複製しない。
+GitAmida may learn from the useful idea of reviewing multiple commits together, but it must not reproduce a specific product's UI.
 
-- GitAmida自身の要件から画面と操作を設計する
-- TUIに適した配置、文言、キーバインドを採用する
-- 他製品のコード、アイコン、画像、スクリーンショットを取り込まない
-- 製品名や広報で提携関係を示唆しない
+- Derive screens and interactions from GitAmida's own requirements
+- Use layout, wording, and key bindings appropriate for a TUI
+- Do not import another product's code, icons, images, or screenshots
+- Do not imply an affiliation through the product name or marketing
 
-## 技術選定を再評価する条件
+## Conditions for revisiting technology choices
 
-次の場合のみ、現在の構成を再評価する。
+Revisit the current architecture only when:
 
-- Terminalでは実現できない操作が中心価値になった
-- 画像diffが簡易プレビューではなく主要機能になった
-- Git CLIの起動・解析コストが測定上のボトルネックになった
+- An interaction that terminals cannot support becomes central to the product's value
+- Image diffing becomes a core feature rather than a lightweight preview
+- Measured Git CLI startup or parsing cost becomes a bottleneck
 
-再評価まではGo TUIを正本とし、別言語のフロントエンドを並行実装しない。ネイティブPanelは要望だけで追加せず、Terminalでは解決できない具体的な利用上の問題が継続して確認された場合に、改めて設計判断する。
+Until then, keep the Go TUI as the canonical interface and do not build a frontend in another language. Do not add a native panel merely in response to requests. Reconsider it only if recurring, concrete usage problems cannot be solved in the terminal.

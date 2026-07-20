@@ -1,125 +1,125 @@
 # GitAmida Roadmap
 
-GitAmidaの最初の完成条件は次の通り。
+GitAmida's initial definition of done is:
 
-> 任意のTerminalからGitAmidaを開き、コミットグラフ上で複数コミットを選択すると、変更ファイルを集約して確認でき、選択したファイルのdiffを内部または外部ツールで開ける。
+> From any terminal, open GitAmida, select multiple commits in the commit graph, review their aggregated changed files, and open a selected file's diff internally or in an external tool.
 
-## 1. 技術検証
+## 1. Technical validation
 
-本実装前に、中心体験を成立させる不確実性だけを小さなspikeで確認する。
+Before production implementation, use small spikes to resolve only the uncertainties that affect the core experience.
 
-- Bubble Tea v2で複数ペイン、サイズ変更、キーボード、クリック、ダブルクリック、ホイールを確認する
-- Gitログから分岐・合流を表す最小グラフモデルを作る
-- 単一コミットの変更ファイルとdiffを安全に取得する
-- VS Code CLIへ一時ファイルのdiffを渡す
-- `ksdiff`へGit blob由来の画像を渡し、一時ファイルの寿命を確認する
-- Ghostty、Cursor Terminal、Codex appのTerminalで入力と描画を確認する
-- VS CodeとCursorでStatus Barから専用Terminalを作成・再表示できることを確認する
+- Verify multiple panes, resizing, keyboard input, clicks, double-clicks, and wheel input with Bubble Tea v2
+- Build a minimal graph model that represents divergence and merges from Git log data
+- Retrieve the changed files and diff for a single commit safely
+- Send temporary files to the VS Code CLI for comparison
+- Send images materialized from Git blobs to `ksdiff` and verify temporary-file lifetime
+- Verify input and rendering in Ghostty and the terminals embedded in Cursor and the Codex app
+- Verify that VS Code and Cursor can create and reveal a dedicated terminal from a status bar item
 
-完了条件は、実装方式を決めるための測定結果と最小デモが揃い、製品コードへ不要な試作を残さないこと。
+This milestone is complete when measurements and minimal demonstrations are sufficient to choose implementation approaches, with no unnecessary spike code retained in the product.
 
-## 2. 単一コミットMVP
+## 2. Single-commit MVP
 
-まず、Git履歴を壊さずに読む基本経路を完成させる。
+Complete the basic read-only path through Git history first.
 
-- リポジトリ内または`--repo`指定で起動する
-- 現在のリポジトリ、ブランチ、HEADを表示する
-- 件数制限付きのコミットグラフを表示する
-- 単一コミットを選択する
-- 追加、変更、削除、renameを含む変更ファイルツリーを表示する
-- 選択ファイルのUnified diffをTUI内に表示する
-- キーボードとマウスでペイン移動、選択、スクロールを行う
-- root commit、merge commit、binary、大きなdiffで安全に縮退する
+- Start inside a repository or accept one through `--repo`
+- Show the current repository, branch, and HEAD
+- Show a commit graph with an initial history limit
+- Select one commit
+- Show a changed-file tree that handles additions, modifications, deletions, and renames
+- Show the selected file's unified diff inside the TUI
+- Move between panes, select items, and scroll with either keyboard or mouse
+- Degrade safely for root commits, merge commits, binary files, and oversized diffs
 
-完了条件は、普段使うリポジトリで履歴から一つのコミットを選び、変更ファイルとdiffを往復できること。
+This milestone is complete when users can select a commit in an everyday repository and move reliably between its changed files and diffs.
 
-## 3. VS Code/Cursor起動拡張
+## 3. VS Code/Cursor launch extension
 
-エディタ内でGitAmidaが利用可能だと分かり、コマンド入力なしで起動できるようにする。
+Make GitAmida discoverable inside the editor and launchable without typing a command.
 
-- Gitリポジトリを開いているとき、左側のStatus Barへ`GitAmida`を表示する
-- Status Barと`GitAmida: Open`コマンドから起動できるようにする
-- `GitAmida`という名前の専用Terminalを作成する
-- 実行中のTerminalがあれば、新しく作らず再表示する
-- 現在のworkspace folderを`--repo`へ渡す
-- multi-root workspaceでは対象リポジトリを選択できるようにする
-- Goバイナリが見つからない場合に、短い導入案内を表示する
-- 同じVSIXをVS CodeとCursorで実機確認する
+- Show `GitAmida` on the left side of the status bar when a Git repository is open
+- Launch from the status bar item and the `GitAmida: Open` command
+- Create a dedicated terminal named `GitAmida`
+- Reveal an existing running terminal instead of creating another
+- Pass the current workspace folder through `--repo`
+- Allow repository selection in a multi-root workspace
+- Show concise installation guidance when the Go binary is unavailable
+- Test the same VSIX in both VS Code and Cursor
 
-拡張にはGit解析、コミット選択、diff表示を実装しない。完了条件は、VS CodeとCursorのどちらでもStatus Barを一度クリックしてTUIを開けること。
+The extension must not implement Git parsing, commit selection, or diff presentation. This milestone is complete when one click on the status bar opens the TUI in both VS Code and Cursor.
 
-## 4. 複数コミットMVP
+## 4. Multiple-commit MVP
 
-GitAmida固有の中心価値を実装する。
+Implement GitAmida's distinctive core value.
 
-- 選択トグルと連続範囲選択を追加する
-- 選択コミット一覧を表示する
-- 変更ファイルを重複排除して集約する
-- ファイルごとの該当コミットを表示する
-- 連続範囲の最終差分を表示する
-- 非連続選択はコミット別diffを時系列表示する
-- 選択変更時の取得をキャンセルし、古い結果で画面を上書きしない
+- Add selection toggles and contiguous range selection
+- Show the selected commits
+- Aggregate and deduplicate changed files
+- Show the commits relevant to each file
+- Show the final diff for a contiguous range
+- Show per-commit diffs chronologically for a non-contiguous selection
+- Cancel stale requests when the selection changes and prevent old results from overwriting the screen
 
-完了条件は、単一、連続範囲、非連続の違いをユーザーが理解でき、各ケースで期待した変更へ到達できること。
+This milestone is complete when users understand the difference between single, contiguous, and non-contiguous selections and can reach the expected changes in every case.
 
-## 5. diff体験
+## 5. Diff experience
 
-人が変更内容を速く読める表示と外部連携を整える。
+Improve human-readable presentation and external-tool integration.
 
-- Unified、Side-by-side、Word diffを切り替える
-- 狭い端末でSide-by-sideからUnifiedへ安全に縮退する
-- 行末、空白量、全空白、空行の無視を切り替える
-- diffコンテキスト行数を変更する
-- VS Codeで左右diffを開くオープナーを追加する
-- CursorのエディタCLI連携可否を検証し、可能ならオープナーを追加する
-- Kaleidoscopeオープナーを追加する
-- 外部ツールがない場合の案内と内部diffへのフォールバックを追加する
+- Switch among unified, side-by-side, and word diffs
+- Degrade safely from side-by-side to unified in narrow terminals
+- Toggle ignoring trailing whitespace, whitespace amount, all whitespace, or blank-line changes
+- Change the number of diff context lines
+- Add an opener for side-by-side diffs in VS Code
+- Verify Cursor editor CLI integration and add an opener if it is reliable
+- Add a Kaleidoscope opener
+- Explain missing external tools and fall back to the internal diff
 
-完了条件は、履歴の選択状態を保ったまま、同じファイルを内部diffと利用可能な外部diffで確認できること。
+This milestone is complete when users can inspect the same file internally and in any available external diff tool without losing the current history selection.
 
-## 6. 画像diff
+## 6. Image diffs
 
-テキスト中心の操作を損なわない範囲で画像確認を追加する。
+Add image inspection without compromising the text-first experience.
 
-- 画像形式とサイズを検出する
-- 対応端末で変更前後を簡易プレビューする
-- 非対応端末ではメタデータと外部ツール操作を表示する
-- Kaleidoscopeで詳細比較を開く
-- 大きな画像のdecode、resize、描画をUIスレッドから分離する
+- Detect image formats and dimensions
+- Show lightweight before-and-after previews in supported terminals
+- Show metadata and an external-tool action in unsupported terminals
+- Open detailed comparisons in Kaleidoscope
+- Move decoding, resizing, and rendering of large images off the UI thread
 
-高度なズーム、スライダー比較、ピクセル差分はこの段階の完了条件に含めない。
+Advanced zooming, slider comparisons, and pixel-level diffs are not completion requirements for this milestone.
 
-## 7. ブランチ単位の確認
+## 7. Branch-level review
 
-コミット選択と同じモデルをブランチ全体へ拡張する。
+Extend the commit-selection model to an entire branch.
 
-- local branchとremote-tracking branchを表示する
-- base branchを明示的に選択する
-- merge-baseから対象ブランチまでのコミットを表示する
-- ブランチ全体の変更ファイルと最終差分を表示する
-- base branchの自動候補を提示し、ユーザーが修正できるようにする
+- Show local and remote-tracking branches
+- Select a base branch explicitly
+- Show commits from the merge base through the target branch
+- Show aggregated changed files and the final diff for the branch
+- Suggest a base branch while allowing the user to correct it
 
-ブランチ切り替えは閲覧機能とは分離し、安全条件を定義してから追加可否を判断する。
+Keep branch switching separate from read-only review. Decide whether to add it only after defining its safety constraints.
 
-## 8. 大規模リポジトリと配布
+## 8. Large repositories and distribution
 
-日常利用できる品質と配布経路を整える。
+Reach everyday performance and establish distribution paths.
 
-- 履歴ページングと追加読み込みを実装する
-- diffサイズ上限、timeout、キャンセルを整備する
-- macOS、Linux、Windowsで主要操作を検証する
-- version表示、診断情報、エラー報告方法を用意する
-- リリース用バイナリとchecksumを生成する
-- Homebrewなどの配布方法を決める
-- 公開前にプロダクト名、パッケージ名、商標、ライセンスを確認する
+- Implement history pagination and incremental loading
+- Add diff-size limits, timeouts, and cancellation
+- Verify major interactions on macOS, Linux, and Windows
+- Provide version output, diagnostics, and an issue-reporting path
+- Produce release binaries and checksums
+- Choose distribution methods such as Homebrew
+- Review the product name, package names, trademarks, and license before publication
 
-## 9. 過去ファイル探索
+## 9. Historical file exploration
 
-リポジトリ内の`backup/`運用を減らすため、通常履歴とは分離して追加する。
+Add a separate workflow for finding old files so users need fewer `backup/` directories in repositories.
 
-- 削除されたファイルを検索する
-- 過去に存在したpathを検索する
-- 削除直前または指定コミット時点のファイルを開く
-- rename履歴を追跡する
-- 特定ファイルの全履歴を表示する
-- OSキャッシュディレクトリを使い、refs更新時に無効化する
+- Search for deleted files
+- Search paths that existed in the past
+- Open a file immediately before deletion or at a selected commit
+- Follow rename history
+- Show the complete history of one file
+- Use the operating system cache directory and invalidate cached data when refs change

@@ -1,68 +1,68 @@
 # GitAmida
 
-GitAmidaは、複数のGitコミットを一つの変更単位として素早く確認するための、エディタ非依存のGit履歴ビューアです。
+GitAmida is an editor-independent Git history viewer for reviewing multiple commits quickly as a single unit of change.
 
 > A human-first Git history viewer for reviewing multiple commits as one change.
 
-現在は設計・MVP準備段階です。
+The project is currently in the design and MVP preparation stage.
 
-## 解決する問題
+## Problem
 
-一般的なGit履歴ビューアでは、履歴画面がエディタ領域を占有したり、複数コミットの変更ファイルを一つのまとまりとして追いにくかったりします。GitAmidaはTerminal内のTUIに履歴を残し、必要なファイルだけを内部diffまたは外部エディタで開けるようにします。
+Typical Git history viewers either occupy the editor area or make it difficult to follow files changed across multiple commits as one coherent unit. GitAmida keeps the history visible in a terminal UI and opens only the files you need in its internal diff viewer or an external editor.
 
-初期ゴールは次の体験です。
+The initial goal is this experience:
 
-> Cursor、VS Code、Codex app、GhosttyなどのTerminalからGitAmidaを開き、コミットグラフ上で複数コミットを選択すると、そのコミット群で変更されたファイルをまとめて確認できる。
+> Open GitAmida from a terminal in Cursor, VS Code, the Codex app, Ghostty, or another environment; select multiple commits in the commit graph; and review the files changed by those commits together.
 
-## 想定する基本操作
+## Core interactions
 
-- コミットグラフとブランチの分岐・合流を表示する
-- 単一、連続範囲、非連続の複数コミットを選択する
-- 選択したコミットで変更されたファイルをツリー表示する
-- ファイルを選択し、UnifiedまたはSide-by-side diffを確認する
-- 空白の扱いを切り替える
-- 対応する外部ツールへ詳細diffを渡す
-- キーボードとマウスのどちらでも操作する
+- View the commit graph, including branch divergence and merges
+- Select one commit, a contiguous range, or multiple non-contiguous commits
+- View files changed by the selected commits in a tree
+- Select a file and review a unified or side-by-side diff
+- Change how whitespace is handled
+- Send a detailed diff to a supported external tool
+- Use either the keyboard or mouse
 
-画像はTUI内で簡易プレビューし、詳細比較はKaleidoscopeなどの外部diffツールへ渡す方針です。
+Images receive a lightweight preview inside the TUI. Detailed comparison is delegated to an external diff tool such as Kaleidoscope.
 
-## プロダクト原則
+## Product principles
 
-- **Human-first**: AI要約ではなく、人が変更を直接読めることを優先する
-- **Read-first**: Git履歴と差分の閲覧を中心にする
-- **Multiple commits as one view**: 複数コミットを一つの作業単位として扱う
-- **Editor-independent**: 特定のエディタに本体を依存させない
-- **Safe**: 履歴を書き換える操作を初期スコープへ含めない
-- **Fast**: 履歴とdiffを必要になった時点で遅延取得する
-- **Focused**: 汎用Gitクライアントではなく、変更確認に集中する
-- **Evidence-driven minimalism**: 小さな核から始め、実際に使いやすさが確認できた機能だけを残す
+- **Human-first**: Prioritize direct human inspection over AI-generated summaries
+- **Read-first**: Focus on browsing Git history and diffs
+- **Multiple commits as one view**: Treat several commits as a single unit of work
+- **Editor-independent**: Keep the core product independent of any specific editor
+- **Safe**: Exclude history-changing operations from the initial scope
+- **Fast**: Load history and diffs lazily, when they are needed
+- **Focused**: Concentrate on change review rather than becoming a general-purpose Git client
+- **Evidence-driven minimalism**: Start with a small core and retain only features proven useful in practice
 
-## 初期スコープ外
+## Initially out of scope
 
-- commit、amend、merge、rebase、cherry-pick
-- reset、revert、stash
-- push、pull、fetch
-- branchの作成・削除
-- conflict解消
-- AIによる要約やレビュー
-- VS Code/CursorネイティブPanel（現在は計画しない）
+- commit, amend, merge, rebase, and cherry-pick
+- reset, revert, and stash
+- push, pull, and fetch
+- branch creation and deletion
+- conflict resolution
+- AI-generated summaries or reviews
+- Native VS Code/Cursor panels, which are not currently planned
 
-ブランチ切り替えは、閲覧機能が安定した後に安全性を確認して追加を検討します。
+Branch switching may be considered after the read-only experience is stable and its safety constraints are defined.
 
-## 技術方針
+## Technical direction
 
 - Go
 - Bubble Tea v2
 - Bubbles v2
 - Lip Gloss v2
-- Gitオブジェクトライブラリではなく、まずGit CLIを利用
+- The Git CLI first, rather than a Git object library
 
-GitAmida本体は単一のGoバイナリにします。VS Code/CursorやKaleidoscopeとの連携は、本体から分離した小さなアダプターとして提供します。
+The GitAmida core is distributed as a single Go binary. Integrations with VS Code, Cursor, and Kaleidoscope are small adapters kept separate from the core.
 
-VS Code/Cursor向けには、Status Barから専用Terminalを作成・再表示する薄い拡張を早期に用意します。拡張側へGit解析やTUIを重複実装しません。
+An early, thin VS Code/Cursor extension will create or reveal a dedicated terminal from a status bar item. It will not duplicate Git parsing or TUI behavior.
 
-## ドキュメント
+## Documentation
 
-- [DESIGN.md](./DESIGN.md): 現在のアーキテクチャと判断理由
-- [ROADMAP.md](./ROADMAP.md): 今後実装する内容と順序
-- [AGENTS.md](./AGENTS.md): 開発規約とAIエージェント向け手順
+- [DESIGN.md](./DESIGN.md): Current architecture and the reasons behind non-obvious decisions
+- [ROADMAP.md](./ROADMAP.md): Planned work and its order
+- [AGENTS.md](./AGENTS.md): Development conventions and instructions for AI agents
