@@ -1,68 +1,49 @@
 # GitAmida
 
-GitAmida is an editor-independent Git history viewer for reviewing multiple commits quickly as a single unit of change.
+GitAmida is an experimental Git history view for Cursor and VS Code. It keeps commit history and changed files in the bottom Panel while opening detailed file comparisons in the editor's native diff view.
 
-> A human-first Git history viewer for reviewing multiple commits as one change.
+> Review Git history without losing the history context when a diff opens.
 
-The project is currently in the design and MVP preparation stage.
+This branch tests an editor-native alternative to the terminal UI prototype. The two implementations intentionally remain on separate branches until hands-on use provides enough evidence to choose a direction.
 
-## Problem
+## Current MVP
 
-Typical Git history viewers either occupy the editor area or make it difficult to follow files changed across multiple commits as one coherent unit. GitAmida keeps the history visible in a terminal UI and opens only the files you need in its internal diff viewer or an external editor.
+- Adds `GitAmida` beside Terminal, Problems, and Output in the bottom Panel
+- Shows up to 100 commits with Git's topology graph, subject, refs, hash, and date
+- Shows the files changed by one selected commit
+- Opens a file in the editor's native side-by-side diff on double-click or Enter
+- Compares normal commits with their first parent and root commits with Git's empty tree
+- Runs read-only Git commands without a shell
+- Uses the active workspace folder, or the first workspace folder when no editor is active
 
-The initial goal is this experience:
+The MVP intentionally excludes multiple-commit selection, file-tree grouping, image diffs, whitespace options, repository selection in multi-root workspaces, and Git-changing operations.
 
-> Open GitAmida from a terminal in Cursor, VS Code, the Codex app, Ghostty, or another environment; select multiple commits in the commit graph; and review the files changed by those commits together.
+## Try it in Cursor
 
-## Core interactions
+Development uses Node.js 24 and npm 11.16 through mise. Extension users do not need to install Node.js because the compiled extension runs in the editor's Extension Host.
 
-- View the commit graph, including branch divergence and merges
-- Select one commit, a contiguous range, or multiple non-contiguous commits
-- View files changed by the selected commits in a tree
-- Select a file and review a unified or side-by-side diff
-- Change how whitespace is handled
-- Send a detailed diff to a supported external tool
-- Use either the keyboard or mouse
+```sh
+mise install
+npm ci
+npm run build
+```
 
-Images receive a lightweight preview inside the TUI. Detailed comparison is delegated to an external diff tool such as Kaleidoscope.
+Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, click **GitAmida** in the bottom Panel. Click a commit, then double-click a changed file to open its diff without replacing the history panel.
+
+The command palette also exposes **GitAmida: Open** and **GitAmida: Refresh**.
 
 ## Product principles
 
-- **Human-first**: Prioritize direct human inspection over AI-generated summaries
-- **Read-first**: Focus on browsing Git history and diffs
-- **Multiple commits as one view**: Treat several commits as a single unit of work
-- **Editor-independent**: Keep the core product independent of any specific editor
+- **Human-first**: Prioritize direct inspection over generated summaries
+- **Read-first**: Focus on browsing history, changed files, and diffs
+- **History stays visible**: Keep review context in a supporting editor panel
+- **Multiple commits as one view**: Treat several commits as a coherent change in the next product milestone
 - **Safe**: Exclude history-changing operations from the initial scope
-- **Fast**: Load history and diffs lazily, when they are needed
-- **Focused**: Concentrate on change review rather than becoming a general-purpose Git client
-- **Evidence-driven minimalism**: Start with a small core and retain only features proven useful in practice
-
-## Initially out of scope
-
-- commit, amend, merge, rebase, and cherry-pick
-- reset, revert, and stash
-- push, pull, and fetch
-- branch creation and deletion
-- conflict resolution
-- AI-generated summaries or reviews
-- Native VS Code/Cursor panels, which are not currently planned
-
-Branch switching may be considered after the read-only experience is stable and its safety constraints are defined.
-
-## Technical direction
-
-- Go
-- Bubble Tea v2
-- Bubbles v2
-- Lip Gloss v2
-- The Git CLI first, rather than a Git object library
-
-The GitAmida core is distributed as a single Go binary. Integrations with VS Code, Cursor, and Kaleidoscope are small adapters kept separate from the core.
-
-An early, thin VS Code/Cursor extension will create or reveal a dedicated terminal from a status bar item. It will not duplicate Git parsing or TUI behavior.
+- **Focused**: Do not become a general-purpose Git client
+- **Evidence-driven minimalism**: Keep only features that prove useful in daily use
 
 ## Documentation
 
-- [DESIGN.md](./DESIGN.md): Current architecture and the reasons behind non-obvious decisions
-- [ROADMAP.md](./ROADMAP.md): Planned work and its order
+- [DESIGN.md](./DESIGN.md): Current architecture and reasons behind non-obvious decisions
+- [ROADMAP.md](./ROADMAP.md): Upcoming work and the comparison checkpoint
 - [AGENTS.md](./AGENTS.md): Development conventions and instructions for AI agents

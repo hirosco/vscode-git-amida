@@ -1,0 +1,81 @@
+{
+  "name": "git-amida",
+  "displayName": "GitAmida",
+  "description": "Review Git history and open commit diffs without hiding the history panel.",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "hirosco",
+  "license": "UNLICENSED",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Visualization"
+  ],
+  "main": "./dist/src/extension.js",
+  "files": [
+    "dist/src/**",
+    "media/**",
+    "README.md"
+  ],
+  "activationEvents": [
+    "onView:gitAmida.history",
+    "onCommand:gitAmida.open"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "gitAmida.open",
+        "title": "GitAmida: Open",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "gitAmida.refresh",
+        "title": "GitAmida: Refresh",
+        "icon": "$(refresh)"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "gitAmida",
+          "title": "GitAmida",
+          "icon": "media/git-amida.svg"
+        }
+      ]
+    },
+    "views": {
+      "gitAmida": [
+        {
+          "id": "gitAmida.history",
+          "name": "History",
+          "type": "webview",
+          "icon": "media/git-amida.svg",
+          "contextualTitle": "GitAmida"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "gitAmida.refresh",
+          "when": "view == gitAmida.history",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "check": "tsc --noEmit -p .",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "package:inspect": "npm pack --dry-run --allow-directory=all --cache .npm-cache"
+  },
+  "devDependencies": {
+    "@types/node": "24.8.1",
+    "@types/vscode": "1.100.0",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "npm@11.16.0"
+}

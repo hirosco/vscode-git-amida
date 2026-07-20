@@ -1,125 +1,62 @@
 # GitAmida Roadmap
 
-GitAmida's initial definition of done is:
+GitAmida's current comparison target is:
 
-> From any terminal, open GitAmida, select multiple commits in the commit graph, review their aggregated changed files, and open a selected file's diff internally or in an external tool.
+> Keep Git history visible in Cursor while selecting a commit, inspecting its changed files, and opening a native side-by-side diff in the editor area.
 
-## 1. Technical validation
+## 1. Hands-on comparison checkpoint
 
-Before production implementation, use small spikes to resolve only the uncertainties that affect the core experience.
+Exercise this editor-native MVP and the Go terminal prototype on the same everyday repository.
 
-- Verify multiple panes, resizing, keyboard input, clicks, double-clicks, and wheel input with Bubble Tea v2
-- Build a minimal graph model that represents divergence and merges from Git log data
-- Retrieve the changed files and diff for a single commit safely
-- Send temporary files to the VS Code CLI for comparison
-- Send images materialized from Git blobs to `ksdiff` and verify temporary-file lifetime
-- Verify input and rendering in Ghostty and the terminals embedded in Cursor and the Codex app
-- Verify that VS Code and Cursor can create and reveal a dedicated terminal from a status bar item
+- Confirm that GitAmida is visible and easy to reopen from the bottom Panel
+- Review several ordinary and root commits
+- Open several diffs while keeping the history context visible
+- Resize the Panel horizontally and vertically
+- Compare repeated mouse and keyboard use with the terminal prototype
+- Record only concrete friction: extra actions, lost context, unreadable layouts, delays, and platform limitations
+- Decide whether the editor-native approach, the terminal approach, or a reduced variant should become the next implementation baseline
 
-This milestone is complete when measurements and minimal demonstrations are sufficient to choose implementation approaches, with no unnecessary spike code retained in the product.
+This checkpoint is complete only after real use. Do not merge either branch into `main` before that decision.
 
-## 2. Single-commit MVP
+## 2. Single-commit hardening
 
-Complete the basic read-only path through Git history first.
+If the editor-native direction survives the comparison:
 
-- Start inside a repository or accept one through `--repo`
-- Show the current repository, branch, and HEAD
-- Show a commit graph with an initial history limit
-- Select one commit
-- Show a changed-file tree that handles additions, modifications, deletions, and renames
-- Show the selected file's unified diff inside the TUI
-- Move between panes, select items, and scroll with either keyboard or mouse
-- Degrade safely for root commits, merge commits, binary files, and oversized diffs
+- Let users choose a repository in multi-root workspaces
+- Group changed files in a navigable tree
+- Make first-parent behavior visible for merge commits and allow another parent to be chosen
+- Handle additions, modifications, deletions, renames, submodules, binary files, oversized blobs, detached HEAD, empty repositories, and non-Git folders explicitly
+- Cancel stale history and blob requests as selection changes
+- Test extension installation and behavior in both Cursor and VS Code
 
-This milestone is complete when users can select a commit in an everyday repository and move reliably between its changed files and diffs.
+This checkpoint is complete when daily single-commit review is predictable and failures are explanatory rather than silent.
 
-## 3. VS Code/Cursor launch extension
+## 3. Multiple-commit MVP
 
-Make GitAmida discoverable inside the editor and launchable without typing a command.
-
-- Show `GitAmida` on the left side of the status bar when a Git repository is open
-- Launch from the status bar item and the `GitAmida: Open` command
-- Create a dedicated terminal named `GitAmida`
-- Reveal an existing running terminal instead of creating another
-- Pass the current workspace folder through `--repo`
-- Allow repository selection in a multi-root workspace
-- Show concise installation guidance when the Go binary is unavailable
-- Test the same VSIX in both VS Code and Cursor
-
-The extension must not implement Git parsing, commit selection, or diff presentation. This milestone is complete when one click on the status bar opens the TUI in both VS Code and Cursor.
-
-## 4. Multiple-commit MVP
-
-Implement GitAmida's distinctive core value.
-
-- Add selection toggles and contiguous range selection
-- Show the selected commits
+- Distinguish single selection, a contiguous range, and non-contiguous selection
 - Aggregate and deduplicate changed files
-- Show the commits relevant to each file
-- Show the final diff for a contiguous range
-- Show per-commit diffs chronologically for a non-contiguous selection
-- Cancel stale requests when the selection changes and prevent old results from overwriting the screen
+- Show commits relevant to each file
+- Open the final diff for a contiguous range
+- Open per-commit diffs chronologically for non-contiguous selection
+- Preserve selection when diffs open and when the Panel is hidden and shown again
 
-This milestone is complete when users understand the difference between single, contiguous, and non-contiguous selections and can reach the expected changes in every case.
+This is GitAmida's first distinctive product milestone. Keep only selection interactions that remain understandable in real use.
 
-## 5. Diff experience
+## 4. Diff controls and external tools
 
-Improve human-readable presentation and external-tool integration.
+- Expose the editor's supported side-by-side and inline diff presentation
+- Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
+- Add a lightweight image before/after view only if the native editor cannot provide a useful comparison
+- Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
+- Explain unavailable tools and retain the native diff as the fallback
 
-- Switch among unified, side-by-side, and word diffs
-- Degrade safely from side-by-side to unified in narrow terminals
-- Toggle ignoring trailing whitespace, whitespace amount, all whitespace, or blank-line changes
-- Change the number of diff context lines
-- Add an opener for side-by-side diffs in VS Code
-- Verify Cursor editor CLI integration and add an opener if it is reliable
-- Add a Kaleidoscope opener
-- Explain missing external tools and fall back to the internal diff
+## 5. Performance, portability, and distribution
 
-This milestone is complete when users can inspect the same file internally and in any available external diff tool without losing the current history selection.
+- Add history pagination, output limits by operation, cancellation, and diagnostics
+- Verify large repositories and worktrees
+- Package one VSIX for Cursor and VS Code
+- Define supported editor versions and platforms
+- Decide whether any editor-independent companion remains justified by measured use
+- Review product naming, trademarks, licensing, marketplace metadata, and privacy before publication
 
-## 6. Image diffs
-
-Add image inspection without compromising the text-first experience.
-
-- Detect image formats and dimensions
-- Show lightweight before-and-after previews in supported terminals
-- Show metadata and an external-tool action in unsupported terminals
-- Open detailed comparisons in Kaleidoscope
-- Move decoding, resizing, and rendering of large images off the UI thread
-
-Advanced zooming, slider comparisons, and pixel-level diffs are not completion requirements for this milestone.
-
-## 7. Branch-level review
-
-Extend the commit-selection model to an entire branch.
-
-- Show local and remote-tracking branches
-- Select a base branch explicitly
-- Show commits from the merge base through the target branch
-- Show aggregated changed files and the final diff for the branch
-- Suggest a base branch while allowing the user to correct it
-
-Keep branch switching separate from read-only review. Decide whether to add it only after defining its safety constraints.
-
-## 8. Large repositories and distribution
-
-Reach everyday performance and establish distribution paths.
-
-- Implement history pagination and incremental loading
-- Add diff-size limits, timeouts, and cancellation
-- Verify major interactions on macOS, Linux, and Windows
-- Provide version output, diagnostics, and an issue-reporting path
-- Produce release binaries and checksums
-- Choose distribution methods such as Homebrew
-- Review the product name, package names, trademarks, and license before publication
-
-## 9. Historical file exploration
-
-Add a separate workflow for finding old files so users need fewer `backup/` directories in repositories.
-
-- Search for deleted files
-- Search paths that existed in the past
-- Open a file immediately before deletion or at a selected commit
-- Follow rename history
-- Show the complete history of one file
-- Use the operating system cache directory and invalidate cached data when refs change
+Telemetry is not planned. Evaluate early versions through direct use and concrete reports of interaction problems.

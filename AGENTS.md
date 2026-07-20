@@ -2,9 +2,11 @@
 
 ## Project overview
 
-GitAmida is a terminal UI written in Go for reviewing multiple Git commits as one unit of change. It is not a general-purpose Git client; it focuses on browsing history, changed files, and diffs.
+GitAmida is currently an experimental TypeScript extension for Cursor and VS Code. It keeps Git history in a bottom Panel View and opens selected file comparisons in the editor's native diff view.
 
-The project is currently in the design and MVP preparation stage. Read `README.md`, `DESIGN.md`, and `ROADMAP.md` before implementation.
+This branch exists to compare an editor-native interaction with the Go terminal prototype. Do not combine the implementations until the comparison checkpoint in `ROADMAP.md` is complete.
+
+Read `README.md`, `DESIGN.md`, and `ROADMAP.md` before implementation.
 
 ## Canonical documents
 
@@ -12,87 +14,92 @@ The project is currently in the design and MVP preparation stage. Read `README.m
 - `DESIGN.md`: Current architecture and reasons behind non-obvious decisions
 - `ROADMAP.md`: Upcoming work and why it matters
 
-Do not create append-only completion histories or decision logs. Update the documents above to reflect the current truth and leave historical context to Git.
+Do not create append-only completion histories, ADR directories, or per-feature todo files. Update these documents to reflect the current truth and leave history to Git.
 
 ## Language policy
 
 - Keep canonical repository documentation, code, identifiers, comments, and commit messages in English.
 - Communicate progress, reviews, explanations, and handoffs to the project owner in Japanese unless requested otherwise.
-- When changing English documentation, summarize the material changes and their rationale in Japanese.
-- Do not maintain complete translated copies of canonical documents. Add a concise localized guide only when a real user need justifies its maintenance cost.
+- When changing English documentation, summarize the material changes and rationale in Japanese.
+- Do not maintain complete translated copies of canonical documents.
 
 ## Implementation principles
 
 - Prefer the smallest relevant change and avoid unrelated refactoring.
-- Keep the GitAmida core entirely in Go.
-- Limit the VS Code/Cursor extension to a launch adapter; it must not contain Git parsing or screen logic.
-- Build the smallest unit that can validate user value instead of adding features based only on assumptions.
-- Do not retain unused features merely because they were expensive to build. Keep boundaries that allow safe removal or reduction.
-- Separate UI, Git execution, domain logic, and external-tool integration.
-- Never block Bubble Tea's `Update`; perform I/O as cancellable commands.
+- Build the smallest interaction that can validate user value.
+- Do not retain unused features merely because they were expensive to build.
+- Keep the Webview limited to rendering and input; Git execution and trusted state belong to the Extension Host.
+- Keep the Git adapter independent of VS Code types.
 - Provide an equivalent keyboard action for every mouse action.
-- Degrade safely when terminal width or capabilities are insufficient.
+- Reflow safely when the View is moved to a narrow container.
 - Do not add operations that change Git history without an explicit design change.
 
-## Intended directory structure
+## Directory structure
 
 ```text
-cmd/git-amida/       CLI entry point
-internal/app/        Use cases and asynchronous orchestration
-internal/domain/     Commit selection, change aggregation, and view models
-internal/git/        Git CLI execution and output parsing
-internal/tui/        Bubble Tea screens, input, and rendering
-internal/diff/       Diff model and presentation modes
-internal/opener/     Internal and external diff openers
-internal/config/     Configuration loading and validation
-extensions/vscode/   Optional status bar and terminal launch adapter
-testdata/            Fixed parsing fixtures
+src/            Extension Host code and Git adapter
+media/          Local Webview JavaScript, CSS, and extension icon
+test/           Node tests for parsing and temporary repositories
+.vscode/        Extension Development Host launch configuration
 ```
 
-Do not create packages before the initial implementation needs them.
+Do not introduce a framework, bundler, domain package, or nested extension workspace until a current feature requires it.
+
+## Node.js and dependency safety
+
+- Use the Node.js and npm versions declared by `mise.toml` and `packageManager`.
+- Use npm and commit `package-lock.json`.
+- Use `npm ci` for clean and CI installs.
+- Keep `.npmrc` supply-chain protections enabled.
+- Prefer no runtime dependencies. Inspect the source, lifecycle scripts, provenance, and transitive graph before adding any dependency.
+- Do not approve an install script broadly. Add an exact package version to `allowScripts` only after review.
+- Do not run untrusted scripts with broad access to credentials, the home directory, synced storage, or external storage.
 
 ## Git CLI handling
 
-- Do not construct shell command strings. Pass the executable and arguments separately to `exec.CommandContext`.
-- Put `--` before path arguments to avoid ambiguity between revisions and paths.
-- Disable color, pagers, and external diffs for machine-parsed output.
-- Preserve Git exit codes and standard error, then translate them into user-facing errors.
-- Apply output limits, lazy loading, and cancellation to potentially large operations.
-- Avoid parsing behavior that depends on the user's global Git configuration.
-- Permit only read-only commands in the initial scope.
+- Use `execFile` with an executable and argument array. Never construct a shell command.
+- Put `--` before path arguments when the Git command accepts it.
+- Disable color, pagers, and external diffs for parsed output.
+- Use NUL-delimited path output.
+- Preserve useful Git stderr and translate it into concise user-facing errors.
+- Apply history, output, and time limits to potentially large operations.
+- Do not depend on the user's aliases, pager, color, external diff, or path-quoting settings.
+- Permit only read-only Git commands in the initial scope.
+- Accept commit hashes and paths for follow-up operations only from parsed Extension Host state, never directly from untrusted Webview state.
+
+## Webview and editor integration
+
+- Apply a restrictive Content Security Policy and use a new nonce for each HTML document.
+- Load scripts, styles, and assets only from the extension package.
+- Insert repository data with `textContent` or explicit DOM nodes; do not interpolate it into HTML or assign it to `innerHTML`.
+- Validate Webview messages and ignore unknown fields and actions.
+- Use VS Code theme tokens and accessibility semantics.
+- Use `TextDocumentContentProvider` for read-only historical text and `vscode.diff` for comparison.
+- Treat binary content, unsupported encodings, and oversized blobs explicitly rather than coercing them into a text diff.
 
 ## Diff conventions
 
-- For a single commit, normally compare its parent with the selected commit.
+- Compare a normal commit with its first parent.
 - Compare a root commit with Git's empty tree.
-- For a contiguous range, show the final diff from immediately before the oldest commit to the newest commit.
-- Do not construct a virtual tree for non-contiguous selections. Aggregate changed files and show per-commit diffs.
-- Generate unified, side-by-side, and word diffs from the same diff model.
-- Treat whitespace-ignore settings as explicit diff-generation inputs, not presentation-only options.
-- Distinguish renames, deletions, binary files, submodules, and oversized diffs from ordinary text changes.
-
-## External-tool integration
-
-- Add external tools as implementations of the `opener` interface.
-- Do not embed `code`, Kaleidoscope, or arbitrary commands directly in Git logic.
-- Launch external processes without a shell.
-- Place temporary files created from Git blobs in a dedicated working directory, with explicit permissions and cleanup timing.
-- If a tool is unavailable, fall back to the internal diff and never install it automatically.
+- For a contiguous range, compare immediately before the oldest commit with the newest commit.
+- Do not construct a virtual tree for non-contiguous selections. Aggregate files and present per-commit diffs.
+- Treat whitespace choices as Git diff-generation inputs, not visual-only filters.
 
 ## Testing
 
-- Test domain logic independently of Git and the TUI with table-driven tests.
-- Test Git parsing with fixed fixtures and small repositories created in temporary directories.
-- Never change the user's real repositories or global Git configuration during tests.
-- Prioritize state-transition tests and golden tests for major TUI views.
-- Test keyboard paths as well as mouse paths.
+- Test Git parsing with fixed byte sequences and temporary repositories.
+- Never mutate the user's real repositories or global Git configuration in tests.
+- Test root commits, merges, renames, deletions, binary files, and paths with spaces or non-ASCII characters as those behaviors are added.
+- Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on snapshots of HTML.
+- Run `npm ci`, `npm run check`, `npm test`, and `npm run package:inspect` at each checkpoint.
+- Manually verify mouse, keyboard, resizing, Panel persistence, and native diff opening in Cursor and VS Code.
 
 ## UI and intellectual-property considerations
 
-- Abstract useful interaction ideas from existing IDEs into GitAmida's own requirements.
+- Abstract useful workflow ideas from existing IDEs into GitAmida's own requirements.
 - Do not faithfully reproduce a specific product's layout, wording, icons, colors, or imagery.
 - Do not import JetBrains source code, assets, or screenshots without permission.
-- Do not use names or presentation that imply affiliation or official compatibility with another product.
+- Do not imply affiliation or official compatibility through naming or presentation.
 
 ## Git workflow
 

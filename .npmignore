@@ -1,0 +1,7 @@
+*
+!dist/
+!dist/src/
+!dist/src/**
+!media/
+!media/**
+!README.md

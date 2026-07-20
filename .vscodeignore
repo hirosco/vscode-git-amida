@@ -1,0 +1,12 @@
+.git/**
+.vscode/**
+src/**
+test/**
+.gitignore
+.npmrc
+AGENTS.md
+CLAUDE.md
+DESIGN.md
+ROADMAP.md
+tsconfig.json
+mise.toml
