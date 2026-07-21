@@ -13,15 +13,16 @@ test("sanitizeViewState supplies safe defaults for untrusted state", () => {
     sanitizeViewState({
       selectedHash: 12,
       fileViewMode: "unknown",
+      historyRatio: 38,
       filesRatio: 94,
       detailsCollapsed: "yes",
       expandedTreePaths: ["src", 42],
     }),
     {
       fileViewMode: "flat",
+      historyRatio: 45,
       filesRatio: 80,
       detailsCollapsed: false,
-      expandedTreePaths: ["src"],
     },
   );
 });
@@ -32,16 +33,15 @@ test("mergeViewState retains existing values and snaps the divider", () => {
       {
         ...DEFAULT_VIEW_STATE,
         selectedHash: "abc",
-        expandedTreePaths: ["src"],
       },
-      { fileViewMode: "tree", filesRatio: 57 },
+      { fileViewMode: "tree", historyRatio: 63, filesRatio: 57 },
     ),
     {
       selectedHash: "abc",
       fileViewMode: "tree",
+      historyRatio: 65,
       filesRatio: 55,
       detailsCollapsed: false,
-      expandedTreePaths: ["src"],
     },
   );
 });

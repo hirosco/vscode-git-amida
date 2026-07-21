@@ -2,9 +2,9 @@ import type { RepositoryViewState } from "./model";
 
 export const DEFAULT_VIEW_STATE: RepositoryViewState = {
   fileViewMode: "flat",
+  historyRatio: 55,
   filesRatio: 65,
   detailsCollapsed: false,
-  expandedTreePaths: [],
 };
 
 export function sanitizeViewState(value: unknown): RepositoryViewState {
@@ -19,17 +19,9 @@ export function sanitizeViewState(value: unknown): RepositoryViewState {
     ...(selectedHash === undefined ? {} : { selectedHash }),
     ...(selectedFilePath === undefined ? {} : { selectedFilePath }),
     fileViewMode: candidate.fileViewMode === "tree" ? "tree" : "flat",
-    filesRatio: sanitizeRatio(candidate.filesRatio),
+    historyRatio: sanitizeRatio(candidate.historyRatio, 45, 70, 55),
+    filesRatio: sanitizeRatio(candidate.filesRatio, 30, 80, 65),
     detailsCollapsed: candidate.detailsCollapsed === true,
-    expandedTreePaths: Array.isArray(candidate.expandedTreePaths)
-      ? candidate.expandedTreePaths
-          .filter(
-            (path): path is string =>
-              typeof path === "string" && path.length > 0 && path.length <= 1_024,
-          )
-          .filter((path, index, paths) => paths.indexOf(path) === index)
-          .slice(0, 500)
-      : [],
   };
 }
 
@@ -44,9 +36,9 @@ export function mergeViewState(
   return sanitizeViewState({
     ...current,
     fileViewMode: value.fileViewMode ?? current.fileViewMode,
+    historyRatio: value.historyRatio ?? current.historyRatio,
     filesRatio: value.filesRatio ?? current.filesRatio,
     detailsCollapsed: value.detailsCollapsed ?? current.detailsCollapsed,
-    expandedTreePaths: value.expandedTreePaths ?? current.expandedTreePaths,
   });
 }
 
@@ -54,9 +46,14 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function sanitizeRatio(value: unknown): number {
+function sanitizeRatio(
+  value: unknown,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_VIEW_STATE.filesRatio;
+    return fallback;
   }
-  return Math.min(80, Math.max(30, Math.round(value / 5) * 5));
+  return Math.min(maximum, Math.max(minimum, Math.round(value / 5) * 5));
 }

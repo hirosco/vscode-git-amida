@@ -65,7 +65,6 @@ footer {
 }
 
 .icon-button,
-.copy-button,
 .mode-switch button {
   border: 0;
   border-radius: 4px;
@@ -80,16 +79,35 @@ footer {
 }
 
 .icon-button:hover,
-.copy-button:hover,
 .mode-switch button:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(440px, 1.45fr) minmax(300px, 0.75fr);
+  grid-template-columns: minmax(340px, 55fr) 5px minmax(340px, 45fr);
   min-width: 0;
   min-height: 0;
+}
+
+.workspace[data-history-ratio="45"] {
+  grid-template-columns: minmax(340px, 45fr) 5px minmax(340px, 55fr);
+}
+
+.workspace[data-history-ratio="50"] {
+  grid-template-columns: minmax(340px, 50fr) 5px minmax(340px, 50fr);
+}
+
+.workspace[data-history-ratio="60"] {
+  grid-template-columns: minmax(340px, 60fr) 5px minmax(340px, 40fr);
+}
+
+.workspace[data-history-ratio="65"] {
+  grid-template-columns: minmax(340px, 65fr) 5px minmax(340px, 35fr);
+}
+
+.workspace[data-history-ratio="70"] {
+  grid-template-columns: minmax(340px, 70fr) 5px minmax(340px, 30fr);
 }
 
 .pane,
@@ -102,7 +120,24 @@ footer {
 
 .history-pane {
   container-type: inline-size;
-  border-right: 1px solid var(--vscode-panel-border);
+}
+
+.workspace-resizer {
+  position: relative;
+  z-index: 1;
+  cursor: col-resize;
+  background: var(--vscode-panel-border);
+}
+
+.workspace-resizer::after {
+  position: absolute;
+  inset: 0 -2px;
+  content: "";
+}
+
+.workspace-resizer:hover,
+.workspace-resizer.dragging {
+  background: var(--vscode-focusBorder);
 }
 
 .inspection-pane {
@@ -169,6 +204,17 @@ footer {
   align-items: center;
 }
 
+.file-toolbar,
+.tree-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tree-actions[hidden] {
+  display: none;
+}
+
 h2 {
   margin: 0;
   font-size: 11px;
@@ -213,7 +259,7 @@ h2 {
 }
 
 .history-columns {
-  grid-template-columns: 60px minmax(150px, 1fr) minmax(80px, 140px) minmax(80px, 120px) 126px;
+  grid-template-columns: 58px minmax(150px, 1fr) 126px;
 }
 
 .file-columns,
@@ -249,7 +295,7 @@ h2 {
 
 .history-row {
   overflow: hidden;
-  white-space: nowrap;
+  align-items: start;
 }
 
 .history-row:hover,
@@ -268,8 +314,8 @@ h2 {
 .file-row:focus-visible,
 .tree-directory-row:focus-visible,
 .icon-button:focus-visible,
-.copy-button:focus-visible,
 .mode-switch button:focus-visible,
+.workspace-resizer:focus-visible,
 .details-resizer:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
@@ -277,6 +323,7 @@ h2 {
 
 .graph {
   overflow: hidden;
+  padding-top: 3px;
   color: var(--vscode-gitDecoration-modifiedResourceForeground);
   font-family: var(--vscode-editor-font-family);
   text-overflow: clip;
@@ -284,8 +331,6 @@ h2 {
 }
 
 .subject,
-.refs,
-.author,
 .date,
 .path {
   min-width: 0;
@@ -294,15 +339,72 @@ h2 {
   white-space: nowrap;
 }
 
-.refs {
-  color: var(--vscode-charts-yellow);
+.commit-cell {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.date {
+  padding-top: 3px;
+  color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
 
-.author,
-.date {
+.head-marker {
+  position: absolute;
+  top: 4px;
+  left: -12px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--vscode-focusBorder);
+  border-radius: 50%;
+  background: var(--vscode-panel-background, var(--vscode-editor-background));
+  box-shadow: 0 0 0 1px var(--vscode-panel-background, var(--vscode-editor-background));
+}
+
+.history-row.selected .head-marker {
+  border-color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
+  box-shadow: 0 0 0 1px var(--vscode-list-activeSelectionBackground);
+}
+
+.ref-list {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 3px 4px;
+  margin-top: 3px;
+  white-space: normal;
+}
+
+.ref-chip {
+  max-width: 100%;
+  padding: 0 5px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
   color: var(--vscode-descriptionForeground);
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.ref-localBranch {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.ref-remoteBranch {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.ref-tag {
+  color: var(--vscode-charts-yellow);
+}
+
+.ref-chip.current-ref {
+  border-color: currentColor;
+  font-weight: 600;
 }
 
 .date,
@@ -433,24 +535,8 @@ code {
   overflow-wrap: anywhere;
 }
 
-.copy-value {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.copy-value code {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.copy-button {
-  flex: 0 0 auto;
-  padding: 2px 6px;
-  color: var(--vscode-textLink-foreground);
-  font-size: 11px;
+.hash-value {
+  font-family: var(--vscode-editor-font-family);
 }
 
 .empty-state {
@@ -474,21 +560,13 @@ footer {
 
 @container (max-width: 720px) {
   .history-columns {
-    grid-template-columns: 56px minmax(140px, 1fr) minmax(80px, 130px) 116px;
-  }
-
-  .author-column {
-    display: none;
+    grid-template-columns: 54px minmax(140px, 1fr) 116px;
   }
 }
 
 @container (max-width: 570px) {
   .history-columns {
-    grid-template-columns: 52px minmax(120px, 1fr) 112px;
-  }
-
-  .refs-column {
-    display: none;
+    grid-template-columns: 48px minmax(120px, 1fr) 108px;
   }
 }
 
@@ -496,6 +574,10 @@ footer {
   .workspace {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(180px, 1fr) minmax(180px, 1fr);
+  }
+
+  .workspace-resizer {
+    display: none;
   }
 
   .history-pane {

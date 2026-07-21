@@ -48,11 +48,13 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 ## Repository History UI
 
 - Keep exactly one pinned, non-closable Repository History tab.
-- Render each commit on one row and never wrap row content.
-- Show graph, subject, refs, author, and date as responsive columns.
+- Render each commit as one logical row with a non-wrapping subject line.
+- Show graph, subject, and date in the primary line; render every ref as a wrapping chip below the subject.
+- Keep author information in commit details instead of spending permanent history width.
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
-- Split the right side into changed files above and resizable, collapsible commit details below.
+- Keep both the Repository History/inspection split and the changed-files/details split resizable.
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
+- Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
 - Preserve selection and scroll state while File History tabs or native diffs are active.
 - Prefetch history automatically near the loaded end; do not use a routine **Load more** button. Offer retry only after a loading failure.

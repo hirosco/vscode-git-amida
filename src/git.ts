@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import type {
   ChangedFile,
   Commit,
+  CommitRef,
   HistoryResult,
   HistoryRow,
   RepositoryInfo,
@@ -33,16 +34,25 @@ export class GitClient {
 
   public async loadHistory(candidate: string): Promise<HistoryResult> {
     const root = await this.resolveRepository(candidate);
-    const [headOutput, branchResult, logOutput] = await Promise.all([
-      this.run(root, ["rev-parse", "--short=12", "HEAD"]),
+    const [headOutput, branchResult, logOutput, refsOutput] = await Promise.all([
+      this.run(root, ["rev-parse", "HEAD"]),
       this.tryRun(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
       this.run(root, [
         "log",
+        "--branches",
+        "--remotes",
+        "--tags",
         "--graph",
         "--topo-order",
-        "--decorate=short",
-        "--max-count=100",
-        `--format=${RECORD_MARKER}%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00%D%x00`,
+        "--no-decorate",
+        `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+      ]),
+      this.run(root, [
+        "for-each-ref",
+        `--format=${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00`,
+        "refs/heads",
+        "refs/remotes",
+        "refs/tags",
       ]),
     ]);
 
@@ -60,7 +70,10 @@ export class GitClient {
 
     return {
       repository,
-      rows: parseHistory(logOutput.toString("utf8")),
+      rows: parseHistory(
+        logOutput.toString("utf8"),
+        parseRefs(refsOutput.toString("utf8")),
+      ),
     };
   }
 
@@ -149,7 +162,10 @@ export class GitClient {
   }
 }
 
-export function parseHistory(output: string): HistoryRow[] {
+export function parseHistory(
+  output: string,
+  refsByCommit: ReadonlyMap<string, CommitRef[]> = new Map(),
+): HistoryRow[] {
   const rows: HistoryRow[] = [];
 
   for (const rawLine of output.split("\n")) {
@@ -168,13 +184,13 @@ export function parseHistory(output: string): HistoryRow[] {
     const fields = line.slice(markerIndex + 1).split("\x00");
     const [
       hash,
+      shortHash = "",
       parents = "",
       authorName = "",
       authorEmail = "",
       authoredAt = "",
       committedAt = "",
       subject = "",
-      refs = "",
     ] = fields;
     if (!hash) {
       continue;
@@ -185,18 +201,84 @@ export function parseHistory(output: string): HistoryRow[] {
       graph,
       commit: {
         hash,
+        shortHash,
         parents: parents.length > 0 ? parents.split(" ") : [],
         authorName,
         authorEmail,
         authoredAt,
         committedAt,
         subject,
-        refs,
+        refs: refsByCommit.get(hash) ?? [],
       },
     });
   }
 
   return rows;
+}
+
+export function parseRefs(output: string): Map<string, CommitRef[]> {
+  const refsByCommit = new Map<string, CommitRef[]>();
+
+  for (const rawRecord of output.split(RECORD_MARKER)) {
+    const record = rawRecord.replace(/\r?\n$/, "");
+    if (record.length === 0) {
+      continue;
+    }
+    const [
+      objectHash,
+      peeledHash = "",
+      fullName = "",
+      head = "",
+      upstream = "",
+      tracking = "",
+    ] = record.split("\x00");
+    const targetHash = peeledHash || objectHash;
+    const identity = parseRefIdentity(fullName);
+    if (!targetHash || identity === undefined) {
+      continue;
+    }
+    const ref: CommitRef = {
+      ...identity,
+      fullName,
+      current: head.trim() === "*",
+      ...(upstream.length === 0 ? {} : { upstream }),
+      ...(tracking.length === 0 ? {} : { tracking }),
+    };
+    const refs = refsByCommit.get(targetHash) ?? [];
+    refs.push(ref);
+    refsByCommit.set(targetHash, refs);
+  }
+
+  for (const refs of refsByCommit.values()) {
+    refs.sort(compareRefs);
+  }
+  return refsByCommit;
+}
+
+function parseRefIdentity(
+  fullName: string,
+): Pick<CommitRef, "name" | "type"> | undefined {
+  if (fullName.startsWith("refs/heads/")) {
+    return { name: fullName.slice("refs/heads/".length), type: "localBranch" };
+  }
+  if (fullName.startsWith("refs/remotes/")) {
+    return {
+      name: fullName.slice("refs/remotes/".length),
+      type: "remoteBranch",
+    };
+  }
+  if (fullName.startsWith("refs/tags/")) {
+    return { name: fullName.slice("refs/tags/".length), type: "tag" };
+  }
+  return undefined;
+}
+
+function compareRefs(left: CommitRef, right: CommitRef): number {
+  if (left.current !== right.current) {
+    return left.current ? -1 : 1;
+  }
+  const order = { localBranch: 0, remoteBranch: 1, tag: 2 } as const;
+  return order[left.type] - order[right.type] || left.name.localeCompare(right.name);
 }
 
 export function parseNameStatus(output: Buffer): ChangedFile[] {

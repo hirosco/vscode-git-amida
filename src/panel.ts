@@ -163,15 +163,6 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    if (value.type === "copyCommitId" && typeof value.hash === "string") {
-      if (!this.commits.has(value.hash)) {
-        return;
-      }
-      await vscode.env.clipboard.writeText(value.hash);
-      await this.post({ type: "commitCopied", hash: value.hash });
-      return;
-    }
-
     if (value.type === "updateViewState") {
       this.viewState = mergeViewState(this.viewState, value.patch);
       await this.persistViewState();
@@ -244,7 +235,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      const shortHash = commit.hash.slice(0, 8);
+      const shortHash = commit.shortHash;
       const left = this.contentProvider.add(
         beforePath,
         `${shortHash}-parent`,
@@ -322,17 +313,18 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     </div>
     <button id="refresh" class="icon-button" type="button" title="Refresh history" aria-label="Refresh history">↻</button>
   </header>
-  <main class="workspace">
+  <main id="workspace" class="workspace" data-history-ratio="55">
     <section class="pane history-pane" aria-labelledby="history-heading">
       <div class="pane-heading">
         <h2 id="history-heading">Repository History</h2>
         <span id="history-count" class="secondary"></span>
       </div>
       <div class="column-head history-columns" aria-hidden="true">
-        <span>Graph</span><span>Commit</span><span class="refs-column">Refs</span><span class="author-column">Author</span><span>Date</span>
+        <span>Graph</span><span>Commit</span><span>Date</span>
       </div>
       <div id="history" class="list history-list" role="listbox" aria-label="Commit history"></div>
     </section>
+    <div id="workspace-resizer" class="workspace-resizer" role="separator" aria-label="Resize Repository History and changed files" aria-orientation="vertical" aria-valuemin="45" aria-valuemax="70" aria-valuenow="55" tabindex="0"></div>
     <section id="inspection" class="inspection-pane" data-files-ratio="65">
       <section class="pane files-section" aria-labelledby="files-heading">
         <div class="pane-heading">
@@ -340,9 +332,15 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
             <h2 id="files-heading">Changed files</h2>
             <span id="selected-commit" class="secondary"></span>
           </div>
-          <div class="mode-switch" role="group" aria-label="Changed file display">
-            <button id="flat-mode" type="button" aria-pressed="true">Flat</button>
-            <button id="tree-mode" type="button" aria-pressed="false">Tree</button>
+          <div class="file-toolbar">
+            <div id="tree-actions" class="tree-actions" role="group" aria-label="Tree expansion" hidden>
+              <button id="expand-all" class="icon-button" type="button" title="Expand all folders" aria-label="Expand all folders">＋</button>
+              <button id="collapse-all" class="icon-button" type="button" title="Collapse all folders" aria-label="Collapse all folders">−</button>
+            </div>
+            <div class="mode-switch" role="group" aria-label="Changed file display">
+              <button id="flat-mode" type="button" aria-pressed="true">Flat</button>
+              <button id="tree-mode" type="button" aria-pressed="false">Tree</button>
+            </div>
           </div>
         </div>
         <div class="column-head file-columns" aria-hidden="true">

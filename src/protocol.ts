@@ -21,7 +21,6 @@ export type HostToWebviewMessage =
       tree: FileTreeNode[];
     }
   | { type: "filesError"; hash: string; message: string }
-  | { type: "commitCopied"; hash: string }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =
@@ -30,5 +29,4 @@ export type WebviewToHostMessage =
   | { type: "selectCommit"; hash: string }
   | { type: "selectFile"; hash: string; path: string }
   | { type: "openDiff"; hash: string; path: string }
-  | { type: "copyCommitId"; hash: string }
   | { type: "updateViewState"; patch: RepositoryViewStatePatch };

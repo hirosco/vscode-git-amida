@@ -27,12 +27,12 @@ Detailed text comparisons open in the editor's native diff view instead of consu
 
 The commit list is optimized for scanning a large history.
 
-- Render every commit on exactly one row
-- Never wrap subject or metadata inside a history row
-- Show graph, subject, refs, author, and date as columns
+- Render every commit as one logical row with a compact primary line
+- Never wrap the subject; place complete refs in a secondary chip band that may wrap
+- Show graph, subject, and date in the history list; keep author information in commit details
 - Give the subject flexible width and truncate it with an accessible full-value label
-- Keep graph alignment stable while optional columns appear or disappear
-- Hide lower-priority columns responsively before allowing horizontal overflow
+- Mark the checked-out HEAD in the gutter without changing subject alignment
+- Keep graph alignment stable while ref chips change row height
 - Keep the selected row visually distinct without relying on color alone
 
 The full commit hash and other secondary metadata do not need permanent space in every row.
@@ -46,12 +46,14 @@ The right side is split vertically:
 
 The divider is resizable. Commit details can be collapsed, but changed files must retain a usable minimum height.
 
-Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree expansion state is presentation state and must not alter the selected files.
+Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree mode starts fully expanded whenever files are loaded and provides expand-all and collapse-all actions. Expansion state is intentionally not persisted across commit changes, refreshes, or editor restarts.
+
+The vertical split between Repository History and inspection is resizable and persisted per workspace. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
 
 The details pane shows:
 
 - Full commit subject
-- Full commit hash with an explicit copy action
+- Full selectable commit hash without a persistent copy button; provide copying through contextual actions
 - Author name and email
 - Authored or committed time, with the chosen meaning labeled
 - Branch and tag refs
@@ -161,7 +163,9 @@ Invoke the locally installed Git CLI from the Extension Host instead of parsing 
 - Apply operation-specific history, output, and time limits
 - Treat Git output and Webview messages as untrusted input
 
-The initial history loads 100 commits as a page size, not a product limit. Prefetch the next page automatically before the user reaches the end of the current rows, preserve graph, selection, and scroll state, and continue until all reachable history is available. Do not require a routine **Load more** action. Show an explicit retry only when automatic loading fails.
+The evaluation build temporarily loads every commit reachable from local branches, remote-tracking branches, and tags in one request, while retaining the operation timeout and output limit. This exists to measure real repository behavior and is not the intended distribution strategy.
+
+The production target uses 100 commits as a page size, not a product limit. Prefetch the next page automatically before the user reaches the end of the current rows, preserve graph, selection, and scroll state, and continue until all reachable history is available. Do not require a routine **Load more** action. Show an explicit retry only when automatic loading fails.
 
 ## Logical architecture
 

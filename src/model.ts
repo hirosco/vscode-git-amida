@@ -8,13 +8,25 @@ export interface RepositoryInfo {
 
 export interface Commit {
   hash: string;
+  shortHash: string;
   parents: string[];
   authorName: string;
   authorEmail: string;
   authoredAt: string;
   committedAt: string;
   subject: string;
-  refs: string;
+  refs: CommitRef[];
+}
+
+export type RefType = "localBranch" | "remoteBranch" | "tag";
+
+export interface CommitRef {
+  name: string;
+  fullName: string;
+  type: RefType;
+  current: boolean;
+  upstream?: string;
+  tracking?: string;
 }
 
 export type HistoryRow =
@@ -38,15 +50,15 @@ export interface RepositoryViewState {
   selectedHash?: string;
   selectedFilePath?: string;
   fileViewMode: FileViewMode;
+  historyRatio: number;
   filesRatio: number;
   detailsCollapsed: boolean;
-  expandedTreePaths: string[];
 }
 
 export type RepositoryViewStatePatch = Partial<
   Pick<
     RepositoryViewState,
-    "fileViewMode" | "filesRatio" | "detailsCollapsed" | "expandedTreePaths"
+    "fileViewMode" | "historyRatio" | "filesRatio" | "detailsCollapsed"
   >
 >;
 

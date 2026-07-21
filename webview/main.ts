@@ -22,8 +22,10 @@ declare function acquireVsCodeApi(): VsCodeApi;
 const vscode = acquireVsCodeApi();
 const elements = {
   details: element<HTMLDivElement>("details"),
+  collapseAll: element<HTMLButtonElement>("collapse-all"),
   detailsResizer: element<HTMLDivElement>("details-resizer"),
   detailsSection: element<HTMLElement>("details-section"),
+  expandAll: element<HTMLButtonElement>("expand-all"),
   files: element<HTMLDivElement>("files"),
   flatMode: element<HTMLButtonElement>("flat-mode"),
   history: element<HTMLDivElement>("history"),
@@ -34,15 +36,20 @@ const elements = {
   selectedCommit: element<HTMLSpanElement>("selected-commit"),
   status: element<HTMLElement>("status"),
   toggleDetails: element<HTMLButtonElement>("toggle-details"),
+  treeActions: element<HTMLDivElement>("tree-actions"),
   treeMode: element<HTMLButtonElement>("tree-mode"),
+  workspace: element<HTMLElement>("workspace"),
+  workspaceResizer: element<HTMLDivElement>("workspace-resizer"),
 };
 
 let selectedHash: string | undefined;
+let currentHead: string | undefined;
 let selectedFilePath: string | undefined;
 let commits = new Map<string, Commit>();
 let currentFiles: ChangedFile[] = [];
 let currentTree: FileTreeNode[] = [];
 let fileViewMode: FileViewMode = "flat";
+let historyRatio = 55;
 let filesRatio = 65;
 let detailsCollapsed = false;
 let expandedTreePaths = new Set<string>();
@@ -53,6 +60,14 @@ element<HTMLButtonElement>("refresh").addEventListener("click", () => {
 
 elements.flatMode.addEventListener("click", () => setFileViewMode("flat"));
 elements.treeMode.addEventListener("click", () => setFileViewMode("tree"));
+elements.expandAll.addEventListener("click", () => {
+  expandedTreePaths = collectDirectoryPaths(currentTree);
+  renderFiles();
+});
+elements.collapseAll.addEventListener("click", () => {
+  expandedTreePaths.clear();
+  renderFiles();
+});
 elements.toggleDetails.addEventListener("click", () => {
   detailsCollapsed = !detailsCollapsed;
   applyDetailsState();
@@ -60,6 +75,7 @@ elements.toggleDetails.addEventListener("click", () => {
 });
 
 configureResizer();
+configureWorkspaceResizer();
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (!isHostMessage(event.data)) {
@@ -75,6 +91,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     case "history":
       applyViewState(message.viewState);
       selectedHash = message.selectedHash;
+      currentHead = message.repository.head;
       renderRepository(message.repository);
       renderHistory(message.rows);
       renderSelectedCommit();
@@ -86,13 +103,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       updateCommitSelection();
       renderSelectedCommit();
       setEmpty(elements.files, "Loading changed files…");
-      elements.selectedCommit.textContent = shortHash(message.hash);
+      elements.selectedCommit.textContent =
+        commits.get(message.hash)?.shortHash ?? shortHash(message.hash);
       setStatus("Loading changed files…");
       break;
     case "files":
       if (message.hash === selectedHash) {
         currentFiles = message.files;
         currentTree = message.tree;
+        expandedTreePaths = collectDirectoryPaths(currentTree);
         renderFiles();
       }
       break;
@@ -101,9 +120,6 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
         setEmpty(elements.files, message.message, true);
         setStatus(message.message, true);
       }
-      break;
-    case "commitCopied":
-      setStatus(`Copied commit ID ${shortHash(message.hash)}.`);
       break;
     case "error":
       commits.clear();
@@ -117,7 +133,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
 
 function renderRepository(repository: RepositoryInfo): void {
   elements.repositoryName.textContent = repository.name;
-  elements.repositoryMeta.textContent = `${repository.branch} · ${repository.head}`;
+  elements.repositoryMeta.textContent = `${repository.branch} · ${shortHash(repository.head, 12)}`;
   elements.repositoryMeta.title = repository.root;
 }
 
@@ -137,22 +153,42 @@ function renderHistory(rows: HistoryRow[]): void {
     button.className = "history-row history-columns";
     button.dataset.hash = row.commit.hash;
     button.setAttribute("role", "option");
+    const isHead = row.commit.hash === currentHead;
+    button.classList.toggle("current-head", isHead);
+    const refNames = row.commit.refs.map((ref) => ref.name).join(", ");
     button.setAttribute(
       "aria-label",
-      `${row.commit.subject}, ${row.commit.authorName}, ${formatFullDate(row.commit.authoredAt)}`,
+      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
     );
 
     const graph = span("graph", row.graph);
     graph.setAttribute("aria-hidden", "true");
+    const commitCell = document.createElement("span");
+    commitCell.className = "commit-cell";
+    if (isHead) {
+      const marker = span("head-marker", "");
+      marker.title = "HEAD (current checkout)";
+      marker.setAttribute("role", "img");
+      marker.setAttribute("aria-label", "HEAD (current checkout)");
+      commitCell.append(marker);
+    }
     const subject = span("subject", row.commit.subject || "(no subject)");
     subject.title = row.commit.subject;
-    const refs = span("refs refs-column", row.commit.refs);
-    refs.title = row.commit.refs;
-    const author = span("author author-column", row.commit.authorName);
-    author.title = `${row.commit.authorName} <${row.commit.authorEmail}>`;
+    commitCell.append(subject);
+    if (row.commit.refs.length > 0) {
+      const refs = document.createElement("span");
+      refs.className = "ref-list";
+      for (const ref of row.commit.refs) {
+        const chip = span(`ref-chip ref-${ref.type}`, ref.name);
+        chip.classList.toggle("current-ref", ref.current);
+        chip.title = refTooltip(ref);
+        refs.append(chip);
+      }
+      commitCell.append(refs);
+    }
     const date = span("date", formatRowDate(row.commit.authoredAt));
     date.title = `Authored ${formatFullDate(row.commit.authoredAt)}`;
-    button.append(graph, subject, refs, author, date);
+    button.append(graph, commitCell, date);
     button.addEventListener("click", () => selectCommit(row.commit.hash));
     button.addEventListener("keydown", (event) => {
       navigateRows(event, ".history-row", () => {
@@ -227,14 +263,12 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
         expandedTreePaths.add(node.path);
       }
       renderFiles();
-      updateViewState({ expandedTreePaths: [...expandedTreePaths] });
     });
     button.addEventListener("keydown", (event) => {
       if (event.key === "ArrowRight" && !expandedTreePaths.has(node.path)) {
         event.preventDefault();
         expandedTreePaths.add(node.path);
         renderFiles();
-        updateViewState({ expandedTreePaths: [...expandedTreePaths] });
       } else if (
         event.key === "ArrowLeft" &&
         expandedTreePaths.has(node.path)
@@ -242,7 +276,6 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
         event.preventDefault();
         expandedTreePaths.delete(node.path);
         renderFiles();
-        updateViewState({ expandedTreePaths: [...expandedTreePaths] });
       }
     });
     wrapper.append(button, children);
@@ -293,7 +326,7 @@ function renderSelectedCommit(): void {
 
   const list = document.createElement("dl");
   list.className = "details-list";
-  appendDetail(list, "Commit", commit.hash, true);
+  appendDetail(list, "Commit", commit.hash);
   appendDetail(
     list,
     "Author",
@@ -301,7 +334,11 @@ function renderSelectedCommit(): void {
   );
   appendDetail(list, "Authored", formatFullDate(commit.authoredAt));
   appendDetail(list, "Committed", formatFullDate(commit.committedAt));
-  appendDetail(list, "Refs", commit.refs || "—");
+  appendDetail(
+    list,
+    "Refs",
+    commit.refs.map((ref) => ref.name).join(", ") || "—",
+  );
   appendDetail(list, "Parents", commit.parents.join(", ") || "None (root commit)");
   appendDetail(
     list,
@@ -315,30 +352,15 @@ function appendDetail(
   list: HTMLDListElement,
   label: string,
   value: string,
-  copy = false,
 ): void {
   const term = document.createElement("dt");
   term.textContent = label;
   const description = document.createElement("dd");
   description.title = value;
-  if (copy) {
-    const code = document.createElement("code");
-    code.textContent = value;
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "copy-button";
-    button.textContent = "Copy";
-    button.setAttribute("aria-label", "Copy full commit ID");
-    button.addEventListener("click", () => {
-      if (selectedHash !== undefined) {
-        vscode.postMessage({ type: "copyCommitId", hash: selectedHash });
-      }
-    });
-    description.className = "copy-value";
-    description.append(code, button);
-  } else {
-    description.textContent = value;
+  if (label === "Commit") {
+    description.className = "hash-value";
   }
+  description.textContent = value;
   list.append(term, description);
 }
 
@@ -399,11 +421,12 @@ function setFileViewMode(mode: FileViewMode): void {
 
 function applyViewState(state: RepositoryViewState): void {
   fileViewMode = state.fileViewMode;
+  historyRatio = state.historyRatio;
   filesRatio = state.filesRatio;
   detailsCollapsed = state.detailsCollapsed;
-  expandedTreePaths = new Set(state.expandedTreePaths);
   selectedFilePath = state.selectedFilePath;
   applyFileViewMode();
+  applyHistoryRatio();
   applyRatio();
   applyDetailsState();
 }
@@ -411,6 +434,12 @@ function applyViewState(state: RepositoryViewState): void {
 function applyFileViewMode(): void {
   elements.flatMode.setAttribute("aria-pressed", String(fileViewMode === "flat"));
   elements.treeMode.setAttribute("aria-pressed", String(fileViewMode === "tree"));
+  elements.treeActions.hidden = fileViewMode !== "tree";
+}
+
+function applyHistoryRatio(): void {
+  elements.workspace.dataset.historyRatio = String(historyRatio);
+  elements.workspaceResizer.setAttribute("aria-valuenow", String(historyRatio));
 }
 
 function applyRatio(): void {
@@ -474,6 +503,66 @@ function configureResizer(): void {
       setFilesRatio(80, true);
     }
   });
+}
+
+function configureWorkspaceResizer(): void {
+  let dragging = false;
+
+  elements.workspaceResizer.addEventListener("pointerdown", (event) => {
+    dragging = true;
+    elements.workspaceResizer.setPointerCapture(event.pointerId);
+    elements.workspaceResizer.classList.add("dragging");
+    updateHistoryRatioFromPointer(event);
+  });
+  elements.workspaceResizer.addEventListener("pointermove", (event) => {
+    if (dragging) {
+      updateHistoryRatioFromPointer(event);
+    }
+  });
+  const finish = (event: PointerEvent): void => {
+    if (!dragging) {
+      return;
+    }
+    dragging = false;
+    if (elements.workspaceResizer.hasPointerCapture(event.pointerId)) {
+      elements.workspaceResizer.releasePointerCapture(event.pointerId);
+    }
+    elements.workspaceResizer.classList.remove("dragging");
+    updateViewState({ historyRatio });
+  };
+  elements.workspaceResizer.addEventListener("pointerup", finish);
+  elements.workspaceResizer.addEventListener("pointercancel", finish);
+  elements.workspaceResizer.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setHistoryRatio(historyRatio - 5, true);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setHistoryRatio(historyRatio + 5, true);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setHistoryRatio(45, true);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setHistoryRatio(70, true);
+    }
+  });
+}
+
+function updateHistoryRatioFromPointer(event: PointerEvent): void {
+  const bounds = elements.workspace.getBoundingClientRect();
+  if (bounds.width <= 0) {
+    return;
+  }
+  setHistoryRatio(((event.clientX - bounds.left) / bounds.width) * 100, false);
+}
+
+function setHistoryRatio(value: number, persist: boolean): void {
+  historyRatio = Math.min(70, Math.max(45, Math.round(value / 5) * 5));
+  applyHistoryRatio();
+  if (persist) {
+    updateViewState({ historyRatio });
+  }
 }
 
 function updateRatioFromPointer(event: PointerEvent): void {
@@ -550,8 +639,37 @@ function span(className: string, text: string): HTMLSpanElement {
   return value;
 }
 
-function shortHash(hash: string): string {
-  return hash.slice(0, 8);
+function shortHash(hash: string, length = 8): string {
+  return hash.slice(0, length);
+}
+
+function collectDirectoryPaths(nodes: FileTreeNode[]): Set<string> {
+  const paths = new Set<string>();
+  for (const node of nodes) {
+    if (node.kind === "directory") {
+      paths.add(node.path);
+      for (const path of collectDirectoryPaths(node.children)) {
+        paths.add(path);
+      }
+    }
+  }
+  return paths;
+}
+
+function refTooltip(ref: Commit["refs"][number]): string {
+  const type = {
+    localBranch: "Local branch",
+    remoteBranch: "Remote-tracking branch",
+    tag: "Tag",
+  }[ref.type];
+  const parts = [type, ref.fullName];
+  if (ref.current) {
+    parts.push("current branch");
+  }
+  if (ref.upstream !== undefined) {
+    parts.push(`upstream: ${ref.upstream}${ref.tracking ?? ""}`);
+  }
+  return parts.join(" · ");
 }
 
 function formatRowDate(value: string): string {
