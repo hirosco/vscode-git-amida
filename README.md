@@ -20,7 +20,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Marks local and remote HEAD positions with an unbordered icon-and-text `HEAD` indicator; local refs are filled, remote refs are outlined, and tags use a distinct shape
 - Shows changed files in Flat or initially expanded Tree mode, with expand-all and collapse-all actions
 - Shows full commit metadata in a resizable, collapsible details pane
-- Selects a linear commit Range with Shift+click, shows its explicit base and tip, and aggregates the final changed files from that comparison
+- Selects a linear commit Range with Shift+click, shows its explicit base, tip, and selected commits, and aggregates the final changed files from that comparison
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
 - Opens a single-commit or Range file comparison in the editor's native side-by-side diff on double-click or Enter
 - Compares normal commits with their first parent and root commits with Git's empty tree

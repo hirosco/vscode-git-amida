@@ -529,7 +529,6 @@ function renderRangeDetails(
 
   const list = document.createElement("dl");
   list.className = "details-list";
-  appendDetail(list, "Mode", "Range");
   appendDetail(list, "Commits", String(range.commitHashes.length));
   appendDetail(
     list,
@@ -543,15 +542,37 @@ function renderRangeDetails(
   );
   appendDetail(
     list,
-    "Compared with",
-    range.baseHash ?? "Empty tree (root commit)",
-  );
-  appendDetail(
-    list,
     "Comparison",
     `${range.baseHash ?? "Empty tree"} → ${range.newestHash}`,
   );
-  elements.details.append(subject, list);
+
+  const commitsHeading = document.createElement("h3");
+  commitsHeading.className = "range-commits-heading";
+  commitsHeading.textContent =
+    `Selected commits (${range.commitHashes.length})`;
+
+  const commitList = document.createElement("ol");
+  commitList.className = "range-commit-list";
+  commitList.setAttribute("aria-label", "Selected commits, oldest first");
+  for (const hash of range.commitHashes) {
+    const commit = commits.get(hash);
+    const item = document.createElement("li");
+    item.className = "range-commit-item";
+    item.title = `${hash} · ${commit?.subject || "(no subject)"}`;
+
+    const hashValue = document.createElement("code");
+    hashValue.className = "range-commit-hash";
+    hashValue.textContent = commit?.shortHash ?? shortHash(hash);
+    const commitSubject = span(
+      "range-commit-subject",
+      commit?.subject || "(no subject)",
+    );
+    commitSubject.title = commit?.subject ?? "";
+    item.append(hashValue, commitSubject);
+    commitList.append(item);
+  }
+
+  elements.details.append(subject, list, commitsHeading, commitList);
 }
 
 function appendDetail(

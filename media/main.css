@@ -688,6 +688,45 @@ code {
   overflow-wrap: anywhere;
 }
 
+.range-commits-heading {
+  margin: 14px 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.range-commit-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.range-commit-item {
+  display: grid;
+  min-width: 0;
+  min-height: 20px;
+  align-items: center;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px;
+  font-size: 11px;
+}
+
+.range-commit-hash {
+  color: var(--vscode-descriptionForeground);
+  font-size: 10px;
+}
+
+.range-commit-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hash-value {
   font-family: var(--vscode-editor-font-family);
 }

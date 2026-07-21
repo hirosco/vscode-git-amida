@@ -141,6 +141,8 @@ IntelliJ IDEA is an interaction reference for familiar selection and aggregation
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
+Range details keep the comparison basis prominent, then show a compact oldest-to-newest list of selected commits using short hashes and subjects. Do not repeat complete author and timestamp metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+
 Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
 The first multiple-commit implementation slice supports only single selection and Range. It must complete the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added. Linear history comes first; branch and merge cases then harden the same Range model rather than introducing another selection mode.
