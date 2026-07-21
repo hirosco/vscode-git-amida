@@ -16,7 +16,7 @@ import type {
 } from "./model";
 import type { HostToWebviewMessage } from "./protocol";
 import {
-  resolveLinearRange,
+  resolveRange,
   selectionIdentity,
   singleCommitSelection,
 } from "./selection";
@@ -164,7 +164,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
           this.navigationState.rangeAnchorHash ??
           this.navigationState.selectedHash;
         if (anchorHash !== undefined && anchorHash !== value.hash) {
-          const result = resolveLinearRange(
+          const result = resolveRange(
             this.commits,
             anchorHash,
             value.hash,
@@ -372,7 +372,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       anchorHash !== selectedHash &&
       this.commits.has(anchorHash)
     ) {
-      const result = resolveLinearRange(
+      const result = resolveRange(
         this.commits,
         anchorHash,
         selectedHash,

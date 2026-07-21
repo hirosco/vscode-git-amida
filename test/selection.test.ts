@@ -3,12 +3,12 @@ import test from "node:test";
 
 import type { Commit } from "../src/model";
 import {
-  resolveLinearRange,
+  resolveRange,
   selectionIdentity,
   singleCommitSelection,
 } from "../src/selection";
 
-test("resolveLinearRange derives the same base and tip in either selection direction", () => {
+test("resolveRange derives the same base and tip in either selection direction", () => {
   const commits = commitMap([
     commit("third", ["second"]),
     commit("second", ["root"]),
@@ -16,7 +16,7 @@ test("resolveLinearRange derives the same base and tip in either selection direc
     commit("root", []),
   ]);
 
-  const forward = resolveLinearRange(commits, "second", "third");
+  const forward = resolveRange(commits, "second", "third");
   assert.equal(forward.ok, true);
   if (forward.ok) {
     assert.deepEqual(forward.selection, {
@@ -30,7 +30,7 @@ test("resolveLinearRange derives the same base and tip in either selection direc
     });
   }
 
-  const reverse = resolveLinearRange(commits, "third", "second");
+  const reverse = resolveRange(commits, "third", "second");
   assert.equal(reverse.ok, true);
   if (reverse.ok) {
     assert.deepEqual(reverse.selection, {
@@ -45,8 +45,8 @@ test("resolveLinearRange derives the same base and tip in either selection direc
   }
 });
 
-test("resolveLinearRange uses the empty tree before a root endpoint", () => {
-  const result = resolveLinearRange(
+test("resolveRange uses the empty tree before a root endpoint", () => {
+  const result = resolveRange(
     commitMap([
       commit("second", ["root"]),
       commit("root", []),
@@ -62,7 +62,7 @@ test("resolveLinearRange uses the empty tree before a root endpoint", () => {
   }
 });
 
-test("resolveLinearRange rejects merge and unrelated paths explicitly", () => {
+test("resolveRange includes every merge contributor between base and tip", () => {
   const commits = commitMap([
     commit("merge", ["main", "side"]),
     commit("main", ["root"]),
@@ -71,20 +71,60 @@ test("resolveLinearRange rejects merge and unrelated paths explicitly", () => {
     commit("unrelated", []),
   ]);
 
-  assert.deepEqual(resolveLinearRange(commits, "main", "merge"), {
+  const result = resolveRange(commits, "main", "merge");
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.selection, {
+      mode: "range",
+      anchorHash: "main",
+      activeHash: "merge",
+      oldestHash: "main",
+      newestHash: "merge",
+      baseHash: "root",
+      commitHashes: ["side", "main", "merge"],
+    });
+  }
+});
+
+test("resolveRange uses the first parent when the oldest endpoint is a merge", () => {
+  const result = resolveRange(
+    commitMap([
+      commit("after", ["merge"]),
+      commit("merge", ["main", "side"]),
+      commit("main", ["root"]),
+      commit("side", ["root"]),
+      commit("root", []),
+    ]),
+    "merge",
+    "after",
+  );
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.selection.baseHash, "main");
+    assert.deepEqual(
+      result.selection.commitHashes,
+      ["side", "merge", "after"],
+    );
+  }
+});
+
+test("resolveRange rejects unrelated endpoints explicitly", () => {
+  const commits = commitMap([
+    commit("main", ["root"]),
+    commit("root", []),
+    commit("unrelated", []),
+  ]);
+
+  assert.deepEqual(resolveRange(commits, "main", "unrelated"), {
     ok: false,
-    message:
-      "Ranges containing merge commits are not available in this first Range checkpoint.",
-  });
-  assert.deepEqual(resolveLinearRange(commits, "main", "unrelated"), {
-    ok: false,
-    message: "Range endpoints must have a direct linear ancestor relationship.",
+    message: "Range endpoints must have an ancestor relationship.",
   });
 });
 
 test("selectionIdentity distinguishes single selections and Range anchors", () => {
   assert.equal(selectionIdentity(singleCommitSelection("commit")), "single:commit");
-  const result = resolveLinearRange(
+  const result = resolveRange(
     commitMap([
       commit("second", ["root"]),
       commit("root", []),

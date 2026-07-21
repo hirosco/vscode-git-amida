@@ -544,6 +544,14 @@ function renderRangeDetails(
     "Oldest",
     commitDescription(range.oldestHash),
   );
+  if (oldest !== undefined && oldest.parents.length > 1) {
+    const comparisonParent = range.baseHash ?? "Empty tree";
+    appendDetail(
+      list,
+      "Comparison parent",
+      `1 of ${oldest.parents.length} (first parent) · ${comparisonParent}`,
+    );
+  }
   appendDetail(
     list,
     "Comparison",

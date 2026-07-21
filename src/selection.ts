@@ -4,25 +4,24 @@ import type {
   RepositorySelection,
 } from "./model";
 
-export type LinearRangeResolution =
+export type RangeResolution =
   | { ok: true; selection: CommitRangeSelection }
   | { ok: false; message: string };
 
-type LinearPathResult =
-  | { kind: "path"; hashes: string[] }
-  | { kind: "merge" }
-  | { kind: "missing" }
-  | { kind: "unrelated" };
+interface Reachability {
+  hashes: Set<string>;
+  missing: boolean;
+}
 
 export function singleCommitSelection(hash: string): RepositorySelection {
   return { mode: "single", activeHash: hash };
 }
 
-export function resolveLinearRange(
+export function resolveRange(
   commits: ReadonlyMap<string, Commit>,
   anchorHash: string,
   activeHash: string,
-): LinearRangeResolution {
+): RangeResolution {
   if (!commits.has(anchorHash) || !commits.has(activeHash)) {
     return {
       ok: false,
@@ -36,46 +35,71 @@ export function resolveLinearRange(
     };
   }
 
-  const anchorToActive = traceLinearPath(commits, anchorHash, activeHash);
-  if (anchorToActive.kind === "path") {
-    return rangeResult(
-      commits,
-      anchorHash,
-      activeHash,
-      anchorHash,
-      activeHash,
-      anchorToActive.hashes,
-    );
-  }
+  const anchorReachability = collectReachable(commits, anchorHash);
+  const activeReachability = collectReachable(commits, activeHash);
+  let oldestHash: string;
+  let newestHash: string;
+  let newestReachability: Reachability;
 
-  const activeToAnchor = traceLinearPath(commits, activeHash, anchorHash);
-  if (activeToAnchor.kind === "path") {
-    return rangeResult(
-      commits,
-      anchorHash,
-      activeHash,
-      activeHash,
-      anchorHash,
-      activeToAnchor.hashes,
-    );
-  }
-
-  if (anchorToActive.kind === "merge" || activeToAnchor.kind === "merge") {
+  if (activeReachability.hashes.has(anchorHash)) {
+    oldestHash = anchorHash;
+    newestHash = activeHash;
+    newestReachability = activeReachability;
+  } else if (anchorReachability.hashes.has(activeHash)) {
+    oldestHash = activeHash;
+    newestHash = anchorHash;
+    newestReachability = anchorReachability;
+  } else if (anchorReachability.missing || activeReachability.missing) {
     return {
       ok: false,
-      message:
-        "Ranges containing merge commits are not available in this first Range checkpoint.",
+      message: "The complete ancestry between these commits is not loaded.",
     };
-  }
-  if (anchorToActive.kind === "missing" || activeToAnchor.kind === "missing") {
+  } else {
     return {
       ok: false,
-      message: "The complete path between these commits is not loaded.",
+      message: "Range endpoints must have an ancestor relationship.",
     };
   }
+
+  const oldestCommit = commits.get(oldestHash);
+  if (oldestCommit === undefined) {
+    return {
+      ok: false,
+      message: "One of the selected commits is no longer in this history.",
+    };
+  }
+  const baseHash = oldestCommit.parents[0];
+  const baseReachability =
+    baseHash === undefined
+      ? { hashes: new Set<string>(), missing: false }
+      : collectReachable(commits, baseHash);
+  if (newestReachability.missing || baseReachability.missing) {
+    return {
+      ok: false,
+      message: "The complete ancestry between these commits is not loaded.",
+    };
+  }
+
+  const selectedHashes = new Set(
+    [...newestReachability.hashes].filter(
+      (hash) => !baseReachability.hashes.has(hash),
+    ),
+  );
+  const commitHashes = [...commits.keys()]
+    .filter((hash) => selectedHashes.has(hash))
+    .reverse();
+
   return {
-    ok: false,
-    message: "Range endpoints must have a direct linear ancestor relationship.",
+    ok: true,
+    selection: {
+      mode: "range",
+      anchorHash,
+      activeHash,
+      oldestHash,
+      newestHash,
+      baseHash,
+      commitHashes,
+    },
   };
 }
 
@@ -85,58 +109,27 @@ export function selectionIdentity(selection: RepositorySelection): string {
     : `range:${selection.anchorHash}:${selection.activeHash}`;
 }
 
-function rangeResult(
+function collectReachable(
   commits: ReadonlyMap<string, Commit>,
-  anchorHash: string,
-  activeHash: string,
-  oldestHash: string,
-  newestHash: string,
-  commitHashes: string[],
-): LinearRangeResolution {
-  return {
-    ok: true,
-    selection: {
-      mode: "range",
-      anchorHash,
-      activeHash,
-      oldestHash,
-      newestHash,
-      baseHash: commits.get(oldestHash)?.parents[0],
-      commitHashes,
-    },
-  };
-}
+  startHash: string,
+): Reachability {
+  const hashes = new Set<string>();
+  const pending = [startHash];
+  let missing = false;
 
-function traceLinearPath(
-  commits: ReadonlyMap<string, Commit>,
-  oldestHash: string,
-  newestHash: string,
-): LinearPathResult {
-  const hashes: string[] = [];
-  const visited = new Set<string>();
-  let currentHash = newestHash;
-
-  while (!visited.has(currentHash)) {
-    visited.add(currentHash);
-    const commit = commits.get(currentHash);
+  while (pending.length > 0) {
+    const hash = pending.pop();
+    if (hash === undefined || hashes.has(hash)) {
+      continue;
+    }
+    const commit = commits.get(hash);
     if (commit === undefined) {
-      return { kind: "missing" };
+      missing = true;
+      continue;
     }
-    hashes.unshift(currentHash);
-    if (currentHash === oldestHash) {
-      return commit.parents.length > 1
-        ? { kind: "merge" }
-        : { kind: "path", hashes };
-    }
-    if (commit.parents.length > 1) {
-      return { kind: "merge" };
-    }
-    const parent = commit.parents[0];
-    if (parent === undefined) {
-      return { kind: "unrelated" };
-    }
-    currentHash = parent;
+    hashes.add(hash);
+    pending.push(...commit.parents);
   }
 
-  return { kind: "unrelated" };
+  return { hashes, missing };
 }

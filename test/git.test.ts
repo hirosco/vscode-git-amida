@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { GitClient, parseHistory, parseNameStatus, parseRefs } from "../src/git";
+import { resolveRange } from "../src/selection";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -216,6 +217,65 @@ test("GitClient compares the final effect of a linear commit range", async (cont
   assert.equal(
     (await client.readBlob(repository, third.hash, "shared.txt")).toString(),
     "third\n",
+  );
+});
+
+test("GitClient compares a merge range from its declared base to tip", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-merge-range-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  writeFileSync(join(repository, "root.txt"), "root\n");
+  git(repository, "add", "--", "root.txt");
+  git(repository, "commit", "-q", "-m", "root");
+  const root = git(repository, "rev-parse", "HEAD").trim();
+
+  git(repository, "switch", "-q", "-c", "side");
+  writeFileSync(join(repository, "side.txt"), "side\n");
+  git(repository, "add", "--", "side.txt");
+  git(repository, "commit", "-q", "-m", "side");
+
+  git(repository, "switch", "-q", "main");
+  writeFileSync(join(repository, "main.txt"), "main\n");
+  git(repository, "add", "--", "main.txt");
+  git(repository, "commit", "-q", "-m", "main");
+  const main = git(repository, "rev-parse", "HEAD").trim();
+  git(repository, "merge", "-q", "--no-ff", "side", "-m", "merge");
+  const merge = git(repository, "rev-parse", "HEAD").trim();
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const commits = new Map(
+    history.rows.map((row) => [row.commit.hash, row.commit]),
+  );
+  const result = resolveRange(commits, main, merge);
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    return;
+  }
+
+  const side = history.rows.find(
+    (row) => row.commit.subject === "side",
+  )?.commit;
+  assert.ok(side);
+  assert.equal(result.selection.baseHash, root);
+  assert.deepEqual(
+    new Set(result.selection.commitHashes),
+    new Set([main, side.hash, merge]),
+  );
+  assert.deepEqual(
+    await client.changedFilesBetween(
+      repository,
+      result.selection.baseHash,
+      result.selection.newestHash,
+    ),
+    [
+      { status: "A", path: "main.txt" },
+      { status: "A", path: "side.txt" },
+    ],
   );
 });
 

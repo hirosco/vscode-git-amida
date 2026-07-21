@@ -144,13 +144,13 @@ IntelliJ IDEA is an interaction reference for familiar selection and aggregation
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
-The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact newest-to-oldest list matching Repository History using short hashes, subjects, and committed timestamps. Keep the underlying Range path oldest-to-newest for comparison semantics. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact newest-to-oldest list matching Repository History using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
 
 Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
-The first multiple-commit implementation slice supports only single selection and Range. It must complete the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added. Linear history comes first; branch and merge cases then harden the same Range model rather than introducing another selection mode.
+The current multiple-commit implementation supports only single selection and Range. It completes the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added.
 
-The current Range checkpoint accepts endpoints only when one is a direct ancestor of the other through a path containing no merge commit. An unsupported Shift selection leaves the current selection unchanged and explains the constraint instead of guessing a comparison parent. This restriction is temporary until Range topology hardening makes branch and merge boundaries explicit.
+Range endpoints must have an ancestor relationship. Use the first parent of the older endpoint as the comparison base, or the empty tree when that endpoint is a root commit. The contributing commit set is every commit reachable from the tip but not from the base, equivalent to `git rev-list base..tip`. This includes side-branch commits merged between the declared base and tip while excluding unrelated date-interleaved rows. When the older endpoint is a merge, show that first-parent choice explicitly. A Shift selection between unrelated endpoints leaves the current selection unchanged because that investigation belongs to explicit Selection rather than one before/after Range.
 
 ### Selection
 
@@ -164,7 +164,7 @@ The familiar interaction target is Shift selection for an initial range and Cmd/
 
 ### Acceptance invariants
 
-- Linear Range results match the diff between the declared base and tip
+- Ancestor-related Range results match the diff between the declared base and tip
 - An unrelated branch row appearing between endpoints does not change a hash-based selection
 - A file changed only by an omitted commit is absent from Selection results
 - An omitted same-file change is not silently folded into a selected commit's diff
