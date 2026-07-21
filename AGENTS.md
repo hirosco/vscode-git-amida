@@ -49,6 +49,8 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 - Keep exactly one pinned, non-closable Repository History tab.
 - Render each commit as one logical row with a non-wrapping subject line.
+- Derive graph lanes from commit hashes and parents; do not send terminal graph text or ANSI color sequences to the Webview.
+- Use the editor's `scmGraph.foreground1` through `scmGraph.foreground5` theme colors with safe workbench fallbacks.
 - Show graph, subject, inline ref indicators, and date on one physical row. Truncate the subject and then excessive refs as space narrows.
 - Represent local and remote HEAD positions with unbordered icon-and-text `HEAD` indicators. Distinguish local, remote, and tag refs by fill and shape as well as color.
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI.

@@ -117,7 +117,24 @@ footer {
 }
 
 .history-pane {
+  --graph-column-width: 54px;
   container-type: inline-size;
+}
+
+.history-pane[data-graph-size="medium"] {
+  --graph-column-width: 72px;
+}
+
+.history-pane[data-graph-size="large"] {
+  --graph-column-width: 94px;
+}
+
+.history-pane[data-graph-size="xlarge"] {
+  --graph-column-width: 116px;
+}
+
+.history-pane[data-graph-size="wide"] {
+  --graph-column-width: 140px;
 }
 
 .workspace-resizer {
@@ -274,7 +291,7 @@ h2 {
 }
 
 .history-columns {
-  grid-template-columns: 58px minmax(150px, 1fr) 126px;
+  grid-template-columns: var(--graph-column-width) minmax(150px, 1fr) 126px;
 }
 
 .file-columns,
@@ -304,13 +321,17 @@ h2 {
   min-height: 25px;
   align-items: center;
   gap: 8px;
-  padding: 2px 8px;
 }
 
 .history-row {
+  padding: 0 8px;
   overflow: hidden;
   align-items: center;
   white-space: nowrap;
+}
+
+.file-row {
+  padding: 2px 8px;
 }
 
 .history-row:hover,
@@ -337,11 +358,77 @@ h2 {
 }
 
 .graph {
+  display: block;
+  width: 100%;
+  height: 25px;
   overflow: hidden;
-  color: var(--vscode-gitDecoration-modifiedResourceForeground);
-  font-family: var(--vscode-editor-font-family);
-  text-overflow: clip;
-  white-space: pre;
+}
+
+.graph-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-node {
+  fill: currentColor;
+  stroke: var(--vscode-panel-background, var(--vscode-editor-background));
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.history-row:hover .graph-node {
+  stroke: var(--vscode-list-hoverBackground);
+}
+
+.history-row.selected .graph-node {
+  stroke: var(--vscode-list-activeSelectionBackground);
+}
+
+.graph-color-0 {
+  color: var(
+    --vscode-scmGraph-foreground1,
+    var(
+      --vscode-charts-blue,
+      var(--vscode-gitDecoration-modifiedResourceForeground)
+    )
+  );
+}
+
+.graph-color-1 {
+  color: var(
+    --vscode-scmGraph-foreground2,
+    var(
+      --vscode-charts-orange,
+      var(--vscode-gitDecoration-addedResourceForeground)
+    )
+  );
+}
+
+.graph-color-2 {
+  color: var(
+    --vscode-scmGraph-foreground3,
+    var(--vscode-charts-green, var(--vscode-textLink-foreground))
+  );
+}
+
+.graph-color-3 {
+  color: var(
+    --vscode-scmGraph-foreground4,
+    var(
+      --vscode-charts-purple,
+      var(--vscode-gitDecoration-deletedResourceForeground)
+    )
+  );
+}
+
+.graph-color-4 {
+  color: var(
+    --vscode-scmGraph-foreground5,
+    var(--vscode-charts-yellow, var(--vscode-foreground))
+  );
 }
 
 .subject,
@@ -612,13 +699,13 @@ footer {
 
 @container (max-width: 720px) {
   .history-columns {
-    grid-template-columns: 54px minmax(140px, 1fr) 116px;
+    grid-template-columns: var(--graph-column-width) minmax(140px, 1fr) 116px;
   }
 }
 
 @container (max-width: 570px) {
   .history-columns {
-    grid-template-columns: 48px minmax(120px, 1fr) 108px;
+    grid-template-columns: var(--graph-column-width) minmax(120px, 1fr) 108px;
   }
 }
 

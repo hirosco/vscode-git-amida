@@ -9,11 +9,11 @@ import { GitClient, parseHistory, parseNameStatus, parseRefs } from "../src/git"
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-test("parseHistory keeps commit rows and graph connector rows", () => {
+test("parseHistory reads commit records without terminal graph text", () => {
   const output = [
-    "* \x1eabc\x00abc1234\x00parent\x00A. U. Thor\x00author@example.invalid\x002026-07-21T10:00:00+09:00\x002026-07-21T11:00:00+09:00\x00subject\x00",
-    "|\\",
-    "| * \x1edef\x00def5678\x00\x00Root Author\x00root@example.invalid\x002026-07-20T10:00:00+09:00\x002026-07-20T10:00:00+09:00\x00root\x00",
+    "\x1b[31m* \x1b[m\x1eabc\x00abc1234\x00parent\x00A. U. Thor\x00author@example.invalid\x002026-07-21T10:00:00+09:00\x002026-07-21T11:00:00+09:00\x00subject\x00",
+    "\x1b[31m|\\\x1b[m",
+    "\x1b[33m| * \x1b[m\x1edef\x00def5678\x00\x00Root Author\x00root@example.invalid\x002026-07-20T10:00:00+09:00\x002026-07-20T10:00:00+09:00\x00root\x00",
   ].join("\n");
   const refs = parseRefs(
     [
@@ -25,56 +25,47 @@ test("parseHistory keeps commit rows and graph connector rows", () => {
 
   assert.deepEqual(parseHistory(output, refs), [
     {
-      kind: "commit",
-      graph: "* ",
-      commit: {
-        hash: "abc",
-        shortHash: "abc1234",
-        parents: ["parent"],
-        authorName: "A. U. Thor",
-        authorEmail: "author@example.invalid",
-        authoredAt: "2026-07-21T10:00:00+09:00",
-        committedAt: "2026-07-21T11:00:00+09:00",
-        subject: "subject",
-        refs: [
-          {
-            name: "main",
-            fullName: "refs/heads/main",
-            type: "localBranch",
-            current: true,
-            upstream: "origin/main",
-            tracking: ">",
-          },
-          {
-            name: "origin/main",
-            fullName: "refs/remotes/origin/main",
-            type: "remoteBranch",
-            current: false,
-          },
-          {
-            name: "v1",
-            fullName: "refs/tags/v1",
-            type: "tag",
-            current: false,
-          },
-        ],
-      },
+      hash: "abc",
+      shortHash: "abc1234",
+      parents: ["parent"],
+      authorName: "A. U. Thor",
+      authorEmail: "author@example.invalid",
+      authoredAt: "2026-07-21T10:00:00+09:00",
+      committedAt: "2026-07-21T11:00:00+09:00",
+      subject: "subject",
+      refs: [
+        {
+          name: "main",
+          fullName: "refs/heads/main",
+          type: "localBranch",
+          current: true,
+          upstream: "origin/main",
+          tracking: ">",
+        },
+        {
+          name: "origin/main",
+          fullName: "refs/remotes/origin/main",
+          type: "remoteBranch",
+          current: false,
+        },
+        {
+          name: "v1",
+          fullName: "refs/tags/v1",
+          type: "tag",
+          current: false,
+        },
+      ],
     },
-    { kind: "graph", graph: "|\\" },
     {
-      kind: "commit",
-      graph: "| * ",
-      commit: {
-        hash: "def",
-        shortHash: "def5678",
-        parents: [],
-        authorName: "Root Author",
-        authorEmail: "root@example.invalid",
-        authoredAt: "2026-07-20T10:00:00+09:00",
-        committedAt: "2026-07-20T10:00:00+09:00",
-        subject: "root",
-        refs: [],
-      },
+      hash: "def",
+      shortHash: "def5678",
+      parents: [],
+      authorName: "Root Author",
+      authorEmail: "root@example.invalid",
+      authoredAt: "2026-07-20T10:00:00+09:00",
+      committedAt: "2026-07-20T10:00:00+09:00",
+      subject: "root",
+      refs: [],
     },
   ]);
 });
@@ -108,9 +99,7 @@ test("GitClient loads root and later commit changes from a temporary repository"
 
   const client = new GitClient();
   const history = await client.loadHistory(repository);
-  const commits = history.rows
-    .filter((row) => row.kind === "commit")
-    .map((row) => row.commit);
+  const commits = history.rows.map((row) => row.commit);
 
   assert.equal(commits.length, 2);
   const newest = commits[0];
@@ -172,7 +161,7 @@ test("GitClient loads all branch, remote, and tag history in one evaluation pass
   git(repository, "update-ref", "refs/stash", stashed);
 
   const history = await new GitClient().loadHistory(repository);
-  const commits = history.rows.filter((row) => row.kind === "commit");
+  const commits = history.rows;
   assert.equal(commits.length, 108);
   const hashes = new Set(commits.map((row) => row.commit.hash));
   assert.equal(hashes.has(parent), true);
@@ -180,6 +169,59 @@ test("GitClient loads all branch, remote, and tag history in one evaluation pass
   assert.equal(hashes.has(remote), true);
   assert.equal(hashes.has(tagged), true);
   assert.equal(hashes.has(stashed), false);
+});
+
+test("GitClient builds connected lanes for a merge history", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-merge-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  const root = git(repository, "commit-tree", EMPTY_TREE, "-m", "root").trim();
+  const main = git(
+    repository,
+    "commit-tree",
+    EMPTY_TREE,
+    "-p",
+    root,
+    "-m",
+    "main",
+  ).trim();
+  const side = git(
+    repository,
+    "commit-tree",
+    EMPTY_TREE,
+    "-p",
+    root,
+    "-m",
+    "side",
+  ).trim();
+  const merge = git(
+    repository,
+    "commit-tree",
+    EMPTY_TREE,
+    "-p",
+    main,
+    "-p",
+    side,
+    "-m",
+    "merge",
+  ).trim();
+  git(repository, "update-ref", "refs/heads/main", merge);
+  git(repository, "update-ref", "refs/heads/side", side);
+
+  const history = await new GitClient().loadHistory(repository);
+  assert.equal(history.rows[0]?.commit.hash, merge);
+  assert.equal(history.graphLaneCount, 2);
+  assert.deepEqual(history.rows[0]?.commit.parents, [main, side]);
+  assert.equal(
+    history.rows.some((row) =>
+      row.graph.lines.some((line) => line.fromLane !== line.toLane),
+    ),
+    true,
+  );
 });
 
 function git(repository: string, ...args: string[]): string {

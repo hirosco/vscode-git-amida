@@ -2,12 +2,12 @@ import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { promisify } from "node:util";
 
+import { buildHistoryGraph } from "./graph";
 import type {
   ChangedFile,
   Commit,
   CommitRef,
   HistoryResult,
-  HistoryRow,
   RepositoryInfo,
 } from "./model";
 
@@ -42,8 +42,8 @@ export class GitClient {
         "--branches",
         "--remotes",
         "--tags",
-        "--graph",
         "--topo-order",
+        "--color=never",
         "--no-decorate",
         `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
       ]),
@@ -68,13 +68,13 @@ export class GitClient {
       detached: !branchResult.ok,
     };
 
-    return {
-      repository,
-      rows: parseHistory(
+    const graph = buildHistoryGraph(
+      parseHistory(
         logOutput.toString("utf8"),
         parseRefs(refsOutput.toString("utf8")),
       ),
-    };
+    );
+    return { repository, rows: graph.rows, graphLaneCount: graph.laneCount };
   }
 
   public async changedFiles(
@@ -165,8 +165,8 @@ export class GitClient {
 export function parseHistory(
   output: string,
   refsByCommit: ReadonlyMap<string, CommitRef[]> = new Map(),
-): HistoryRow[] {
-  const rows: HistoryRow[] = [];
+): Commit[] {
+  const commits: Commit[] = [];
 
   for (const rawLine of output.split("\n")) {
     const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
@@ -176,11 +176,9 @@ export function parseHistory(
 
     const markerIndex = line.indexOf(RECORD_MARKER);
     if (markerIndex === -1) {
-      rows.push({ kind: "graph", graph: line });
       continue;
     }
 
-    const graph = line.slice(0, markerIndex);
     const fields = line.slice(markerIndex + 1).split("\x00");
     const [
       hash,
@@ -196,24 +194,20 @@ export function parseHistory(
       continue;
     }
 
-    rows.push({
-      kind: "commit",
-      graph,
-      commit: {
-        hash,
-        shortHash,
-        parents: parents.length > 0 ? parents.split(" ") : [],
-        authorName,
-        authorEmail,
-        authoredAt,
-        committedAt,
-        subject,
-        refs: refsByCommit.get(hash) ?? [],
-      },
+    commits.push({
+      hash,
+      shortHash,
+      parents: parents.length > 0 ? parents.split(" ") : [],
+      authorName,
+      authorEmail,
+      authoredAt,
+      committedAt,
+      subject,
+      refs: refsByCommit.get(hash) ?? [],
     });
   }
 
-  return rows;
+  return commits;
 }
 
 export function parseRefs(output: string): Map<string, CommitRef[]> {

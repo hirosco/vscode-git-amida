@@ -29,9 +29,24 @@ export interface CommitRef {
   tracking?: string;
 }
 
-export type HistoryRow =
-  | { kind: "commit"; graph: string; commit: Commit }
-  | { kind: "graph"; graph: string };
+export interface GraphLine {
+  fromLane: number;
+  from: "top" | "node";
+  toLane: number;
+  to: "node" | "bottom";
+  color: number;
+}
+
+export interface CommitGraph {
+  nodeLane: number;
+  nodeColor: number;
+  lines: GraphLine[];
+}
+
+export interface HistoryRow {
+  graph: CommitGraph;
+  commit: Commit;
+}
 
 export interface ChangedFile {
   status: string;
@@ -42,6 +57,7 @@ export interface ChangedFile {
 export interface HistoryResult {
   repository: RepositoryInfo;
   rows: HistoryRow[];
+  graphLaneCount: number;
 }
 
 export type FileViewMode = "flat" | "tree";

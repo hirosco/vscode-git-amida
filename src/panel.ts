@@ -73,15 +73,10 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       this.commits.clear();
       this.filesByCommit.clear();
       for (const row of history.rows) {
-        if (row.kind === "commit") {
-          this.commits.set(row.commit.hash, row.commit);
-        }
+        this.commits.set(row.commit.hash, row.commit);
       }
 
-      const firstCommit = history.rows.find(
-        (row): row is Extract<(typeof history.rows)[number], { kind: "commit" }> =>
-          row.kind === "commit",
-      );
+      const firstCommit = history.rows[0];
       const selectedHash =
         this.viewState.selectedHash !== undefined &&
         this.commits.has(this.viewState.selectedHash)

@@ -1,8 +1,10 @@
 import type {
   ChangedFile,
   Commit,
+  CommitGraph,
   FileTreeNode,
   FileViewMode,
+  GraphLine,
   HistoryRow,
   RepositoryInfo,
   RepositoryViewState,
@@ -93,7 +95,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       selectedHash = message.selectedHash;
       currentHead = message.repository.head;
       renderRepository(message.repository);
-      renderHistory(message.rows);
+      renderHistory(message.rows, message.graphLaneCount);
       renderSelectedCommit();
       break;
     case "filesLoading":
@@ -137,16 +139,17 @@ function renderRepository(repository: RepositoryInfo): void {
   elements.repositoryMeta.title = repository.root;
 }
 
-function renderHistory(rows: HistoryRow[]): void {
+function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
   elements.history.replaceChildren();
   commits = new Map();
-  const commitRows = rows.filter(
-    (row): row is Extract<HistoryRow, { kind: "commit" }> =>
-      row.kind === "commit",
-  );
-  elements.historyCount.textContent = `${commitRows.length} commits`;
+  const historyPane = elements.history.closest<HTMLElement>(".history-pane");
+  const metrics = graphMetrics(graphLaneCount);
+  if (historyPane !== null) {
+    historyPane.dataset.graphSize = metrics.size;
+  }
+  elements.historyCount.textContent = `${rows.length} commits`;
 
-  for (const row of commitRows) {
+  for (const row of rows) {
     commits.set(row.commit.hash, row.commit);
     const button = document.createElement("button");
     button.type = "button";
@@ -160,7 +163,7 @@ function renderHistory(rows: HistoryRow[]): void {
       `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
     );
 
-    const graph = span("graph", row.graph);
+    const graph = createGraph(row.graph, graphLaneCount, metrics.width);
     graph.setAttribute("aria-hidden", "true");
     const commitCell = document.createElement("span");
     commitCell.className = "commit-cell";
@@ -188,6 +191,105 @@ function renderHistory(rows: HistoryRow[]): void {
 
   updateCommitSelection();
   setStatus("Select a commit, then double-click a file to open the editor diff.");
+}
+
+type GraphSize = "small" | "medium" | "large" | "xlarge" | "wide";
+
+function graphMetrics(laneCount: number): { size: GraphSize; width: number } {
+  if (laneCount <= 4) {
+    return { size: "small", width: 54 };
+  }
+  if (laneCount <= 6) {
+    return { size: "medium", width: 72 };
+  }
+  if (laneCount <= 8) {
+    return { size: "large", width: 94 };
+  }
+  if (laneCount <= 10) {
+    return { size: "xlarge", width: 116 };
+  }
+  return { size: "wide", width: 140 };
+}
+
+function createGraph(
+  graph: CommitGraph,
+  laneCount: number,
+  width: number,
+): SVGSVGElement {
+  const height = 25;
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("graph");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("preserveAspectRatio", "xMinYMid meet");
+
+  for (const line of graph.lines) {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.classList.add("graph-line", graphColorClass(line.color));
+    path.setAttribute("d", graphPath(line, laneCount, width, height));
+    svg.append(path);
+  }
+
+  const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  node.classList.add("graph-node", graphColorClass(graph.nodeColor));
+  node.setAttribute(
+    "cx",
+    formatGraphNumber(laneX(graph.nodeLane, laneCount, width)),
+  );
+  node.setAttribute("cy", formatGraphNumber(height / 2));
+  node.setAttribute("r", "3.5");
+  svg.append(node);
+  return svg;
+}
+
+function graphPath(
+  line: GraphLine,
+  laneCount: number,
+  width: number,
+  height: number,
+): string {
+  const fromX = laneX(line.fromLane, laneCount, width);
+  const toX = laneX(line.toLane, laneCount, width);
+  const fromY = endpointY(line.from, height);
+  const toY = endpointY(line.to, height);
+  const start = `${formatGraphNumber(fromX)} ${formatGraphNumber(fromY)}`;
+  const end = `${formatGraphNumber(toX)} ${formatGraphNumber(toY)}`;
+  if (fromX === toX) {
+    return `M ${start} L ${end}`;
+  }
+
+  const bend = (toY - fromY) * 0.45;
+  const firstControl = `${formatGraphNumber(fromX)} ${formatGraphNumber(fromY + bend)}`;
+  const secondControl = `${formatGraphNumber(toX)} ${formatGraphNumber(toY - bend)}`;
+  return `M ${start} C ${firstControl}, ${secondControl}, ${end}`;
+}
+
+function laneX(lane: number, laneCount: number, width: number): number {
+  if (laneCount <= 1) {
+    return 6;
+  }
+  const spacing = Math.min(11, (width - 12) / (laneCount - 1));
+  return 6 + lane * spacing;
+}
+
+function endpointY(
+  endpoint: GraphLine["from"] | GraphLine["to"],
+  height: number,
+): number {
+  if (endpoint === "top") {
+    return -1;
+  }
+  if (endpoint === "bottom") {
+    return height + 1;
+  }
+  return height / 2;
+}
+
+function graphColorClass(color: number): string {
+  return `graph-color-${Math.abs(color) % 5}`;
+}
+
+function formatGraphNumber(value: number): string {
+  return Number(value.toFixed(2)).toString();
 }
 
 function createRefList(
