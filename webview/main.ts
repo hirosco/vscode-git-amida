@@ -568,7 +568,7 @@ function renderExplicitSelectionDetails(
   appendDetail(
     details,
     "Comparison",
-    "Combined only per exact file revision chain",
+    "Oldest selected before-state → newest selected after-state per file",
   );
 
   const commitsHeading = document.createElement("h3");
@@ -590,9 +590,20 @@ function renderExplicitSelectionDetails(
     `Selected file changes (${file.selection.changes.length})`;
   const explanation = document.createElement("p");
   explanation.className = "selection-file-explanation";
-  explanation.textContent = file.selection.combined
-    ? "An exact combined file comparison is available."
-    : "The selected revisions have a gap or separate ancestry, so commit diffs remain separate.";
+  const beforeEndpoint =
+    file.selection.beforeRef === undefined
+      ? "Empty file"
+      : shortHash(file.selection.beforeRef);
+  const afterEndpoint =
+    file.selection.afterRef === undefined
+      ? "Empty file"
+      : shortHash(file.selection.afterRef);
+  const endpoint =
+    `${beforeEndpoint} → ${afterEndpoint}`;
+  explanation.textContent =
+    file.selection.changes.length === 1
+      ? `Endpoint ${endpoint}. Compares this selected change with its first parent.`
+      : `Endpoint ${endpoint}. Compares this file's oldest selected before-state with its newest selected after-state. Intervening changes to this path are included; branches are not virtually merged.`;
   const fileCommits = createCommitList(
     file.selection.changes.map((change) => change.commitHash),
     new Map(
@@ -1172,12 +1183,7 @@ function fileStatusLabel(file: ChangedFile): string {
         ? `${status} · 1 selected commit`
         : `${status} · ${contentLabel(file)} · 1 selected commit`;
     }
-    return (
-      `${count} selected commits · ` +
-      (file.selection.combined
-        ? "combined diff available"
-        : "per-commit diffs")
-    );
+    return `${count} selected commits · endpoint diff`;
   }
   const status = statusLabel(file.status);
   if (file.content === undefined) {

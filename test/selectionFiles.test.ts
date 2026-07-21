@@ -2,12 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { CommitFileChange } from "../src/model";
-import {
-  buildSelectionFiles,
-  comparisonForChange,
-} from "../src/selectionFiles";
+import { buildSelectionFiles } from "../src/selectionFiles";
 
-test("buildSelectionFiles keeps unrelated same-path changes separate", () => {
+test("buildSelectionFiles compares unrelated same-path changes by selection endpoints", () => {
   const states = buildSelectionFiles(
     [
       change("main", "root", "M", "shared.txt", "base", "main"),
@@ -19,13 +16,20 @@ test("buildSelectionFiles keeps unrelated same-path changes separate", () => {
 
   const shared = states.find((state) => state.file.path === "shared.txt");
   assert.ok(shared);
-  assert.equal(shared.combined, undefined);
+  assert.deepEqual(shared.comparison, {
+    beforeRef: "root",
+    afterRef: "main",
+    beforePath: "shared.txt",
+    afterPath: "shared.txt",
+    status: "M",
+  });
   assert.deepEqual(shared.file.selection, {
     changes: [
       { commitHash: "main", status: "M" },
       { commitHash: "side", status: "M" },
     ],
-    combined: false,
+    beforeRef: "root",
+    afterRef: "main",
   });
   assert.deepEqual(
     states.map((state) => state.file.path),
@@ -33,7 +37,7 @@ test("buildSelectionFiles keeps unrelated same-path changes separate", () => {
   );
 });
 
-test("buildSelectionFiles combines an exact file revision chain", () => {
+test("buildSelectionFiles compares the oldest before-state with the newest after-state", () => {
   const states = buildSelectionFiles(
     [
       change("newest", "middle-parent", "M", "file.txt", "middle", "new"),
@@ -42,17 +46,16 @@ test("buildSelectionFiles combines an exact file revision chain", () => {
     ["newest", "oldest"],
   );
 
-  assert.deepEqual(states[0]?.combined, {
+  assert.deepEqual(states[0]?.comparison, {
     beforeRef: "base",
     afterRef: "newest",
     beforePath: "file.txt",
     afterPath: "file.txt",
     status: "M",
   });
-  assert.equal(states[0]?.file.selection?.combined, true);
 });
 
-test("buildSelectionFiles does not combine a hidden same-file gap", () => {
+test("buildSelectionFiles spans a hidden same-file gap", () => {
   const states = buildSelectionFiles(
     [
       change("newest", "omitted", "M", "file.txt", "hidden", "new"),
@@ -60,11 +63,16 @@ test("buildSelectionFiles does not combine a hidden same-file gap", () => {
     ],
     ["newest", "oldest"],
   );
-  assert.equal(states[0]?.combined, undefined);
-  assert.equal(states[0]?.file.selection?.combined, false);
+  assert.deepEqual(states[0]?.comparison, {
+    beforeRef: "base",
+    afterRef: "newest",
+    beforePath: "file.txt",
+    afterPath: "file.txt",
+    status: "M",
+  });
 });
 
-test("buildSelectionFiles follows renames and avoids an empty combined diff", () => {
+test("buildSelectionFiles follows endpoint paths through selected renames", () => {
   const rename = change("rename", "base", "R100", "new.txt", "old", "same");
   rename.oldPath = "old.txt";
   const revert = change("revert", "rename", "R100", "old.txt", "same", "old");
@@ -72,13 +80,12 @@ test("buildSelectionFiles follows renames and avoids an empty combined diff", ()
   const states = buildSelectionFiles([revert, rename], ["revert", "rename"]);
 
   assert.equal(states.length, 1);
-  assert.equal(states[0]?.combined, undefined);
-  assert.deepEqual(comparisonForChange(rename), {
+  assert.deepEqual(states[0]?.comparison, {
     beforeRef: "base",
-    afterRef: "rename",
+    afterRef: "revert",
     beforePath: "old.txt",
-    afterPath: "new.txt",
-    status: "R100",
+    afterPath: "old.txt",
+    status: "M",
   });
 });
 

@@ -22,7 +22,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Shows full commit metadata in a resizable, collapsible details pane
 - Selects an ancestor-related commit Range with Shift+click, shows its explicit base, tip, and contributing commits across merges, and aggregates the final changed files from that comparison
 - Adds or removes individual commits with Cmd/Ctrl+click or Space, including unrelated branches, and labels the result as an explicit Selection rather than a hypothetical merged tree
-- Deduplicates Selection files, identifies every contributing commit, and offers one combined file diff only when the selected revisions form an exact chain; otherwise it offers the real per-commit diffs
+- Deduplicates paths changed by selected commits and opens each file directly from its oldest selected before-state to its newest selected after-state, including intervening revisions of that path without pretending to merge branches
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
 - Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; pinning remains available through the editor
 - Compares normal commits with their first parent and root commits with Git's empty tree
@@ -42,7 +42,7 @@ npm ci
 npm run build
 ```
 
-Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Click a commit, Shift+click an ancestor-related commit to select a Range, or use Cmd/Ctrl+click to toggle commits in an explicit Selection. With a history row focused, Space provides the same toggle action. Double-click a changed file to open its diff without replacing the history panel; when one safe combined Selection diff does not exist, choose one of its contributing commit diffs.
+Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Click a commit, Shift+click an ancestor-related commit to select a Range, or use Cmd/Ctrl+click to toggle commits in an explicit Selection. With a history row focused, Space provides the same toggle action. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor.
 
 ## Product principles
 

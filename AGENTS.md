@@ -120,7 +120,9 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Compare a normal commit with its first parent.
 - Compare a root commit with Git's empty tree.
 - For a contiguous range, compare immediately before the oldest commit with the newest commit.
-- Do not construct a virtual tree for non-contiguous selections. Aggregate files and present per-commit diffs.
+- For an explicit Selection, list only paths changed by selected commits. For each listed path, compare the state before its oldest selected change with the state after its newest selected change.
+- Make Selection endpoints visible: intervening unselected changes to the same path are part of that endpoint diff, while files changed only by unselected commits remain absent.
+- Do not construct a virtual tree or imply that changes from unrelated branches were merged. The newest selected endpoint supplies the after-state for a shared path.
 - Treat whitespace choices as Git diff-generation inputs, not visual-only filters.
 
 ## Testing

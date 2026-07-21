@@ -63,7 +63,8 @@ export interface ChangedFileContent {
 
 export interface SelectionFileSummary {
   changes: SelectionFileChangeSummary[];
-  combined: boolean;
+  beforeRef?: string;
+  afterRef?: string;
 }
 
 export interface SelectionFileChangeSummary {

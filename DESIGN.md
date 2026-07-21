@@ -132,13 +132,13 @@ The virtual-document path accepts text blobs up to 5 MiB. Classify raster images
 
 IntelliJ IDEA is an interaction reference for familiar selection and aggregation, not the authority for GitAmida's result semantics. Every multi-commit result must remain explainable from actual Git revisions.
 
-- Store selection by commit hash so Date/Topology ordering and unrelated rows between selected commits do not change the result
+- Store selection by commit hash so unrelated rows between selected commits do not silently become selected
 - Distinguish a **Range**, which compares two real repository states, from a **Selection**, which investigates an explicit set of commit changes
 - Show the comparison basis or contributing commits instead of presenting an unexplained combined diff
 - Never create a virtual tree by cherry-picking selected commits
-- Never attribute an unselected commit's change to a Selection merely to produce a convenient two-pane diff
-- Fall back to per-commit diffs when selected changes cannot be composed without a hidden gap
-- Treat ambiguity as a presentation constraint, not an error: keep the selected commits and explain why their diffs remain separate
+- Exclude paths changed only by unselected commits
+- For a selected path, make it explicit that the endpoint comparison includes intervening unselected revisions of that same path
+- Never imply that endpoint comparison merges changes from unrelated branches
 
 ### Range
 
@@ -156,11 +156,11 @@ Range endpoints must have an ancestor relationship. Use the first parent of the 
 
 A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history. Cmd/Ctrl+click toggles the pointed commit, while Space toggles the focused history row as the keyboard equivalent. A plain click returns to one commit, and Shift+click creates a Range from the active anchor.
 
-A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate their changed files and keep each contributing commit visible, but do not imply that the selection is one real final repository state. If revisions of the same file do not form an exact chain, present their commit diffs separately. A hypothetical merged branch result would require separate merge-preview semantics and is not part of Selection.
+A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate only paths changed by the selected commits and keep each contributing commit visible, but do not imply that the selection is one real final repository state.
 
-Aggregate and deduplicate changed files, retain the selected commits relevant to each file, and present commits newest first to match Repository History. Changes may be combined only when their before and after blob IDs and paths form one exact, explainable chain that does not absorb an unselected file revision. When an omitted commit creates a gap in the same file, or selected commits come from separate ancestry, keep that file's selected commit diffs separate.
+For each aggregated path, compare the state before its oldest selected change with the state after its newest selected change, using the newest-first order shown in Repository History. This matches the observed IntelliJ interaction: a file changed only by an omitted commit stays absent, while an omitted revision of a selected file appears inside that file's endpoint diff. When selected commits come from unrelated branches, the newest contributing commit supplies the after-state; GitAmida does not merge the branches or synthesize a tree.
 
-Changed files show how many selected commits contributed to each path. Selecting a file explains whether an exact combined comparison is available. Opening a file with more than one contributing change uses an editor Quick Pick: offer the combined comparison when safe, followed by every real per-commit comparison; otherwise offer only the per-commit comparisons and state why. The Extension Host derives these choices from parsed commit changes, so the Webview never supplies revision IDs for a diff.
+Changed files show how many selected commits contributed to each path. Selecting a file shows its actual before and after endpoint hashes and explains the inclusion of intervening same-path changes. Double-click or Enter opens that endpoint comparison directly in the reusable native preview diff; it does not ask users to choose among contributing commit diffs. The Extension Host derives both endpoints from parsed commit changes, so the Webview never supplies revision IDs for a diff.
 
 The familiar interaction target is Shift selection for an initial range and Cmd/Ctrl toggling for individual inclusion. The interaction may follow IntelliJ conventions, but the displayed result remains governed by the rules above.
 
@@ -169,9 +169,9 @@ The familiar interaction target is Shift selection for an initial range and Cmd/
 - Ancestor-related Range results match the diff between the declared base and tip
 - An unrelated branch row appearing between endpoints does not change a hash-based selection
 - A file changed only by an omitted commit is absent from Selection results
-- An omitted same-file change is not silently folded into a selected commit's diff
+- An omitted same-file revision is included in the visible endpoint diff and the comparison basis is shown
+- Unrelated branch changes to the same path use visible endpoints and are never described as merged
 - Merge comparisons identify the active parent
-- The same selected hashes produce the same result under Date and Topology ordering
 - Additions, deletions, renames, cancellations, and unsupported content remain explicit rather than being dropped during deduplication
 
 ### Entire branch

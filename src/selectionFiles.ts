@@ -16,7 +16,7 @@ export interface FileComparison {
 export interface SelectionFileState {
   file: ChangedFile;
   changes: CommitFileChange[];
-  combined?: FileComparison;
+  comparison: FileComparison;
 }
 
 export function buildSelectionFiles(
@@ -56,7 +56,7 @@ export function buildSelectionFiles(
     if (newest === undefined) {
       throw new Error("Selection file group cannot be empty.");
     }
-    const combined = combineChanges(group);
+    const comparison = compareSelectionEndpoints(group);
     const file: ChangedFile = {
       status: group.length === 1 ? newest.status : "S",
       path: newest.path,
@@ -71,116 +71,65 @@ export function buildSelectionFiles(
           commitHash: change.commitHash,
           status: change.status,
         })),
-        combined: combined !== undefined,
+        ...(comparison.beforeRef === undefined
+          ? {}
+          : { beforeRef: comparison.beforeRef }),
+        ...(comparison.afterRef === undefined
+          ? {}
+          : { afterRef: comparison.afterRef }),
       },
     };
     return {
       file,
       changes: group,
-      ...(combined === undefined ? {} : { combined }),
+      comparison,
     };
   });
   states.sort((left, right) => left.file.path.localeCompare(right.file.path));
   return states;
 }
 
-export function comparisonForChange(
-  change: CommitFileChange,
+function compareSelectionEndpoints(
+  changes: CommitFileChange[],
 ): FileComparison {
-  return {
-    beforeRef: isMissingObject(change.oldObject)
-      ? undefined
-      : change.parentHash,
-    afterRef: isMissingObject(change.newObject)
-      ? undefined
-      : change.commitHash,
-    beforePath: change.oldPath ?? change.path,
-    afterPath: change.path,
-    status: change.status,
-    ...(change.content === undefined ? {} : { content: change.content }),
-  };
+  const newest = changes[0];
+  const oldest = changes.at(-1);
+  if (newest === undefined || oldest === undefined) {
+    throw new Error("Selection file group cannot be empty.");
+  }
+  return compareEndpoints(oldest, newest, changes);
 }
 
-function combineChanges(
-  changes: CommitFileChange[],
-): FileComparison | undefined {
-  if (changes.length < 2) {
-    return undefined;
-  }
-  const remaining = new Set(changes);
-  const starts = changes.filter(
-    (candidate) =>
-      !changes.some(
-        (other) => other !== candidate && connects(other, candidate),
-      ),
-  );
-  if (starts.length !== 1) {
-    return undefined;
-  }
-
-  const start = starts[0];
-  if (start === undefined) {
-    return undefined;
-  }
-  const chain: CommitFileChange[] = [];
-  let current: CommitFileChange = start;
-  while (true) {
-    chain.push(current);
-    remaining.delete(current);
-    if (remaining.size === 0) {
-      break;
-    }
-    const next = [...remaining].filter((candidate) =>
-      connects(current, candidate),
-    );
-    if (next.length !== 1) {
-      return undefined;
-    }
-    const nextChange = next[0];
-    if (nextChange === undefined) {
-      return undefined;
-    }
-    current = nextChange;
-  }
-
-  const first = chain[0];
-  const last = chain.at(-1);
-  if (first === undefined || last === undefined) {
-    return undefined;
-  }
-  const beforePath = first.oldPath ?? first.path;
-  const afterPath = last.path;
-  if (first.oldObject === last.newObject && beforePath === afterPath) {
-    return undefined;
-  }
+function compareEndpoints(
+  oldest: CommitFileChange,
+  newest: CommitFileChange,
+  changes: CommitFileChange[] = [oldest],
+): FileComparison {
+  const beforePath = oldest.oldPath ?? oldest.path;
+  const afterPath = newest.path;
   const content = changes.find(
     (change) => change.content !== undefined,
   )?.content;
   return {
-    beforeRef: isMissingObject(first.oldObject)
+    beforeRef: isMissingObject(oldest.oldObject)
       ? undefined
-      : first.parentHash,
-    afterRef: isMissingObject(last.newObject)
+      : oldest.parentHash,
+    afterRef: isMissingObject(newest.newObject)
       ? undefined
-      : last.commitHash,
+      : newest.commitHash,
     beforePath,
     afterPath,
-    status: combinedStatus(first.oldObject, last.newObject, beforePath, afterPath),
+    status: comparisonStatus(
+      oldest.oldObject,
+      newest.newObject,
+      beforePath,
+      afterPath,
+    ),
     ...(content === undefined ? {} : { content }),
   };
 }
 
-function connects(
-  older: CommitFileChange,
-  newer: CommitFileChange,
-): boolean {
-  return (
-    older.newObject === newer.oldObject &&
-    older.path === (newer.oldPath ?? newer.path)
-  );
-}
-
-function combinedStatus(
+function comparisonStatus(
   oldObject: string,
   newObject: string,
   oldPath: string,

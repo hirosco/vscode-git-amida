@@ -25,7 +25,6 @@ import {
 } from "./selection";
 import {
   buildSelectionFiles,
-  comparisonForChange,
   type FileComparison,
   type SelectionFileState,
 } from "./selectionFiles";
@@ -391,42 +390,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   ): Promise<void> {
     const identity = selectionIdentity(selection);
     const request = this.selectionRequest;
-    const choices: DiffChoice[] = [];
-    if (state.combined !== undefined) {
-      choices.push({
-        label: "$(git-merge) Combined selected changes",
-        description: "Exact file revision chain",
-        detail:
-          "Compare the first selected before-state with the last selected after-state",
-        comparison: state.combined,
-        comparisonLabel: `Selection ${state.changes.length} commits`,
-      });
-    }
-    for (const change of state.changes) {
-      const commit = this.commits.get(change.commitHash);
-      choices.push({
-        label: `$(git-commit) ${commit?.subject || "(no subject)"}`,
-        description:
-          `${commit?.shortHash ?? change.commitHash.slice(0, 8)} · ` +
-          fileStatusName(change.status),
-        detail: commit?.committedAt,
-        comparison: comparisonForChange(change),
-        comparisonLabel: commit?.shortHash ?? change.commitHash.slice(0, 8),
-      });
-    }
-
-    const choice =
-      choices.length === 1
-        ? choices[0]
-        : await vscode.window.showQuickPick(choices, {
-            placeHolder:
-              state.combined === undefined
-                ? "These selected changes do not form one exact file revision chain; choose a commit diff"
-                : "Open the combined file comparison or one selected commit diff",
-            title: basename(state.file.path),
-          });
     if (
-      choice === undefined ||
       request !== this.selectionRequest ||
       this.selection === undefined ||
       selectionIdentity(this.selection) !== identity
@@ -435,8 +399,8 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
     await this.openComparison(
       repository,
-      choice.comparison,
-      choice.comparisonLabel,
+      state.comparison,
+      this.selectionLabel(selection),
       identity,
       request,
     );
@@ -736,11 +700,6 @@ function isBinary(content: Buffer): boolean {
   return content.subarray(0, sampleLength).includes(0);
 }
 
-interface DiffChoice extends vscode.QuickPickItem {
-  comparison: FileComparison;
-  comparisonLabel: string;
-}
-
 function fileContentMessage(
   content: ChangedFile["content"],
 ): string | undefined {
@@ -760,18 +719,6 @@ function fileContentMessage(
       return `GitAmida: ${actual} exceeds the current ${formatBytes(MAX_TEXT_BLOB_BYTES)} text-diff limit.`;
     }
   }
-}
-
-function fileStatusName(status: string): string {
-  const labels: Record<string, string> = {
-    A: "Added",
-    C: "Copied",
-    D: "Deleted",
-    M: "Modified",
-    R: "Renamed",
-    T: "Type changed",
-  };
-  return labels[status[0] ?? ""] ?? status;
 }
 
 function formatBytes(bytes: number): string {
