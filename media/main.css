@@ -211,6 +211,17 @@ footer {
   gap: 3px;
 }
 
+.file-toolbar {
+  height: 24px;
+}
+
+.tree-actions .icon-button {
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
 .tree-actions[hidden] {
   display: none;
 }
@@ -352,59 +363,75 @@ h2 {
   font-size: 11px;
 }
 
-.head-marker {
-  position: absolute;
-  top: 4px;
-  left: -12px;
-  width: 8px;
-  height: 8px;
-  border: 2px solid var(--vscode-focusBorder);
-  border-radius: 50%;
-  background: var(--vscode-panel-background, var(--vscode-editor-background));
-  box-shadow: 0 0 0 1px var(--vscode-panel-background, var(--vscode-editor-background));
-}
-
-.history-row.selected .head-marker {
-  border-color: var(--vscode-list-activeSelectionForeground);
-  background: var(--vscode-list-activeSelectionBackground);
-  box-shadow: 0 0 0 1px var(--vscode-list-activeSelectionBackground);
-}
-
 .ref-list {
   display: flex;
   min-width: 0;
+  min-height: 16px;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 3px 4px;
-  margin-top: 3px;
+  gap: 2px;
+  margin-top: 2px;
   white-space: normal;
 }
 
-.ref-chip {
-  max-width: 100%;
-  padding: 0 5px;
-  border: 1px solid var(--vscode-panel-border);
+.ref-head,
+.ref-indicator {
+  display: inline-flex;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.ref-head {
+  gap: 3px;
+  padding: 0 5px 0 3px;
+  border: 1px solid currentColor;
   border-radius: 8px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 10px;
-  line-height: 16px;
-  overflow-wrap: anywhere;
+  color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.ref-indicator {
+  width: 16px;
+}
+
+.ref-symbol {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.ref-head .ref-symbol,
+.ref-localBranch .ref-symbol {
+  border-color: currentColor;
+  background: currentColor;
 }
 
 .ref-localBranch {
-  color: var(--vscode-gitDecoration-addedResourceForeground);
+  color: var(--vscode-charts-green, var(--vscode-gitDecoration-addedResourceForeground));
 }
 
 .ref-remoteBranch {
-  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+  color: var(--vscode-charts-purple, var(--vscode-textLink-foreground));
 }
 
 .ref-tag {
-  color: var(--vscode-charts-yellow);
+  color: var(--vscode-charts-yellow, var(--vscode-gitDecoration-modifiedResourceForeground));
 }
 
-.ref-chip.current-ref {
-  border-color: currentColor;
-  font-weight: 600;
+.ref-tag .ref-symbol {
+  width: 9px;
+  height: 9px;
+  border: 0;
+  border-radius: 1px;
+  background: currentColor;
+  clip-path: polygon(0 0, 62% 0, 100% 50%, 62% 100%, 0 100%);
 }
 
 .date,

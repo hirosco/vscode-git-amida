@@ -154,7 +154,6 @@ function renderHistory(rows: HistoryRow[]): void {
     button.dataset.hash = row.commit.hash;
     button.setAttribute("role", "option");
     const isHead = row.commit.hash === currentHead;
-    button.classList.toggle("current-head", isHead);
     const refNames = row.commit.refs.map((ref) => ref.name).join(", ");
     button.setAttribute(
       "aria-label",
@@ -165,25 +164,11 @@ function renderHistory(rows: HistoryRow[]): void {
     graph.setAttribute("aria-hidden", "true");
     const commitCell = document.createElement("span");
     commitCell.className = "commit-cell";
-    if (isHead) {
-      const marker = span("head-marker", "");
-      marker.title = "HEAD (current checkout)";
-      marker.setAttribute("role", "img");
-      marker.setAttribute("aria-label", "HEAD (current checkout)");
-      commitCell.append(marker);
-    }
     const subject = span("subject", row.commit.subject || "(no subject)");
     subject.title = row.commit.subject;
     commitCell.append(subject);
-    if (row.commit.refs.length > 0) {
-      const refs = document.createElement("span");
-      refs.className = "ref-list";
-      for (const ref of row.commit.refs) {
-        const chip = span(`ref-chip ref-${ref.type}`, ref.name);
-        chip.classList.toggle("current-ref", ref.current);
-        chip.title = refTooltip(ref);
-        refs.append(chip);
-      }
+    const refs = createRefList(row.commit, isHead);
+    if (refs !== undefined) {
       commitCell.append(refs);
     }
     const date = span("date", formatRowDate(row.commit.authoredAt));
@@ -203,6 +188,45 @@ function renderHistory(rows: HistoryRow[]): void {
 
   updateCommitSelection();
   setStatus("Select a commit, then double-click a file to open the editor diff.");
+}
+
+function createRefList(
+  commit: Commit,
+  isHead: boolean,
+): HTMLSpanElement | undefined {
+  const currentBranch = commit.refs.find((ref) => ref.current);
+  const visibleRefs = commit.refs.filter((ref) => !ref.current);
+  if (!isHead && visibleRefs.length === 0) {
+    return undefined;
+  }
+
+  const list = document.createElement("span");
+  list.className = "ref-list";
+  if (isHead) {
+    const head = document.createElement("span");
+    const description =
+      currentBranch === undefined
+        ? `HEAD · Detached at ${commit.shortHash}`
+        : `HEAD · ${refTooltip(currentBranch)}`;
+    head.className = "ref-head";
+    head.title = description;
+    head.setAttribute("role", "img");
+    head.setAttribute("aria-label", description);
+    head.append(span("ref-symbol", ""), span("ref-head-label", "HEAD"));
+    list.append(head);
+  }
+
+  for (const ref of visibleRefs) {
+    const indicator = document.createElement("span");
+    const description = refTooltip(ref);
+    indicator.className = `ref-indicator ref-${ref.type}`;
+    indicator.title = description;
+    indicator.setAttribute("role", "img");
+    indicator.setAttribute("aria-label", description);
+    indicator.append(span("ref-symbol", ""));
+    list.append(indicator);
+  }
+  return list;
 }
 
 function renderFiles(): void {
@@ -662,7 +686,7 @@ function refTooltip(ref: Commit["refs"][number]): string {
     remoteBranch: "Remote-tracking branch",
     tag: "Tag",
   }[ref.type];
-  const parts = [type, ref.fullName];
+  const parts = [`${type}: ${ref.name}`, ref.fullName];
   if (ref.current) {
     parts.push("current branch");
   }

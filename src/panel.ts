@@ -334,7 +334,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
           </div>
           <div class="file-toolbar">
             <div id="tree-actions" class="tree-actions" role="group" aria-label="Tree expansion" hidden>
-              <button id="expand-all" class="icon-button" type="button" title="Expand all folders" aria-label="Expand all folders">＋</button>
+              <button id="expand-all" class="icon-button" type="button" title="Expand all folders" aria-label="Expand all folders">+</button>
               <button id="collapse-all" class="icon-button" type="button" title="Collapse all folders" aria-label="Collapse all folders">−</button>
             </div>
             <div class="mode-switch" role="group" aria-label="Changed file display">

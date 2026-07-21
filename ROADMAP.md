@@ -7,8 +7,8 @@ GitAmida's current product target is:
 ## 1. Repository History density and details
 
 - Render every commit as one logical row with a non-wrapping subject
-- Show graph, subject, and date on the primary line and complete wrapping ref chips below it
-- Mark the checked-out HEAD independently from the subject text
+- Show graph, subject, and date on the primary line and compact ref indicators with complete tooltip labels below it
+- Mark the checked-out position with an icon-and-text `HEAD` badge; distinguish local, remote, and tag refs by fill and shape as well as color
 - Keep author information in commit details
 - Split the right side into changed files and a resizable, collapsible commit-details pane
 - Make the Repository History/inspection boundary resizable
