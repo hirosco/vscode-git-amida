@@ -70,7 +70,7 @@ Selecting a commit updates both changed files and details. Loading either area m
 
 ### Commit graph
 
-The Extension Host derives a lane model from commit hashes and parents instead of accepting terminal graph text from Git. Each history row carries typed line segments and a commit node; the Webview renders them as a compact SVG aligned with the row. This prevents terminal ANSI sequences from leaking into the browser and keeps graph structure independent of user Git color configuration.
+The Extension Host derives a lane model from commit hashes and parents instead of accepting terminal graph text from Git. Each history row carries typed line segments and a commit node; the Webview renders them as a compact SVG aligned with the row. Lane transitions use unsmoothed straight segments so branches and merges remain visually discrete in the dense Panel layout. This prevents terminal ANSI sequences from leaking into the browser and keeps graph structure independent of user Git color configuration.
 
 Lane colors use VS Code's `scmGraph.foreground1` through `scmGraph.foreground5` theme tokens with standard workbench fallbacks. The graph column grows in bounded steps as concurrent lanes increase, then compresses lane spacing rather than taking unbounded horizontal space from commit subjects. The current evaluation build lays out the complete loaded history in one pass; pagination must later preserve active lane and color state across loaded batches.
 

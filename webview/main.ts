@@ -253,14 +253,7 @@ function graphPath(
   const toY = endpointY(line.to, height);
   const start = `${formatGraphNumber(fromX)} ${formatGraphNumber(fromY)}`;
   const end = `${formatGraphNumber(toX)} ${formatGraphNumber(toY)}`;
-  if (fromX === toX) {
-    return `M ${start} L ${end}`;
-  }
-
-  const bend = (toY - fromY) * 0.45;
-  const firstControl = `${formatGraphNumber(fromX)} ${formatGraphNumber(fromY + bend)}`;
-  const secondControl = `${formatGraphNumber(toX)} ${formatGraphNumber(toY - bend)}`;
-  return `M ${start} C ${firstControl}, ${secondControl}, ${end}`;
+  return `M ${start} L ${end}`;
 }
 
 function laneX(lane: number, laneCount: number, width: number): number {
