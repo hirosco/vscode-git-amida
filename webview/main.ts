@@ -529,20 +529,20 @@ function renderRangeDetails(
 
   const subject = document.createElement("p");
   subject.className = "details-subject";
-  subject.textContent = `${oldest?.subject || "(no subject)"} → ${newest?.subject || "(no subject)"}`;
+  subject.textContent = `${newest?.subject || "(no subject)"} … ${oldest?.subject || "(no subject)"}`;
 
   const list = document.createElement("dl");
   list.className = "details-list";
   appendDetail(list, "Commits", String(range.commitHashes.length));
   appendDetail(
     list,
-    "Oldest",
-    commitDescription(range.oldestHash),
+    "Newest",
+    commitDescription(range.newestHash),
   );
   appendDetail(
     list,
-    "Newest",
-    commitDescription(range.newestHash),
+    "Oldest",
+    commitDescription(range.oldestHash),
   );
   appendDetail(
     list,
@@ -557,8 +557,8 @@ function renderRangeDetails(
 
   const commitList = document.createElement("ol");
   commitList.className = "range-commit-list";
-  commitList.setAttribute("aria-label", "Selected commits, oldest first");
-  for (const hash of range.commitHashes) {
+  commitList.setAttribute("aria-label", "Selected commits, newest first");
+  for (const hash of [...range.commitHashes].reverse()) {
     const commit = commits.get(hash);
     const item = document.createElement("li");
     item.className = "range-commit-item";

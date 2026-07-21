@@ -36,6 +36,7 @@ The commit list is optimized for scanning a large history.
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
 - Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI
+- Treat refs as branch or tag pointers whose current target is exactly that commit. Git does not record one owning branch for a commit; branches that contain it are a separate reachability query
 - Keep graph alignment stable while refs appear or disappear
 - Keep the selected row visually distinct without relying on color alone
 
@@ -62,7 +63,7 @@ The details pane shows:
 - Full selectable commit hash without a persistent copy button; provide copying through contextual actions
 - Author name and email
 - Authored or committed time, with the chosen meaning labeled
-- Branch and tag refs
+- Branch and tag refs pointing directly at the selected commit
 - Parent commits
 - The active comparison parent for a merge commit
 
@@ -143,7 +144,7 @@ IntelliJ IDEA is an interaction reference for familiar selection and aggregation
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
-The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact oldest-to-newest list using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact newest-to-oldest list matching Repository History using short hashes, subjects, and committed timestamps. Keep the underlying Range path oldest-to-newest for comparison semantics. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
 
 Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
