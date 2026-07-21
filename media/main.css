@@ -419,11 +419,17 @@ h2 {
 }
 
 .ref-localBranch {
-  color: var(--vscode-charts-green, var(--vscode-gitDecoration-addedResourceForeground));
+  color: var(
+    --vscode-scmGraph-historyItemRefColor,
+    var(--vscode-charts-green, var(--vscode-gitDecoration-addedResourceForeground))
+  );
 }
 
 .ref-remoteBranch {
-  color: var(--vscode-charts-purple, var(--vscode-textLink-foreground));
+  color: var(
+    --vscode-scmGraph-historyItemRemoteRefColor,
+    var(--vscode-charts-purple, var(--vscode-textLink-foreground))
+  );
 }
 
 .ref-tag {
