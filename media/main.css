@@ -3,6 +3,7 @@
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
 }
+
 * {
   box-sizing: border-box;
 }
@@ -13,9 +14,9 @@ body {
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
   color: var(--vscode-foreground);
   background: var(--vscode-panel-background, var(--vscode-editor-background));
-  overflow: hidden;
 }
 
 body {
@@ -44,34 +45,55 @@ footer {
   border-bottom: 1px solid var(--vscode-panel-border);
 }
 
+.repository-identity,
+.heading-label {
+  min-width: 0;
+}
+
+#repository-name,
+#repository-meta,
+.secondary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #repository-meta,
 .secondary {
   margin-left: 8px;
   color: var(--vscode-descriptionForeground);
 }
 
-.icon-button {
-  width: 24px;
-  height: 24px;
-  padding: 0;
+.icon-button,
+.copy-button,
+.mode-switch button {
   border: 0;
   border-radius: 4px;
   background: transparent;
   cursor: pointer;
 }
 
-.icon-button:hover {
+.icon-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.icon-button:hover,
+.copy-button:hover,
+.mode-switch button:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
 .workspace {
   display: grid;
-  grid-template-columns: minmax(340px, 1.25fr) minmax(260px, 0.75fr);
+  grid-template-columns: minmax(440px, 1.45fr) minmax(300px, 0.75fr);
   min-width: 0;
   min-height: 0;
 }
 
-.pane {
+.pane,
+.files-section {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
@@ -79,14 +101,72 @@ footer {
 }
 
 .history-pane {
+  container-type: inline-size;
   border-right: 1px solid var(--vscode-panel-border);
+}
+
+.inspection-pane {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(96px, 65fr) 5px minmax(72px, 35fr);
+}
+
+.inspection-pane[data-files-ratio="30"] {
+  grid-template-rows: minmax(96px, 30fr) 5px minmax(72px, 70fr);
+}
+
+.inspection-pane[data-files-ratio="35"] {
+  grid-template-rows: minmax(96px, 35fr) 5px minmax(72px, 65fr);
+}
+
+.inspection-pane[data-files-ratio="40"] {
+  grid-template-rows: minmax(96px, 40fr) 5px minmax(72px, 60fr);
+}
+
+.inspection-pane[data-files-ratio="45"] {
+  grid-template-rows: minmax(96px, 45fr) 5px minmax(72px, 55fr);
+}
+
+.inspection-pane[data-files-ratio="50"] {
+  grid-template-rows: minmax(96px, 50fr) 5px minmax(72px, 50fr);
+}
+
+.inspection-pane[data-files-ratio="55"] {
+  grid-template-rows: minmax(96px, 55fr) 5px minmax(72px, 45fr);
+}
+
+.inspection-pane[data-files-ratio="60"] {
+  grid-template-rows: minmax(96px, 60fr) 5px minmax(72px, 40fr);
+}
+
+.inspection-pane[data-files-ratio="70"] {
+  grid-template-rows: minmax(96px, 70fr) 5px minmax(72px, 30fr);
+}
+
+.inspection-pane[data-files-ratio="75"] {
+  grid-template-rows: minmax(96px, 75fr) 5px minmax(72px, 25fr);
+}
+
+.inspection-pane[data-files-ratio="80"] {
+  grid-template-rows: minmax(96px, 80fr) 5px minmax(72px, 20fr);
+}
+
+.inspection-pane.details-collapsed {
+  grid-template-rows: minmax(0, 1fr) 0 auto;
 }
 
 .pane-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.heading-label {
+  display: flex;
+  align-items: center;
 }
 
 h2 {
@@ -95,27 +175,50 @@ h2 {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+  padding: 1px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+}
+
+.mode-switch button {
+  min-width: 38px;
+  padding: 2px 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.mode-switch button[aria-pressed="true"] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
 }
 
 .column-head {
   display: grid;
-  min-height: 24px;
+  min-height: 23px;
   align-items: center;
+  gap: 8px;
   padding: 0 8px;
+  overflow: hidden;
   color: var(--vscode-descriptionForeground);
   background: var(--vscode-sideBarSectionHeader-background);
   border-bottom: 1px solid var(--vscode-panel-border);
   font-size: 11px;
+  white-space: nowrap;
 }
 
-.history-columns,
-.history-row {
-  grid-template-columns: 68px minmax(160px, 1fr) 82px;
+.history-columns {
+  grid-template-columns: 60px minmax(150px, 1fr) minmax(80px, 140px) minmax(80px, 120px) 126px;
 }
 
 .file-columns,
 .file-row {
-  grid-template-columns: minmax(160px, 1fr) 84px;
+  grid-template-columns: minmax(120px, 1fr) 82px;
 }
 
 .list {
@@ -124,22 +227,34 @@ h2 {
 }
 
 .history-row,
-.file-row {
-  display: grid;
+.file-row,
+.tree-directory-row {
   width: 100%;
-  min-height: 34px;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 8px;
+  min-width: 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 55%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--vscode-panel-border) 45%, transparent);
   text-align: left;
   background: transparent;
   cursor: default;
 }
 
+.history-row,
+.file-row {
+  display: grid;
+  min-height: 25px;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+}
+
+.history-row {
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 .history-row:hover,
-.file-row:hover {
+.file-row:hover,
+.tree-directory-row:hover {
   background: var(--vscode-list-hoverBackground);
 }
 
@@ -151,67 +266,58 @@ h2 {
 
 .history-row:focus-visible,
 .file-row:focus-visible,
-.icon-button:focus-visible {
+.tree-directory-row:focus-visible,
+.icon-button:focus-visible,
+.copy-button:focus-visible,
+.mode-switch button:focus-visible,
+.details-resizer:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
 
-.graph,
-.graph-only {
+.graph {
+  overflow: hidden;
   color: var(--vscode-gitDecoration-modifiedResourceForeground);
   font-family: var(--vscode-editor-font-family);
+  text-overflow: clip;
   white-space: pre;
 }
 
-.graph-only {
-  min-height: 15px;
-  padding-left: 8px;
-}
-
-.commit-details {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .subject,
-.path,
-.refs {
+.refs,
+.author,
+.date,
+.path {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.commit-metadata {
-  display: flex;
-  min-width: 0;
-  gap: 8px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
-}
-
-.hash,
-.date {
-  font-family: var(--vscode-editor-font-family);
-}
-
 .refs {
   color: var(--vscode-charts-yellow);
+  font-size: 11px;
 }
 
+.author,
 .date {
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
+}
+
+.date,
+code {
+  font-family: var(--vscode-editor-font-family);
 }
 
 .status {
   justify-self: start;
-  padding: 2px 5px;
+  padding: 1px 5px;
   border: 1px solid var(--vscode-panel-border);
   border-radius: 10px;
   color: var(--vscode-descriptionForeground);
   font-size: 10px;
+  white-space: nowrap;
 }
 
 .status-A {
@@ -227,6 +333,123 @@ h2 {
 .status-C,
 .status-T {
   color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.tree-directory-row {
+  display: flex;
+  min-height: 25px;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+}
+
+.tree-chevron {
+  width: 12px;
+  flex: 0 0 12px;
+  color: var(--vscode-descriptionForeground);
+  text-align: center;
+}
+
+.tree-folder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-children {
+  margin-left: 14px;
+  border-left: 1px solid color-mix(in srgb, var(--vscode-tree-indentGuidesStroke) 65%, transparent);
+}
+
+.tree-file-row {
+  padding-left: 12px;
+}
+
+.details-resizer {
+  position: relative;
+  z-index: 1;
+  cursor: row-resize;
+  background: var(--vscode-panel-border);
+}
+
+.details-resizer::after {
+  position: absolute;
+  inset: -2px 0;
+  content: "";
+}
+
+.details-resizer:hover,
+.details-resizer.dragging {
+  background: var(--vscode-focusBorder);
+}
+
+.details-collapsed .details-resizer {
+  display: none;
+}
+
+.details-section {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.details-section.collapsed {
+  grid-template-rows: auto 0;
+}
+
+.details-section.collapsed .details-content {
+  display: none;
+}
+
+.details-content {
+  min-height: 0;
+  padding: 10px;
+  overflow: auto;
+}
+
+.details-subject {
+  margin: 0 0 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.details-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.details-list dt {
+  color: var(--vscode-descriptionForeground);
+}
+
+.details-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.copy-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-value code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-button {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  color: var(--vscode-textLink-foreground);
+  font-size: 11px;
 }
 
 .empty-state {
@@ -248,10 +471,30 @@ footer {
   white-space: nowrap;
 }
 
-@media (max-width: 720px) {
+@container (max-width: 720px) {
+  .history-columns {
+    grid-template-columns: 56px minmax(140px, 1fr) minmax(80px, 130px) 116px;
+  }
+
+  .author-column {
+    display: none;
+  }
+}
+
+@container (max-width: 570px) {
+  .history-columns {
+    grid-template-columns: 52px minmax(120px, 1fr) 112px;
+  }
+
+  .refs-column {
+    display: none;
+  }
+}
+
+@media (max-width: 780px) {
   .workspace {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(180px, 1fr) minmax(140px, 0.8fr);
+    grid-template-rows: minmax(180px, 1fr) minmax(180px, 1fr);
   }
 
   .history-pane {

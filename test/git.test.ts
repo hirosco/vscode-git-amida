@@ -9,9 +9,9 @@ import { GitClient, parseHistory, parseNameStatus } from "../src/git";
 
 test("parseHistory keeps commit rows and graph connector rows", () => {
   const output = [
-    "* \x1eabc\x00parent\x002026-07-21\x00subject\x00HEAD -> main\x00",
+    "* \x1eabc\x00parent\x00A. U. Thor\x00author@example.invalid\x002026-07-21T10:00:00+09:00\x002026-07-21T11:00:00+09:00\x00subject\x00HEAD -> main\x00",
     "|\\",
-    "| * \x1edef\x00\x002026-07-20\x00root\x00\x00",
+    "| * \x1edef\x00\x00Root Author\x00root@example.invalid\x002026-07-20T10:00:00+09:00\x002026-07-20T10:00:00+09:00\x00root\x00\x00",
   ].join("\n");
 
   assert.deepEqual(parseHistory(output), [
@@ -21,7 +21,10 @@ test("parseHistory keeps commit rows and graph connector rows", () => {
       commit: {
         hash: "abc",
         parents: ["parent"],
-        date: "2026-07-21",
+        authorName: "A. U. Thor",
+        authorEmail: "author@example.invalid",
+        authoredAt: "2026-07-21T10:00:00+09:00",
+        committedAt: "2026-07-21T11:00:00+09:00",
         subject: "subject",
         refs: "HEAD -> main",
       },
@@ -33,7 +36,10 @@ test("parseHistory keeps commit rows and graph connector rows", () => {
       commit: {
         hash: "def",
         parents: [],
-        date: "2026-07-20",
+        authorName: "Root Author",
+        authorEmail: "root@example.invalid",
+        authoredAt: "2026-07-20T10:00:00+09:00",
+        committedAt: "2026-07-20T10:00:00+09:00",
         subject: "root",
         refs: "",
       },
@@ -68,7 +74,6 @@ test("GitClient loads root and later commit changes from a temporary repository"
 
   const client = new GitClient();
   const history = await client.loadHistory(repository);
-  client.setRepository(history.repository.root);
   const commits = history.rows
     .filter((row) => row.kind === "commit")
     .map((row) => row.commit);
@@ -80,11 +85,13 @@ test("GitClient loads root and later commit changes from a temporary repository"
   assert.ok(root);
   assert.equal(history.repository.detached, false);
   assert.equal(history.repository.root, realpathSync(repository));
-  assert.deepEqual(await client.changedFiles(newest), [
+  assert.equal(newest.authorName, "GitAmida Test");
+  assert.equal(newest.authorEmail, "test@example.invalid");
+  assert.deepEqual(await client.changedFiles(history.repository.root, newest), [
     { status: "M", path: "hello.txt" },
     { status: "A", path: "space name.txt" },
   ]);
-  assert.deepEqual(await client.changedFiles(root), [
+  assert.deepEqual(await client.changedFiles(history.repository.root, root), [
     { status: "A", path: "hello.txt" },
   ]);
 });

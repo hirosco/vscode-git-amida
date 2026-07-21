@@ -41,9 +41,8 @@ export class GitClient {
         "--graph",
         "--topo-order",
         "--decorate=short",
-        "--date=short",
         "--max-count=100",
-        `--format=${RECORD_MARKER}%H%x00%P%x00%ad%x00%s%x00%D%x00`,
+        `--format=${RECORD_MARKER}%H%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00%D%x00`,
       ]),
     ]);
 
@@ -65,9 +64,12 @@ export class GitClient {
     };
   }
 
-  public async changedFiles(commit: Commit): Promise<ChangedFile[]> {
+  public async changedFiles(
+    repository: string,
+    commit: Commit,
+  ): Promise<ChangedFile[]> {
     const rootParent = commit.parents[0] ?? EMPTY_TREE;
-    const output = await this.runForRepository([
+    const output = await this.run(repository, [
       "diff",
       "--name-status",
       "--no-ext-diff",
@@ -80,24 +82,15 @@ export class GitClient {
     return parseNameStatus(output);
   }
 
-  public async readBlob(ref: string | undefined, path: string): Promise<Buffer> {
+  public async readBlob(
+    repository: string,
+    ref: string | undefined,
+    path: string,
+  ): Promise<Buffer> {
     if (ref === undefined) {
       return Buffer.alloc(0);
     }
-    return this.runForRepository(["cat-file", "blob", `${ref}:${path}`]);
-  }
-
-  public setRepository(root: string): void {
-    this.repository = root;
-  }
-
-  private repository?: string;
-
-  private async runForRepository(args: string[]): Promise<Buffer> {
-    if (this.repository === undefined) {
-      throw new GitError("No Git repository is active.");
-    }
-    return this.run(this.repository, args);
+    return this.run(repository, ["cat-file", "blob", `${ref}:${path}`]);
   }
 
   private async tryRun(
@@ -173,7 +166,16 @@ export function parseHistory(output: string): HistoryRow[] {
 
     const graph = line.slice(0, markerIndex);
     const fields = line.slice(markerIndex + 1).split("\x00");
-    const [hash, parents = "", date = "", subject = "", refs = ""] = fields;
+    const [
+      hash,
+      parents = "",
+      authorName = "",
+      authorEmail = "",
+      authoredAt = "",
+      committedAt = "",
+      subject = "",
+      refs = "",
+    ] = fields;
     if (!hash) {
       continue;
     }
@@ -184,7 +186,10 @@ export function parseHistory(output: string): HistoryRow[] {
       commit: {
         hash,
         parents: parents.length > 0 ? parents.split(" ") : [],
-        date,
+        authorName,
+        authorEmail,
+        authoredAt,
+        committedAt,
         subject,
         refs,
       },

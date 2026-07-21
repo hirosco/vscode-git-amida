@@ -46,7 +46,7 @@ The right side is split vertically:
 
 The divider is resizable. Commit details can be collapsed, but changed files must retain a usable minimum height.
 
-Changed files initially support a flat full-path list. Add a user-controlled Tree mode for large changes, while retaining Flat mode for fast scanning and searching. Tree expansion state is presentation state and must not alter the selected files.
+Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree expansion state is presentation state and must not alter the selected files.
 
 The details pane shows:
 
@@ -143,6 +143,7 @@ Node.js is a development and build tool only. Extension users do not need to ins
 Use a Webview View because a topology graph, compact data grid, resizable details split, and multiple internal history tabs exceed what one native Tree View represents well.
 
 - Use VS Code theme tokens instead of copying another product's presentation
+- Compile browser-targeted TypeScript separately from the Extension Host without a framework, bundler, or runtime dependency
 - Keep all scripts and styles local
 - Apply a restrictive Content Security Policy with a per-render nonce
 - Render Git data through DOM text nodes, never HTML interpolation

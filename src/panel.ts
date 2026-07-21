@@ -4,21 +4,26 @@ import { basename } from "node:path";
 import * as vscode from "vscode";
 
 import { GitContentProvider } from "./contentProvider";
+import { buildFileTree } from "./fileTree";
 import { GitClient, GitError } from "./git";
-import type { ChangedFile, Commit, HistoryResult } from "./model";
+import type { ChangedFile, Commit } from "./model";
+import type { HostToWebviewMessage } from "./protocol";
+import {
+  DEFAULT_VIEW_STATE,
+  mergeViewState,
+  sanitizeViewState,
+} from "./viewState";
 
-interface WebviewMessage {
-  type?: unknown;
-  hash?: unknown;
-  path?: unknown;
-}
+const VIEW_STATE_KEY = "gitAmida.repositoryViewState";
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "gitAmida.history";
 
   private view?: vscode.WebviewView;
-  private history?: HistoryResult;
+  private repository?: string;
   private readonly commits = new Map<string, Commit>();
+  private readonly filesByCommit = new Map<string, ChangedFile[]>();
+  private viewState = { ...DEFAULT_VIEW_STATE };
   private historyRequest = 0;
   private filesRequest = 0;
 
@@ -26,16 +31,24 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri,
     private readonly git: GitClient,
     private readonly contentProvider: GitContentProvider,
-  ) {}
+    private readonly workspaceState: vscode.Memento,
+  ) {
+    this.viewState = sanitizeViewState(
+      this.workspaceState.get<unknown>(VIEW_STATE_KEY),
+    );
+  }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
     view.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "media")],
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.extensionUri, "media"),
+        vscode.Uri.joinPath(this.extensionUri, "dist", "webview"),
+      ],
     };
     view.webview.html = this.html(view.webview);
-    view.webview.onDidReceiveMessage((message: WebviewMessage) => {
+    view.webview.onDidReceiveMessage((message: unknown) => {
       void this.receiveMessage(message);
     });
   }
@@ -56,22 +69,42 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      this.git.setRepository(history.repository.root);
-      this.history = history;
+      this.repository = history.repository.root;
       this.commits.clear();
+      this.filesByCommit.clear();
       for (const row of history.rows) {
         if (row.kind === "commit") {
           this.commits.set(row.commit.hash, row.commit);
         }
       }
 
-      await this.post({ type: "history", ...history });
       const firstCommit = history.rows.find(
         (row): row is Extract<(typeof history.rows)[number], { kind: "commit" }> =>
           row.kind === "commit",
       );
-      if (firstCommit !== undefined) {
-        await this.loadFiles(firstCommit.commit.hash);
+      const selectedHash =
+        this.viewState.selectedHash !== undefined &&
+        this.commits.has(this.viewState.selectedHash)
+          ? this.viewState.selectedHash
+          : firstCommit?.commit.hash;
+      this.viewState = {
+        ...this.viewState,
+        selectedHash,
+        selectedFilePath:
+          selectedHash === this.viewState.selectedHash
+            ? this.viewState.selectedFilePath
+            : undefined,
+      };
+      await this.persistViewState();
+
+      await this.post({
+        type: "history",
+        ...history,
+        selectedHash,
+        viewState: this.viewState,
+      });
+      if (selectedHash !== undefined) {
+        await this.loadFiles(selectedHash);
       }
     } catch (error) {
       if (request !== this.historyRequest) {
@@ -81,44 +114,99 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async receiveMessage(message: WebviewMessage): Promise<void> {
+  private async receiveMessage(message: unknown): Promise<void> {
     if (message === null || typeof message !== "object") {
       return;
     }
+    const value = message as Record<string, unknown>;
 
-    if (message.type === "ready" || message.type === "refresh") {
+    if (value.type === "ready" || value.type === "refresh") {
       await this.refresh();
       return;
     }
 
-    if (message.type === "selectCommit" && typeof message.hash === "string") {
-      await this.loadFiles(message.hash);
+    if (value.type === "selectCommit" && typeof value.hash === "string") {
+      if (!this.commits.has(value.hash)) {
+        return;
+      }
+      this.viewState = {
+        ...this.viewState,
+        selectedHash: value.hash,
+        selectedFilePath: undefined,
+      };
+      await this.persistViewState();
+      await this.loadFiles(value.hash);
       return;
     }
 
     if (
-      message.type === "openDiff" &&
-      typeof message.hash === "string" &&
-      typeof message.path === "string"
+      value.type === "selectFile" &&
+      typeof value.hash === "string" &&
+      typeof value.path === "string" &&
+      this.findFile(value.hash, value.path) !== undefined
     ) {
-      await this.openDiff(message.hash, message.path);
+      this.viewState = {
+        ...this.viewState,
+        selectedHash: value.hash,
+        selectedFilePath: value.path,
+      };
+      await this.persistViewState();
+      return;
+    }
+
+    if (
+      value.type === "openDiff" &&
+      typeof value.hash === "string" &&
+      typeof value.path === "string"
+    ) {
+      await this.openDiff(value.hash, value.path);
+      return;
+    }
+
+    if (value.type === "copyCommitId" && typeof value.hash === "string") {
+      if (!this.commits.has(value.hash)) {
+        return;
+      }
+      await vscode.env.clipboard.writeText(value.hash);
+      await this.post({ type: "commitCopied", hash: value.hash });
+      return;
+    }
+
+    if (value.type === "updateViewState") {
+      this.viewState = mergeViewState(this.viewState, value.patch);
+      await this.persistViewState();
     }
   }
 
   private async loadFiles(hash: string): Promise<void> {
     const commit = this.commits.get(hash);
-    if (commit === undefined) {
+    const repository = this.repository;
+    if (commit === undefined || repository === undefined) {
       return;
     }
 
     const request = ++this.filesRequest;
     await this.post({ type: "filesLoading", hash });
     try {
-      const files = await this.git.changedFiles(commit);
+      const files = await this.git.changedFiles(repository, commit);
       if (request !== this.filesRequest) {
         return;
       }
-      await this.post({ type: "files", hash, files });
+      this.filesByCommit.set(hash, files);
+      if (
+        this.viewState.selectedHash === hash &&
+        this.viewState.selectedFilePath !== undefined &&
+        !files.some((file) => file.path === this.viewState.selectedFilePath)
+      ) {
+        this.viewState = { ...this.viewState, selectedFilePath: undefined };
+        await this.persistViewState();
+      }
+      await this.post({
+        type: "files",
+        hash,
+        files,
+        tree: buildFileTree(files),
+      });
     } catch (error) {
       if (request !== this.filesRequest) {
         return;
@@ -134,7 +222,8 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private async openDiff(hash: string, path: string): Promise<void> {
     const commit = this.commits.get(hash);
     const file = this.findFile(hash, path);
-    if (commit === undefined || file === undefined) {
+    const repository = this.repository;
+    if (commit === undefined || file === undefined || repository === undefined) {
       return;
     }
 
@@ -145,12 +234,12 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const [before, after] = await Promise.all([
-        this.git.readBlob(beforeRef, beforePath),
-        this.git.readBlob(afterRef, file.path),
+        this.git.readBlob(repository, beforeRef, beforePath),
+        this.git.readBlob(repository, afterRef, file.path),
       ]);
       if (isBinary(before) || isBinary(after)) {
         await vscode.window.showInformationMessage(
-          "GitAmida: Binary and image diffs are not available in this comparison MVP.",
+          "GitAmida: Binary and image diffs are not available yet.",
         );
         return;
       }
@@ -182,17 +271,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     return this.filesByCommit.get(hash)?.find((file) => file.path === path);
   }
 
-  private selectedHash?: string;
-  private readonly filesByCommit = new Map<string, ChangedFile[]>();
+  private async persistViewState(): Promise<void> {
+    await this.workspaceState.update(VIEW_STATE_KEY, this.viewState);
+  }
 
-  private async post(message: Record<string, unknown>): Promise<void> {
-    if (message.type === "files" && typeof message.hash === "string") {
-      const files = message.files;
-      if (Array.isArray(files)) {
-        this.selectedHash = message.hash;
-        this.filesByCommit.set(message.hash, files as ChangedFile[]);
-      }
-    }
+  private async post(message: HostToWebviewMessage): Promise<void> {
     await this.view?.webview.postMessage(message);
   }
 
@@ -213,7 +296,13 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       vscode.Uri.joinPath(this.extensionUri, "media", "main.css"),
     );
     const scriptUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, "media", "main.js"),
+      vscode.Uri.joinPath(
+        this.extensionUri,
+        "dist",
+        "webview",
+        "webview",
+        "main.js",
+      ),
     );
 
     return `<!doctype html>
@@ -227,7 +316,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 </head>
 <body>
   <header class="repository-bar">
-    <div>
+    <div class="repository-identity">
       <strong id="repository-name">GitAmida</strong>
       <span id="repository-meta">Open a Git repository to begin</span>
     </div>
@@ -236,29 +325,47 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   <main class="workspace">
     <section class="pane history-pane" aria-labelledby="history-heading">
       <div class="pane-heading">
-        <h2 id="history-heading">History</h2>
+        <h2 id="history-heading">Repository History</h2>
         <span id="history-count" class="secondary"></span>
       </div>
       <div class="column-head history-columns" aria-hidden="true">
-        <span>Graph</span><span>Commit</span><span>Date</span>
+        <span>Graph</span><span>Commit</span><span class="refs-column">Refs</span><span class="author-column">Author</span><span>Date</span>
       </div>
       <div id="history" class="list history-list" role="listbox" aria-label="Commit history"></div>
     </section>
-    <section class="pane files-pane" aria-labelledby="files-heading">
-      <div class="pane-heading">
-        <h2 id="files-heading">Changed files</h2>
-        <span id="selected-commit" class="secondary"></span>
-      </div>
-      <div class="column-head file-columns" aria-hidden="true">
-        <span>Path</span><span>Status</span>
-      </div>
-      <div id="files" class="list file-list" role="listbox" aria-label="Changed files">
-        <p class="empty-state">Select a commit.</p>
-      </div>
+    <section id="inspection" class="inspection-pane" data-files-ratio="65">
+      <section class="pane files-section" aria-labelledby="files-heading">
+        <div class="pane-heading">
+          <div class="heading-label">
+            <h2 id="files-heading">Changed files</h2>
+            <span id="selected-commit" class="secondary"></span>
+          </div>
+          <div class="mode-switch" role="group" aria-label="Changed file display">
+            <button id="flat-mode" type="button" aria-pressed="true">Flat</button>
+            <button id="tree-mode" type="button" aria-pressed="false">Tree</button>
+          </div>
+        </div>
+        <div class="column-head file-columns" aria-hidden="true">
+          <span>Path</span><span>Status</span>
+        </div>
+        <div id="files" class="list file-list" role="listbox" aria-label="Changed files">
+          <p class="empty-state">Select a commit.</p>
+        </div>
+      </section>
+      <div id="details-resizer" class="details-resizer" role="separator" aria-label="Resize changed files and commit details" aria-orientation="horizontal" aria-valuemin="30" aria-valuemax="80" aria-valuenow="65" tabindex="0"></div>
+      <section id="details-section" class="details-section" aria-labelledby="details-heading">
+        <div class="pane-heading">
+          <h2 id="details-heading">Commit details</h2>
+          <button id="toggle-details" class="icon-button" type="button" title="Collapse commit details" aria-label="Collapse commit details" aria-expanded="true">⌄</button>
+        </div>
+        <div id="details" class="details-content">
+          <p class="empty-state">Select a commit.</p>
+        </div>
+      </section>
     </section>
   </main>
-  <footer id="status" role="status">Click a commit, then double-click a file to open the editor diff.</footer>
-  <script nonce="${nonce}" src="${scriptUri}"></script>
+  <footer id="status" role="status">Select a commit, then double-click a file to open the editor diff.</footer>
+  <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;
   }

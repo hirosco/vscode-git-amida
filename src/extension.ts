@@ -11,6 +11,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.extensionUri,
     git,
     contentProvider,
+    context.workspaceState,
   );
 
   context.subscriptions.push(

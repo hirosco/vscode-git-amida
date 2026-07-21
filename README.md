@@ -15,14 +15,15 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 ## Current MVP
 
 - Adds `GitAmida` beside Terminal, Problems, and Output in the bottom Panel
-- Shows up to 100 commits with Git's topology graph, subject, refs, hash, and date
-- Shows the files changed by one selected commit
+- Shows up to 100 commits as compact one-row entries with graph, subject, refs, author, and date
+- Shows the selected commit's changed files in Flat or collapsible Tree mode
+- Shows full commit metadata in a resizable, collapsible details pane and copies the full commit ID
 - Opens a file in the editor's native side-by-side diff on double-click or Enter
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Runs read-only Git commands without a shell
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
-The compact one-row history, commit details pane, file-tree mode, file-history tabs, multiple-commit selection, branch switching, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
+Automatic full-history loading, the theme-aware lane graph, file-history tabs, multiple-commit selection, branch switching, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
 
 ## Try it in Cursor
 

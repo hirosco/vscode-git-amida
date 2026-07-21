@@ -9,7 +9,10 @@ export interface RepositoryInfo {
 export interface Commit {
   hash: string;
   parents: string[];
-  date: string;
+  authorName: string;
+  authorEmail: string;
+  authoredAt: string;
+  committedAt: string;
   subject: string;
   refs: string;
 }
@@ -28,3 +31,37 @@ export interface HistoryResult {
   repository: RepositoryInfo;
   rows: HistoryRow[];
 }
+
+export type FileViewMode = "flat" | "tree";
+
+export interface RepositoryViewState {
+  selectedHash?: string;
+  selectedFilePath?: string;
+  fileViewMode: FileViewMode;
+  filesRatio: number;
+  detailsCollapsed: boolean;
+  expandedTreePaths: string[];
+}
+
+export type RepositoryViewStatePatch = Partial<
+  Pick<
+    RepositoryViewState,
+    "fileViewMode" | "filesRatio" | "detailsCollapsed" | "expandedTreePaths"
+  >
+>;
+
+export interface FileTreeDirectory {
+  kind: "directory";
+  name: string;
+  path: string;
+  children: FileTreeNode[];
+}
+
+export interface FileTreeEntry {
+  kind: "file";
+  name: string;
+  path: string;
+  file: ChangedFile;
+}
+
+export type FileTreeNode = FileTreeDirectory | FileTreeEntry;

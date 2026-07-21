@@ -36,8 +36,9 @@ Do not create append-only completion histories, ADR directories, or per-feature 
 ## Directory structure
 
 ```text
-src/            Extension Host code and Git adapter
-media/          Local Webview JavaScript, CSS, and extension icon
+src/            Extension Host code, shared protocol, and Git adapter
+webview/        Browser-targeted TypeScript for the Webview
+media/          Local Webview CSS and extension icon
 test/           Node tests for parsing and temporary repositories
 .vscode/        Extension Development Host launch configuration
 ```
