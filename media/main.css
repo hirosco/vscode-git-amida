@@ -153,7 +153,7 @@ footer {
 }
 
 .inspection-pane.details-collapsed {
-  grid-template-rows: minmax(0, 1fr) 0 auto;
+  grid-template-rows: minmax(0, 1fr) 0 30px;
 }
 
 .pane-heading {
@@ -395,7 +395,8 @@ code {
 }
 
 .details-section.collapsed {
-  grid-template-rows: auto 0;
+  min-height: 30px;
+  grid-template-rows: 30px 0;
 }
 
 .details-section.collapsed .details-content {

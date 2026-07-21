@@ -55,3 +55,13 @@ test("mergeViewState ignores selection fields from a presentation patch", () => 
     { ...DEFAULT_VIEW_STATE, selectedHash: "trusted" },
   );
 });
+
+test("mergeViewState can expand details after they were collapsed", () => {
+  const collapsed = mergeViewState(DEFAULT_VIEW_STATE, {
+    detailsCollapsed: true,
+  });
+  assert.equal(collapsed.detailsCollapsed, true);
+
+  const expanded = mergeViewState(collapsed, { detailsCollapsed: false });
+  assert.equal(expanded.detailsCollapsed, false);
+});
