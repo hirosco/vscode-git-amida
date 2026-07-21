@@ -320,9 +320,12 @@ function createRefList(
   isHead: boolean,
 ): HTMLSpanElement | undefined {
   const currentBranch = commit.refs.find((ref) => ref.current);
-  const visibleRefs = commit.refs.filter(
-    (ref) => !ref.current || isPrimaryLocalBranch(ref),
-  );
+  const visibleRefs = commit.refs
+    .filter((ref) => !ref.current || primaryBranchLabel(ref) !== undefined)
+    .sort(
+      (left, right) =>
+        refPresentationOrder(left) - refPresentationOrder(right),
+    );
   if (!isHead && visibleRefs.length === 0) {
     return undefined;
   }
@@ -345,8 +348,11 @@ function createRefList(
       list.append(createHeadIndicator(ref.type, description));
       continue;
     }
-    if (isPrimaryLocalBranch(ref)) {
-      list.append(createNamedRefIndicator(ref, description));
+    const primaryLabel = primaryBranchLabel(ref);
+    if (primaryLabel !== undefined) {
+      list.append(
+        createNamedRefIndicator(ref, primaryLabel, description),
+      );
       continue;
     }
 
@@ -360,22 +366,39 @@ function createRefList(
   return list;
 }
 
-function isPrimaryLocalBranch(ref: Commit["refs"][number]): boolean {
-  return (
+function refPresentationOrder(ref: Commit["refs"][number]): number {
+  if (ref.type === "remoteBranch" && ref.name.endsWith("/HEAD")) {
+    return 0;
+  }
+  return primaryBranchLabel(ref) === undefined ? 2 : 1;
+}
+
+function primaryBranchLabel(
+  ref: Commit["refs"][number],
+): "main" | "master" | undefined {
+  if (
     ref.type === "localBranch" &&
     (ref.name === "main" || ref.name === "master")
-  );
+  ) {
+    return ref.name;
+  }
+  if (ref.type !== "remoteBranch") {
+    return undefined;
+  }
+  const label = /^[^/]+\/(main|master)$/.exec(ref.name)?.[1];
+  return label === "main" || label === "master" ? label : undefined;
 }
 
 function createNamedRefIndicator(
   ref: Commit["refs"][number],
+  label: string,
   description: string,
 ): HTMLSpanElement {
   const indicator = document.createElement("span");
   indicator.className = `ref-named ref-${ref.type}`;
   indicator.setAttribute("role", "img");
   indicator.setAttribute("aria-label", description);
-  indicator.append(span("ref-symbol", ""), span("ref-name", ref.name));
+  indicator.append(span("ref-symbol", ""), span("ref-name", label));
   return indicator;
 }
 
