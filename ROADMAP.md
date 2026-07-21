@@ -6,23 +6,20 @@ GitAmida's current product target is:
 
 The remaining checkpoints build on selection-scoped, endpoint-based comparison and contain only work still needed to validate and extend that baseline.
 
-## 1. Local extension installation
+## 1. Installed-extension validation
 
-- Produce one reviewed VSIX that can be installed in both Cursor and VS Code
-- Add a reproducible packaging command with pinned development tooling after dependency and lifecycle-script review
-- Verify install, upgrade, activation, Panel persistence, and native diff opening outside the Extension Development Host
-- Document the shortest local installation and update procedure for daily use
-- Keep Marketplace publication and automatic update distribution out of this checkpoint
+- Verify that the GitAmida Panel restores after a full Cursor restart
+- Verify single-commit, Range, and Selection native diffs from the installed extension
+- Install the same VSIX in VS Code when its CLI or application is available and compare activation, Panel layout, and native diff behavior with Cursor
 
-This checkpoint is complete when the multi-commit workflow can be evaluated in a normal daily-use editor window without launching a development host.
+This checkpoint is complete when the installed extension retains its state in normal Cursor use and the same VSIX has no editor-specific regression in VS Code. Marketplace publication and automatic updates remain outside this checkpoint.
 
 ## 2. Daily-use commit graph validation
 
-- Validate connected linear, branch, and merge lanes in real repositories
-- Tune line thickness, node size, lane spacing, and graph-column width without reducing subject readability
-- Verify all five SCM graph theme colors in primary, light, and high-contrast themes
-- Keep commit subjects, refs, and dates aligned as the graph column changes width
-- Confirm that selected and hovered rows retain visible commit nodes and lines
+- Observe dense branch and merge histories during normal repository work
+- Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
+- Verify all five SCM graph theme colors in light and high-contrast themes
+- Confirm that commit subjects, local and remote HEAD/main indicators, and dates remain aligned in narrow Panels
 - Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
@@ -55,11 +52,11 @@ This checkpoint is complete when switching behaves predictably in a clean reposi
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 5. Single-commit and history hardening
+## 5. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
-- Handle renames, submodules, binary files, oversized blobs, detached HEAD, empty repositories, and non-Git folders explicitly
+- Present detached HEAD, empty repositories, and non-Git folders as explicit states
 - Cancel stale history and blob requests as selection changes
 - Prefetch additional history automatically near the current end instead of stopping at 100 commits or requiring a **Load more** action
 - Preserve the visible scroll position while pages append and show an explicit retry only after a loading failure
