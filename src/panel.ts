@@ -9,6 +9,7 @@ import { GitClient, GitError, MAX_TEXT_BLOB_BYTES } from "./git";
 import type {
   ChangedFile,
   Commit,
+  CommitFileChange,
   RepositoryNavigationState,
   RepositorySelection,
   RepositoryViewPreferences,
@@ -16,10 +17,18 @@ import type {
 } from "./model";
 import type { HostToWebviewMessage } from "./protocol";
 import {
+  explicitCommitSelection,
   resolveRange,
   selectionIdentity,
   singleCommitSelection,
+  toggleExplicitCommit,
 } from "./selection";
+import {
+  buildSelectionFiles,
+  comparisonForChange,
+  type FileComparison,
+  type SelectionFileState,
+} from "./selectionFiles";
 import {
   mergeViewPreferences,
   restoreViewState,
@@ -37,6 +46,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private readonly commits = new Map<string, Commit>();
   private selection?: RepositorySelection;
   private currentFiles: ChangedFile[] = [];
+  private readonly selectionFiles = new Map<string, SelectionFileState>();
+  private readonly commitChanges = new Map<
+    string,
+    Promise<CommitFileChange[]>
+  >();
   private navigationState: RepositoryNavigationState;
   private viewPreferences: RepositoryViewPreferences;
   private readonly stateReady: Promise<void>;
@@ -97,6 +111,8 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       this.repository = history.repository.root;
       this.commits.clear();
       this.currentFiles = [];
+      this.selectionFiles.clear();
+      this.commitChanges.clear();
       for (const row of history.rows) {
         this.commits.set(row.commit.hash, row.commit);
       }
@@ -112,9 +128,14 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         this.selection?.mode === "range"
           ? this.selection.anchorHash
           : undefined;
+      const selectionHashes =
+        this.selection?.mode === "selection"
+          ? this.selection.commitHashes
+          : undefined;
       this.navigationState = {
         selectedHash: this.selection?.activeHash,
         rangeAnchorHash,
+        selectionHashes,
         selectedFilePath:
           selectedHash === this.navigationState.selectedHash
             ? this.navigationState.selectedFilePath
@@ -154,9 +175,16 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     if (
       value.type === "selectCommit" &&
       typeof value.hash === "string" &&
-      typeof value.extend === "boolean"
+      typeof value.extend === "boolean" &&
+      typeof value.toggle === "boolean"
     ) {
       if (!this.commits.has(value.hash)) {
+        return;
+      }
+      if (value.toggle) {
+        await this.selectAndLoad(
+          toggleExplicitCommit(this.commits, this.selection, value.hash),
+        );
         return;
       }
       if (value.extend) {
@@ -219,10 +247,13 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     const request = ++this.selectionRequest;
     this.selection = selection;
     this.currentFiles = [];
+    this.selectionFiles.clear();
     this.navigationState = {
       selectedHash: selection.activeHash,
       rangeAnchorHash:
         selection.mode === "range" ? selection.anchorHash : undefined,
+      selectionHashes:
+        selection.mode === "selection" ? selection.commitHashes : undefined,
       selectedFilePath: undefined,
     };
     await this.persistNavigationState();
@@ -242,18 +273,31 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     const request = ++this.filesRequest;
     await this.post({ type: "filesLoading", selection });
     try {
-      const files =
-        selection.mode === "single"
-          ? await this.git.changedFiles(repository, commit)
-          : await this.git.changedFilesBetween(
-              repository,
-              selection.baseHash,
-              selection.newestHash,
-            );
+      let states: SelectionFileState[] | undefined;
+      let files: ChangedFile[];
+      if (selection.mode === "selection") {
+        states = await this.loadSelectionFiles(
+          repository,
+          selection.commitHashes,
+        );
+        files = states.map((state) => state.file);
+      } else if (selection.mode === "single") {
+        files = await this.git.changedFiles(repository, commit);
+      } else {
+        files = await this.git.changedFilesBetween(
+          repository,
+          selection.baseHash,
+          selection.newestHash,
+        );
+      }
       if (request !== this.filesRequest) {
         return;
       }
       this.currentFiles = files;
+      this.selectionFiles.clear();
+      for (const state of states ?? []) {
+        this.selectionFiles.set(state.file.path, state);
+      }
       if (
         selectionIdentity(this.selection ?? selection) ===
           selectionIdentity(selection) &&
@@ -298,6 +342,14 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    if (selection.mode === "selection") {
+      const state = this.selectionFiles.get(path);
+      if (state !== undefined) {
+        await this.openSelectionDiff(selection, state, repository);
+      }
+      return;
+    }
+
     const activeCommit = this.commits.get(selection.activeHash);
     if (activeCommit === undefined) {
       return;
@@ -316,7 +368,88 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     const diffIdentity = selectionIdentity(selection);
     const request = this.selectionRequest;
 
-    const unsupportedMessage = fileContentMessage(file);
+    await this.openComparison(
+      repository,
+      {
+        beforeRef,
+        afterRef,
+        beforePath,
+        afterPath: file.path,
+        status: file.status,
+        ...(file.content === undefined ? {} : { content: file.content }),
+      },
+      this.selectionLabel(selection),
+      diffIdentity,
+      request,
+    );
+  }
+
+  private async openSelectionDiff(
+    selection: Extract<RepositorySelection, { mode: "selection" }>,
+    state: SelectionFileState,
+    repository: string,
+  ): Promise<void> {
+    const identity = selectionIdentity(selection);
+    const request = this.selectionRequest;
+    const choices: DiffChoice[] = [];
+    if (state.combined !== undefined) {
+      choices.push({
+        label: "$(git-merge) Combined selected changes",
+        description: "Exact file revision chain",
+        detail:
+          "Compare the first selected before-state with the last selected after-state",
+        comparison: state.combined,
+        comparisonLabel: `Selection ${state.changes.length} commits`,
+      });
+    }
+    for (const change of state.changes) {
+      const commit = this.commits.get(change.commitHash);
+      choices.push({
+        label: `$(git-commit) ${commit?.subject || "(no subject)"}`,
+        description:
+          `${commit?.shortHash ?? change.commitHash.slice(0, 8)} · ` +
+          fileStatusName(change.status),
+        detail: commit?.committedAt,
+        comparison: comparisonForChange(change),
+        comparisonLabel: commit?.shortHash ?? change.commitHash.slice(0, 8),
+      });
+    }
+
+    const choice =
+      choices.length === 1
+        ? choices[0]
+        : await vscode.window.showQuickPick(choices, {
+            placeHolder:
+              state.combined === undefined
+                ? "These selected changes do not form one exact file revision chain; choose a commit diff"
+                : "Open the combined file comparison or one selected commit diff",
+            title: basename(state.file.path),
+          });
+    if (
+      choice === undefined ||
+      request !== this.selectionRequest ||
+      this.selection === undefined ||
+      selectionIdentity(this.selection) !== identity
+    ) {
+      return;
+    }
+    await this.openComparison(
+      repository,
+      choice.comparison,
+      choice.comparisonLabel,
+      identity,
+      request,
+    );
+  }
+
+  private async openComparison(
+    repository: string,
+    comparison: FileComparison,
+    label: string,
+    selectionId: string,
+    request: number,
+  ): Promise<void> {
+    const unsupportedMessage = fileContentMessage(comparison.content);
     if (unsupportedMessage !== undefined) {
       await vscode.window.showInformationMessage(unsupportedMessage);
       return;
@@ -324,13 +457,21 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const [before, after] = await Promise.all([
-        this.git.readBlob(repository, beforeRef, beforePath),
-        this.git.readBlob(repository, afterRef, file.path),
+        this.git.readBlob(
+          repository,
+          comparison.beforeRef,
+          comparison.beforePath,
+        ),
+        this.git.readBlob(
+          repository,
+          comparison.afterRef,
+          comparison.afterPath,
+        ),
       ]);
       if (
         request !== this.selectionRequest ||
         this.selection === undefined ||
-        selectionIdentity(this.selection) !== diffIdentity
+        selectionIdentity(this.selection) !== selectionId
       ) {
         return;
       }
@@ -341,14 +482,13 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      const label = this.selectionLabel(selection);
       const left = this.contentProvider.add(
-        beforePath,
+        comparison.beforePath,
         `${label}-base`,
         before.toString("utf8"),
       );
       const right = this.contentProvider.add(
-        file.path,
+        comparison.afterPath,
         label,
         after.toString("utf8"),
       );
@@ -356,7 +496,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         "vscode.diff",
         left,
         right,
-        `${basename(file.path)} (${label})`,
+        `${basename(comparison.afterPath)} (${label})`,
         { preview: false },
       );
     } catch (error) {
@@ -373,6 +513,16 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   ): RepositorySelection | undefined {
     if (selectedHash === undefined) {
       return undefined;
+    }
+    if (
+      this.navigationState.selectionHashes !== undefined &&
+      this.navigationState.selectionHashes.length > 1
+    ) {
+      return explicitCommitSelection(
+        this.commits,
+        this.navigationState.selectionHashes,
+        selectedHash,
+      );
     }
     const anchorHash = this.navigationState.rangeAnchorHash;
     if (
@@ -399,6 +549,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         selection.activeHash.slice(0, 8)
       );
     }
+    if (selection.mode === "selection") {
+      return `Selection-${selection.commitHashes.length}`;
+    }
     const oldest =
       this.commits.get(selection.oldestHash)?.shortHash ??
       selection.oldestHash.slice(0, 8);
@@ -406,6 +559,44 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       this.commits.get(selection.newestHash)?.shortHash ??
       selection.newestHash.slice(0, 8);
     return `${oldest}…${newest}`;
+  }
+
+  private async loadSelectionFiles(
+    repository: string,
+    commitHashes: string[],
+  ): Promise<SelectionFileState[]> {
+    const allChanges: CommitFileChange[] = [];
+    for (let index = 0; index < commitHashes.length; index += 4) {
+      const batch = commitHashes.slice(index, index + 4);
+      const changes = await Promise.all(
+        batch.map(async (hash) => {
+          const commit = this.commits.get(hash);
+          return commit === undefined
+            ? []
+            : await this.changesForCommit(repository, commit);
+        }),
+      );
+      allChanges.push(...changes.flat());
+    }
+    return buildSelectionFiles(allChanges, commitHashes);
+  }
+
+  private changesForCommit(
+    repository: string,
+    commit: Commit,
+  ): Promise<CommitFileChange[]> {
+    const cached = this.commitChanges.get(commit.hash);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const request = this.git.commitFileChanges(repository, commit);
+    this.commitChanges.set(commit.hash, request);
+    void request.catch(() => {
+      if (this.commitChanges.get(commit.hash) === request) {
+        this.commitChanges.delete(commit.hash);
+      }
+    });
+    return request;
   }
 
   private viewState(): RepositoryViewState {
@@ -533,7 +724,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       </section>
     </section>
   </main>
-  <footer id="status" role="status">Select a commit, or Shift+click an ancestor-related commit to review a Range.</footer>
+  <footer id="status" role="status">Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.</footer>
   <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -545,8 +736,14 @@ function isBinary(content: Buffer): boolean {
   return content.subarray(0, sampleLength).includes(0);
 }
 
-function fileContentMessage(file: ChangedFile): string | undefined {
-  const content = file.content;
+interface DiffChoice extends vscode.QuickPickItem {
+  comparison: FileComparison;
+  comparisonLabel: string;
+}
+
+function fileContentMessage(
+  content: ChangedFile["content"],
+): string | undefined {
   if (content === undefined) {
     return undefined;
   }
@@ -563,6 +760,18 @@ function fileContentMessage(file: ChangedFile): string | undefined {
       return `GitAmida: ${actual} exceeds the current ${formatBytes(MAX_TEXT_BLOB_BYTES)} text-diff limit.`;
     }
   }
+}
+
+function fileStatusName(status: string): string {
+  const labels: Record<string, string> = {
+    A: "Added",
+    C: "Copied",
+    D: "Deleted",
+    M: "Modified",
+    R: "Renamed",
+    T: "Type changed",
+  };
+  return labels[status[0] ?? ""] ?? status;
 }
 
 function formatBytes(bytes: number): string {

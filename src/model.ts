@@ -53,11 +53,29 @@ export interface ChangedFile {
   path: string;
   oldPath?: string;
   content?: ChangedFileContent;
+  selection?: SelectionFileSummary;
 }
 
 export interface ChangedFileContent {
   kind: "binary" | "image" | "submodule" | "oversized";
   size?: number;
+}
+
+export interface SelectionFileSummary {
+  changes: SelectionFileChangeSummary[];
+  combined: boolean;
+}
+
+export interface SelectionFileChangeSummary {
+  commitHash: string;
+  status: string;
+}
+
+export interface CommitFileChange extends ChangedFile {
+  commitHash: string;
+  parentHash?: string;
+  oldObject: string;
+  newObject: string;
 }
 
 export interface HistoryResult {
@@ -81,15 +99,23 @@ export interface CommitRangeSelection {
   commitHashes: string[];
 }
 
+export interface ExplicitCommitSelection {
+  mode: "selection";
+  activeHash: string;
+  commitHashes: string[];
+}
+
 export type RepositorySelection =
   | SingleCommitSelection
-  | CommitRangeSelection;
+  | CommitRangeSelection
+  | ExplicitCommitSelection;
 
 export type FileViewMode = "flat" | "tree";
 
 export interface RepositoryNavigationState {
   selectedHash?: string;
   rangeAnchorHash?: string;
+  selectionHashes?: string[];
   selectedFilePath?: string;
 }
 

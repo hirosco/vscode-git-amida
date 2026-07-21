@@ -121,6 +121,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
         currentTree = message.tree;
         expandedTreePaths = collectDirectoryPaths(currentTree);
         renderFiles();
+        renderSelectionDetails();
       }
       break;
     case "filesError":
@@ -190,14 +191,26 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     const date = span("date", formatRowDate(row.commit.committedAt));
     date.title = `Committed ${formatFullDate(row.commit.committedAt)}`;
     button.append(graph, commitCell, date);
-    button.addEventListener("click", (event) =>
-      selectCommit(row.commit.hash, event.shiftKey),
-    );
+    button.addEventListener("click", (event) => {
+      selectCommit(
+        row.commit.hash,
+        event.shiftKey,
+        event.metaKey || event.ctrlKey,
+      );
+    });
     button.addEventListener("keydown", (event) => {
+      if (
+        event.key === " " ||
+        (event.key === "Enter" && (event.metaKey || event.ctrlKey))
+      ) {
+        event.preventDefault();
+        selectCommit(row.commit.hash, false, true);
+        return;
+      }
       navigateRows(event, ".history-row", (target) => {
         const hash = target.dataset.hash;
         if (hash !== undefined) {
-          selectCommit(hash, event.shiftKey);
+          selectCommit(hash, event.shiftKey, false);
         }
       });
     });
@@ -206,7 +219,7 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
 
   updateCommitSelection();
   setStatus(
-    "Select a commit, or Shift+click another commit to review a linear Range.",
+    "Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.",
   );
 }
 
@@ -356,9 +369,10 @@ function createHeadIndicator(
 function renderFiles(): void {
   elements.files.replaceChildren();
   if (currentFiles.length === 0) {
-    const noun = selection?.mode === "range" ? "Range" : "commit";
-    setEmpty(elements.files, `This ${noun} has no final file changes.`);
-    setStatus(`No final file changes in the selected ${noun}.`);
+    const noun = selectionNoun();
+    const qualifier = selection?.mode === "selection" ? "" : " final";
+    setEmpty(elements.files, `This ${noun} has no${qualifier} file changes.`);
+    setStatus(`No${qualifier} file changes in the selected ${noun}.`);
     return;
   }
 
@@ -373,7 +387,7 @@ function renderFiles(): void {
   }
   updateFileSelection();
   setStatus(
-    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${selection?.mode === "range" ? " in this Range" : ""}. ` +
+    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${selection?.mode === "single" ? "" : ` in this ${selectionNoun()}`}. ` +
       "Double-click or press Enter to open a diff.",
   );
 }
@@ -444,8 +458,18 @@ function createFileRow(
   button.dataset.filePath = file.path;
   button.setAttribute("role", tree ? "treeitem" : "option");
   const status = fileStatusLabel(file);
-  button.title = `${fileDisplayPath(file)} · ${status}`;
-  button.setAttribute("aria-label", `${fileDisplayPath(file)}, ${status}`);
+  const contributors = file.selection?.changes
+    .map(
+      (change) =>
+        commits.get(change.commitHash)?.shortHash ??
+        shortHash(change.commitHash),
+    )
+    .join(", ");
+  const description =
+    `${fileDisplayPath(file)} · ${status}` +
+    (contributors === undefined ? "" : ` · commits ${contributors}`);
+  button.title = description;
+  button.setAttribute("aria-label", description);
   button.append(
     span("path", label),
     span(
@@ -484,6 +508,11 @@ function renderSelectionDetails(): void {
     return;
   }
 
+  if (selection.mode === "selection") {
+    renderExplicitSelectionDetails(selection);
+    return;
+  }
+
   const commit = commits.get(selection.activeHash);
   if (commit === undefined) {
     elements.detailsHeading.textContent = "Commit details";
@@ -519,6 +548,61 @@ function renderSelectionDetails(): void {
     commit.parents[0] ?? "Empty tree (root commit)",
   );
   elements.details.append(subject, list);
+}
+
+function renderExplicitSelectionDetails(
+  explicit: Extract<RepositorySelection, { mode: "selection" }>,
+): void {
+  elements.detailsHeading.textContent = "Commit details";
+  const heading = document.createElement("h3");
+  heading.className = "details-subheading";
+  heading.textContent = "Selection details";
+
+  const summary = document.createElement("p");
+  summary.className = "details-subject";
+  summary.textContent = "Explicit commits; no virtual merged tree";
+
+  const details = document.createElement("dl");
+  details.className = "details-list";
+  appendDetail(details, "Commits", String(explicit.commitHashes.length));
+  appendDetail(
+    details,
+    "Comparison",
+    "Combined only per exact file revision chain",
+  );
+
+  const commitsHeading = document.createElement("h3");
+  commitsHeading.className = "details-subheading";
+  commitsHeading.textContent =
+    `Selected commits (${explicit.commitHashes.length})`;
+  const commitList = createCommitList(explicit.commitHashes);
+  elements.details.append(heading, summary, details, commitsHeading, commitList);
+
+  const file = currentFiles.find(
+    (candidate) => candidate.path === selectedFilePath,
+  );
+  if (file?.selection === undefined) {
+    return;
+  }
+  const fileHeading = document.createElement("h3");
+  fileHeading.className = "details-subheading";
+  fileHeading.textContent =
+    `Selected file changes (${file.selection.changes.length})`;
+  const explanation = document.createElement("p");
+  explanation.className = "selection-file-explanation";
+  explanation.textContent = file.selection.combined
+    ? "An exact combined file comparison is available."
+    : "The selected revisions have a gap or separate ancestry, so commit diffs remain separate.";
+  const fileCommits = createCommitList(
+    file.selection.changes.map((change) => change.commitHash),
+    new Map(
+      file.selection.changes.map((change) => [
+        change.commitHash,
+        statusLabel(change.status),
+      ]),
+    ),
+  );
+  elements.details.append(fileHeading, explanation, fileCommits);
 }
 
 function renderRangeDetails(
@@ -606,6 +690,36 @@ function renderRangeDetails(
   );
 }
 
+function createCommitList(
+  hashes: string[],
+  statuses: ReadonlyMap<string, string> = new Map(),
+): HTMLOListElement {
+  const list = document.createElement("ol");
+  list.className = "range-commit-list";
+  list.setAttribute("aria-label", "Selected commits, newest first");
+  for (const hash of hashes) {
+    const commit = commits.get(hash);
+    const item = document.createElement("li");
+    item.className = "range-commit-item";
+    item.title = `${hash} · ${commit?.subject || "(no subject)"}`;
+    const hashValue = document.createElement("code");
+    hashValue.className = "range-commit-hash";
+    hashValue.textContent = commit?.shortHash ?? shortHash(hash);
+    const subjectValue = statuses.has(hash)
+      ? `[${statuses.get(hash)}] ${commit?.subject || "(no subject)"}`
+      : commit?.subject || "(no subject)";
+    const commitSubject = span("range-commit-subject", subjectValue);
+    commitSubject.title = commit?.subject ?? "";
+    const commitDate = span(
+      "range-commit-date",
+      commit === undefined ? "—" : formatRowDate(commit.committedAt),
+    );
+    item.append(hashValue, commitSubject, commitDate);
+    list.append(item);
+  }
+  return list;
+}
+
 function appendDetail(
   list: HTMLDListElement,
   label: string,
@@ -622,20 +736,22 @@ function appendDetail(
   list.append(term, description);
 }
 
-function selectCommit(hash: string, extend: boolean): void {
+function selectCommit(hash: string, extend: boolean, toggle: boolean): void {
   if (
     !extend &&
+    !toggle &&
     selection?.mode === "single" &&
     hash === selection.activeHash
   ) {
     return;
   }
-  vscode.postMessage({ type: "selectCommit", hash, extend });
+  vscode.postMessage({ type: "selectCommit", hash, extend, toggle });
 }
 
 function selectFile(path: string): void {
   selectedFilePath = path;
   updateFileSelection();
+  renderSelectionDetails();
   if (selection !== undefined) {
     vscode.postMessage({ type: "selectFile", path });
   }
@@ -643,7 +759,7 @@ function selectFile(path: string): void {
 
 function updateCommitSelection(): void {
   const selectedHashes =
-    selection?.mode === "range"
+    selection?.mode === "range" || selection?.mode === "selection"
       ? new Set(selection.commitHashes)
       : new Set(selection === undefined ? [] : [selection.activeHash]);
   for (const row of elements.history.querySelectorAll<HTMLElement>(
@@ -658,6 +774,10 @@ function updateCommitSelection(): void {
     row.classList.toggle(
       "range-selected",
       selection?.mode === "range" && inSelection,
+    );
+    row.classList.toggle(
+      "selection-selected",
+      selection?.mode === "selection" && inSelection,
     );
     row.classList.toggle("range-endpoint", endpoint);
     row.classList.toggle("selected", active);
@@ -921,11 +1041,20 @@ function sameSelection(
   if (right === undefined || left.mode !== right.mode) {
     return false;
   }
-  return left.mode === "single"
-    ? left.activeHash === right.activeHash
-    : right.mode === "range" &&
-        left.anchorHash === right.anchorHash &&
-        left.activeHash === right.activeHash;
+  if (left.mode === "single") {
+    return left.activeHash === right.activeHash;
+  }
+  if (left.mode === "range") {
+    return (
+      right.mode === "range" &&
+      left.anchorHash === right.anchorHash &&
+      left.activeHash === right.activeHash
+    );
+  }
+  return (
+    right.mode === "selection" &&
+    left.commitHashes.join("\x00") === right.commitHashes.join("\x00")
+  );
 }
 
 function selectionLabel(value: RepositorySelection): string {
@@ -934,11 +1063,21 @@ function selectionLabel(value: RepositorySelection): string {
       commits.get(value.activeHash)?.shortHash ?? shortHash(value.activeHash)
     );
   }
+  if (value.mode === "selection") {
+    return `Selection · ${value.commitHashes.length} commits`;
+  }
   const oldest =
     commits.get(value.oldestHash)?.shortHash ?? shortHash(value.oldestHash);
   const newest =
     commits.get(value.newestHash)?.shortHash ?? shortHash(value.newestHash);
   return `Range ${oldest}…${newest}`;
+}
+
+function selectionNoun(): "commit" | "Range" | "Selection" {
+  if (selection?.mode === "range") {
+    return "Range";
+  }
+  return selection?.mode === "selection" ? "Selection" : "commit";
 }
 
 function commitDescription(hash: string): string {
@@ -1023,33 +1162,61 @@ function statusLabel(status: string): string {
 }
 
 function fileStatusLabel(file: ChangedFile): string {
+  if (file.selection !== undefined) {
+    const count = file.selection.changes.length;
+    if (count === 1) {
+      const changeStatus =
+        file.selection.changes[0]?.status ?? file.status;
+      const status = statusLabel(changeStatus);
+      return file.content === undefined
+        ? `${status} · 1 selected commit`
+        : `${status} · ${contentLabel(file)} · 1 selected commit`;
+    }
+    return (
+      `${count} selected commits · ` +
+      (file.selection.combined
+        ? "combined diff available"
+        : "per-commit diffs")
+    );
+  }
   const status = statusLabel(file.status);
   if (file.content === undefined) {
     return status;
   }
-  const content = {
+  return `${status} · ${contentLabel(file)}`;
+}
+
+function fileStatusShortLabel(file: ChangedFile): string {
+  if (file.selection !== undefined) {
+    const count = file.selection.changes.length;
+    if (count > 1) {
+      return `${count} changes`;
+    }
+    const changeStatus = file.selection.changes[0]?.status ?? file.status;
+    return file.content === undefined
+      ? statusLabel(changeStatus)
+      : `${changeStatus[0] ?? "X"} · ${contentLabel(file, true)}`;
+  }
+  if (file.content === undefined) {
+    return statusLabel(file.status);
+  }
+  return `${file.status[0] ?? "X"} · ${contentLabel(file, true)}`;
+}
+
+function contentLabel(file: ChangedFile, short = false): string {
+  const content = file.content;
+  if (content === undefined) {
+    return "";
+  }
+  return {
     binary: "Binary",
     image: "Image",
     submodule: "Submodule",
     oversized:
-      file.content.size === undefined
-        ? "Large file"
-        : `Large · ${formatBytes(file.content.size)}`,
-  }[file.content.kind];
-  return `${status} · ${content}`;
-}
-
-function fileStatusShortLabel(file: ChangedFile): string {
-  if (file.content === undefined) {
-    return statusLabel(file.status);
-  }
-  const content = {
-    binary: "Binary",
-    image: "Image",
-    submodule: "Submodule",
-    oversized: "Large",
-  }[file.content.kind];
-  return `${file.status[0] ?? "X"} · ${content}`;
+      short || content.size === undefined
+        ? "Large"
+        : `Large · ${formatBytes(content.size)}`,
+  }[content.kind];
 }
 
 function formatBytes(bytes: number): string {

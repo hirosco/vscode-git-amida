@@ -36,7 +36,12 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "refresh" }
-  | { type: "selectCommit"; hash: string; extend: boolean }
+  | {
+      type: "selectCommit";
+      hash: string;
+      extend: boolean;
+      toggle: boolean;
+    }
   | { type: "selectFile"; path: string }
   | { type: "openDiff"; path: string }
   | { type: "updateViewState"; patch: RepositoryViewStatePatch };

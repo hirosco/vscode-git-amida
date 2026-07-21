@@ -65,10 +65,12 @@ export function sanitizeNavigationState(
   const candidate = value as Record<string, unknown>;
   const selectedHash = optionalString(candidate.selectedHash);
   const rangeAnchorHash = optionalString(candidate.rangeAnchorHash);
+  const selectionHashes = optionalStringArray(candidate.selectionHashes);
   const selectedFilePath = optionalString(candidate.selectedFilePath);
   return {
     ...(selectedHash === undefined ? {} : { selectedHash }),
     ...(rangeAnchorHash === undefined ? {} : { rangeAnchorHash }),
+    ...(selectionHashes === undefined ? {} : { selectionHashes }),
     ...(selectedFilePath === undefined ? {} : { selectedFilePath }),
   };
 }
@@ -92,6 +94,17 @@ export function mergeViewPreferences(
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function optionalStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const strings = value.filter(
+    (item): item is string => typeof item === "string" && item.length > 0,
+  );
+  const unique = [...new Set(strings)];
+  return unique.length > 1 ? unique : undefined;
 }
 
 function sanitizeRatio(

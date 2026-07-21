@@ -3,9 +3,11 @@ import test from "node:test";
 
 import type { Commit } from "../src/model";
 import {
+  explicitCommitSelection,
   resolveRange,
   selectionIdentity,
   singleCommitSelection,
+  toggleExplicitCommit,
 } from "../src/selection";
 
 test("resolveRange derives the same base and tip in either selection direction", () => {
@@ -173,6 +175,51 @@ test("selectionIdentity distinguishes single selections and Range anchors", () =
   if (result.ok) {
     assert.equal(selectionIdentity(result.selection), "range:root:second");
   }
+});
+
+test("toggleExplicitCommit converts a Range and can omit an interior commit", () => {
+  const commits = commitMap([
+    commit("third", ["second"]),
+    commit("second", ["root"]),
+    commit("root", []),
+  ]);
+  const range = resolveRange(commits, "root", "third");
+  assert.equal(range.ok, true);
+  if (!range.ok) {
+    return;
+  }
+
+  assert.deepEqual(toggleExplicitCommit(commits, range.selection, "second"), {
+    mode: "selection",
+    activeHash: "third",
+    commitHashes: ["third", "root"],
+  });
+});
+
+test("explicitCommitSelection supports unrelated commits and collapses to single", () => {
+  const commits = commitMap([
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ]);
+  const selection = explicitCommitSelection(
+    commits,
+    ["side", "missing", "main"],
+    "side",
+  );
+  assert.deepEqual(selection, {
+    mode: "selection",
+    activeHash: "side",
+    commitHashes: ["main", "side"],
+  });
+  assert.equal(
+    selectionIdentity(selection),
+    "selection:main,side",
+  );
+  assert.deepEqual(toggleExplicitCommit(commits, selection, "main"), {
+    mode: "single",
+    activeHash: "side",
+  });
 });
 
 function commitMap(commits: Commit[]): Map<string, Commit> {

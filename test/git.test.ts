@@ -20,6 +20,7 @@ import {
   parseRefs,
 } from "../src/git";
 import { resolveRange } from "../src/selection";
+import { buildSelectionFiles } from "../src/selectionFiles";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -418,6 +419,102 @@ test("GitClient compares a merge range from its declared base to tip", async (co
       { status: "A", path: "side.txt" },
     ],
   );
+});
+
+test("explicit Selection keeps unrelated branch changes separate", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-selection-branch-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  writeFileSync(join(repository, "shared.txt"), "base\n");
+  git(repository, "add", "--", "shared.txt");
+  git(repository, "commit", "-q", "-m", "root");
+
+  git(repository, "switch", "-q", "-c", "side");
+  writeFileSync(join(repository, "shared.txt"), "side\n");
+  writeFileSync(join(repository, "side-only.txt"), "side\n");
+  git(repository, "add", "--", "shared.txt", "side-only.txt");
+  git(repository, "commit", "-q", "-m", "side change");
+
+  git(repository, "switch", "-q", "main");
+  writeFileSync(join(repository, "shared.txt"), "main\n");
+  writeFileSync(join(repository, "main-only.txt"), "main\n");
+  git(repository, "add", "--", "shared.txt", "main-only.txt");
+  git(repository, "commit", "-q", "-m", "main change");
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const bySubject = new Map(
+    history.rows.map((row) => [row.commit.subject, row.commit]),
+  );
+  const main = bySubject.get("main change");
+  const side = bySubject.get("side change");
+  assert.ok(main);
+  assert.ok(side);
+
+  const states = buildSelectionFiles(
+    [
+      ...(await client.commitFileChanges(repository, main)),
+      ...(await client.commitFileChanges(repository, side)),
+    ],
+    [main.hash, side.hash],
+  );
+  assert.deepEqual(
+    states.map((state) => state.file.path),
+    ["main-only.txt", "shared.txt", "side-only.txt"],
+  );
+  const shared = states.find((state) => state.file.path === "shared.txt");
+  assert.ok(shared);
+  assert.equal(shared.combined, undefined);
+  assert.deepEqual(
+    shared.file.selection?.changes.map((change) => change.commitHash),
+    [main.hash, side.hash],
+  );
+});
+
+test("explicit Selection does not bridge an omitted file revision", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-selection-gap-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "shared.txt"), "root\n");
+  git(repository, "add", "--", "shared.txt");
+  git(repository, "commit", "-q", "-m", "root");
+  writeFileSync(join(repository, "shared.txt"), "selected old\n");
+  git(repository, "commit", "-q", "-am", "selected old");
+  const selectedOld = git(repository, "rev-parse", "HEAD").trim();
+  writeFileSync(join(repository, "shared.txt"), "omitted\n");
+  git(repository, "commit", "-q", "-am", "omitted");
+  writeFileSync(join(repository, "shared.txt"), "selected new\n");
+  git(repository, "commit", "-q", "-am", "selected new");
+  const selectedNew = git(repository, "rev-parse", "HEAD").trim();
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const commits = new Map(
+    history.rows.map((row) => [row.commit.hash, row.commit]),
+  );
+  const oldCommit = commits.get(selectedOld);
+  const newCommit = commits.get(selectedNew);
+  assert.ok(oldCommit);
+  assert.ok(newCommit);
+
+  const states = buildSelectionFiles(
+    [
+      ...(await client.commitFileChanges(repository, newCommit)),
+      ...(await client.commitFileChanges(repository, oldCommit)),
+    ],
+    [selectedNew, selectedOld],
+  );
+  assert.equal(states.length, 1);
+  assert.equal(states[0]?.file.path, "shared.txt");
+  assert.equal(states[0]?.combined, undefined);
+  assert.equal(states[0]?.file.selection?.combined, false);
 });
 
 test("GitClient builds connected lanes for a merge history", async (context) => {

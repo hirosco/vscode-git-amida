@@ -148,17 +148,19 @@ The inspection pane keeps its stable **Commit details** heading. Range selection
 
 Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
-The current multiple-commit implementation supports only single selection and Range. It completes the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added.
+The current multiple-commit implementation supports single commits, Range, and explicit Selection. It completes the whole path from choosing commits, through aggregated changed files, to native file diffs without manufacturing a repository state that Git does not contain.
 
 Range endpoints must have an ancestor relationship. Use the first parent of the older endpoint as the comparison base, or the empty tree when that endpoint is a root commit. The contributing commit set is every commit reachable from the tip but not from the base, equivalent to `git rev-list base..tip`. This includes side-branch commits merged between the declared base and tip while excluding unrelated date-interleaved rows. When the older endpoint is a merge, show that first-parent choice explicitly. A Shift selection between unrelated endpoints leaves the current selection unchanged because that investigation belongs to explicit Selection rather than one before/after Range.
 
 ### Selection
 
-A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history.
+A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history. Cmd/Ctrl+click toggles the pointed commit, while Space toggles the focused history row as the keyboard equivalent. A plain click returns to one commit, and Shift+click creates a Range from the active anchor.
 
 A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate their changed files and keep each contributing commit visible, but do not imply that the selection is one real final repository state. If revisions of the same file do not form an exact chain, present their commit diffs separately. A hypothetical merged branch result would require separate merge-preview semantics and is not part of Selection.
 
-Aggregate and deduplicate changed files, retain the selected commits relevant to each file, and present their diffs in chronological order. Changes may be combined only when their before and after revisions form an exact, explainable chain that does not absorb an unselected change. When an omitted commit creates a gap in the same file, keep that file's selected commit diffs separate.
+Aggregate and deduplicate changed files, retain the selected commits relevant to each file, and present commits newest first to match Repository History. Changes may be combined only when their before and after blob IDs and paths form one exact, explainable chain that does not absorb an unselected file revision. When an omitted commit creates a gap in the same file, or selected commits come from separate ancestry, keep that file's selected commit diffs separate.
+
+Changed files show how many selected commits contributed to each path. Selecting a file explains whether an exact combined comparison is available. Opening a file with more than one contributing change uses an editor Quick Pick: offer the combined comparison when safe, followed by every real per-commit comparison; otherwise offer only the per-commit comparisons and state why. The Extension Host derives these choices from parsed commit changes, so the Webview never supplies revision IDs for a diff.
 
 The familiar interaction target is Shift selection for an initial range and Cmd/Ctrl toggling for individual inclusion. The interaction may follow IntelliJ conventions, but the displayed result remains governed by the rules above.
 

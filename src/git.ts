@@ -6,6 +6,7 @@ import { buildHistoryGraph } from "./graph";
 import type {
   ChangedFile,
   Commit,
+  CommitFileChange,
   CommitRef,
   HistoryResult,
   RepositoryInfo,
@@ -119,6 +120,34 @@ export class GitClient {
     base: string | undefined,
     tip: string,
   ): Promise<ChangedFile[]> {
+    const entries = await this.changedEntriesBetween(repository, base, tip);
+    return entries.map(changedFileFromEntry);
+  }
+
+  public async commitFileChanges(
+    repository: string,
+    commit: Commit,
+  ): Promise<CommitFileChange[]> {
+    const parentHash = commit.parents[0];
+    const entries = await this.changedEntriesBetween(
+      repository,
+      parentHash,
+      commit.hash,
+    );
+    return entries.map((entry) => ({
+      ...changedFileFromEntry(entry),
+      commitHash: commit.hash,
+      ...(parentHash === undefined ? {} : { parentHash }),
+      oldObject: entry.oldObject,
+      newObject: entry.newObject,
+    }));
+  }
+
+  private async changedEntriesBetween(
+    repository: string,
+    base: string | undefined,
+    tip: string,
+  ): Promise<RawDiffEntry[]> {
     const baseRef = base ?? EMPTY_TREE;
     const [rawOutput, numStatOutput] = await Promise.all([
       this.run(repository, [
@@ -152,15 +181,10 @@ export class GitClient {
       entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
     );
 
-    return entries.map((entry) => {
-      const content = classifyChangedFile(entry, binaryPaths, objectInfo);
-      return {
-        status: entry.status,
-        path: entry.path,
-        ...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
-        ...(content === undefined ? {} : { content }),
-      };
-    });
+    return entries.map((entry) => ({
+      ...entry,
+      content: classifyChangedFile(entry, binaryPaths, objectInfo),
+    }));
   }
 
   public async readBlob(
@@ -525,6 +549,15 @@ function classifyChangedFile(
     return { kind: "binary", ...(size === undefined ? {} : { size }) };
   }
   return undefined;
+}
+
+function changedFileFromEntry(entry: RawDiffEntry): ChangedFile {
+  return {
+    status: entry.status,
+    path: entry.path,
+    ...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
+    ...(entry.content === undefined ? {} : { content: entry.content }),
+  };
 }
 
 function isObjectHash(value: string): boolean {

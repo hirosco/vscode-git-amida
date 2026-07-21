@@ -31,12 +31,14 @@ test("view preferences and navigation state sanitize independently", () => {
     sanitizeNavigationState({
       selectedHash: "abc",
       rangeAnchorHash: "def",
+      selectionHashes: ["abc", "ghi", "abc", 42],
       selectedFilePath: "src/file.ts",
       fileViewMode: "tree",
     }),
     {
       selectedHash: "abc",
       rangeAnchorHash: "def",
+      selectionHashes: ["abc", "ghi"],
       selectedFilePath: "src/file.ts",
     },
   );

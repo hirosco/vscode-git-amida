@@ -17,6 +17,51 @@ export function singleCommitSelection(hash: string): RepositorySelection {
   return { mode: "single", activeHash: hash };
 }
 
+export function explicitCommitSelection(
+  commits: ReadonlyMap<string, Commit>,
+  hashes: Iterable<string>,
+  activeHash: string,
+): RepositorySelection {
+  const selected = new Set(
+    [...hashes].filter((hash) => commits.has(hash)),
+  );
+  if (selected.size === 0) {
+    return singleCommitSelection(activeHash);
+  }
+  if (selected.size === 1) {
+    return singleCommitSelection([...selected][0] ?? activeHash);
+  }
+  const commitHashes = [...commits.keys()].filter((hash) => selected.has(hash));
+  return {
+    mode: "selection",
+    activeHash:
+      selected.has(activeHash) ? activeHash : commitHashes[0] ?? activeHash,
+    commitHashes,
+  };
+}
+
+export function toggleExplicitCommit(
+  commits: ReadonlyMap<string, Commit>,
+  current: RepositorySelection | undefined,
+  hash: string,
+): RepositorySelection {
+  if (current === undefined || !commits.has(hash)) {
+    return singleCommitSelection(hash);
+  }
+  const selected = new Set(
+    current.mode === "single" ? [current.activeHash] : current.commitHashes,
+  );
+  if (selected.has(hash)) {
+    if (selected.size === 1) {
+      return current;
+    }
+    selected.delete(hash);
+  } else {
+    selected.add(hash);
+  }
+  return explicitCommitSelection(commits, selected, hash);
+}
+
 export function resolveRange(
   commits: ReadonlyMap<string, Commit>,
   anchorHash: string,
@@ -104,9 +149,13 @@ export function resolveRange(
 }
 
 export function selectionIdentity(selection: RepositorySelection): string {
-  return selection.mode === "single"
-    ? `single:${selection.activeHash}`
-    : `range:${selection.anchorHash}:${selection.activeHash}`;
+  if (selection.mode === "single") {
+    return `single:${selection.activeHash}`;
+  }
+  if (selection.mode === "range") {
+    return `range:${selection.anchorHash}:${selection.activeHash}`;
+  }
+  return `selection:${[...selection.commitHashes].sort().join(",")}`;
 }
 
 function collectReachable(

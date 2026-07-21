@@ -15,34 +15,7 @@ GitAmida's current product target is:
 
 This checkpoint is complete when branch ancestry can be followed quickly without terminal color artifacts or excessive horizontal cost.
 
-## 2. Range topology and content hardening
-
-- Keep date-interleaved commits outside the selected ancestry from changing the Range result
-- Define and display the comparison parent when the oldest endpoint is a merge commit, using first parent as the visible default
-- Support ancestor-related ranges across branch and merge topology without treating unrelated branch commits as one Range
-- Make additions, deletions, renames, and root commits part of the explainable base/tip comparison
-- Surface binary files, images, submodules, oversized blobs, and unsupported content explicitly instead of coercing them into text diffs
-- Cancel or discard stale Range, file, and blob results when selection changes
-- Verify that Date and future Topology display orders produce the same comparison for the same endpoint hashes
-- Test each Range result against the corresponding Git base/tip diff in temporary branch and merge repositories
-
-This checkpoint is complete when branching and merge history cannot silently change what the selected Range means.
-
-## 3. Explicit multi-commit Selection
-
-- Add Cmd/Ctrl+click and a keyboard equivalent for explicitly adding or removing individual commits
-- Label the mode as **Selection** so it cannot be confused with Range endpoint semantics
-- Allow explicit commits from different branches without converting them into one Range or hypothetical merged tree
-- Aggregate and deduplicate files while showing the selected commits that contribute to each file
-- Exclude files changed only by unselected commits
-- Combine a file into one diff only when the selected revisions form an exact, explainable chain
-- Present per-commit diffs when omitted or unrelated revisions make one combined state misleading
-- Do not synthesize a virtual tree or imply that the result can be exported as a cherry-pick preview
-- Preserve selected hashes and their presentation when history display order changes
-
-This checkpoint is complete when users can intentionally omit a commit and still understand exactly which selected commits produced every displayed diff.
-
-## 4. Local extension installation
+## 2. Local extension installation
 
 - Produce one reviewed VSIX that can be installed in both Cursor and VS Code
 - Add a reproducible packaging command with pinned development tooling after dependency and lifecycle-script review
@@ -52,7 +25,7 @@ This checkpoint is complete when users can intentionally omit a commit and still
 
 This checkpoint is complete when the multi-commit workflow can be evaluated in a normal daily-use editor window without launching a development host.
 
-## 5. Safe branch switching
+## 3. Safe branch switching
 
 - Keep ref indicators display-only and add **Switch Branch…** to a commit row's native Webview context menu
 - Open a Quick Pick containing every other local branch that points at the selected commit; hide or disable switching when no candidate exists
@@ -66,7 +39,7 @@ This checkpoint is complete when the multi-commit workflow can be evaluated in a
 
 This checkpoint is complete when switching behaves predictably in a clean repository and safely refuses every ambiguous state.
 
-## 6. File History investigations
+## 4. File History investigations
 
 - Keep one pinned Repository History tab
 - Open and close several independent File History tabs
@@ -80,7 +53,7 @@ This checkpoint is complete when switching behaves predictably in a clean reposi
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 7. Single-commit and history hardening
+## 5. Single-commit and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
@@ -91,7 +64,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Preserve lane and color continuity while history pages append
 - Test behavior in both Cursor and VS Code
 
-## 8. Diff controls and external tools
+## 6. Diff controls and external tools
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
@@ -99,7 +72,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
 - Explain unavailable tools and retain the native diff as the fallback
 
-## 9. Performance and public distribution
+## 7. Performance and public distribution
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs
