@@ -52,6 +52,12 @@ export interface ChangedFile {
   status: string;
   path: string;
   oldPath?: string;
+  content?: ChangedFileContent;
+}
+
+export interface ChangedFileContent {
+  kind: "binary" | "image" | "submodule" | "oversized";
+  size?: number;
 }
 
 export interface HistoryResult {

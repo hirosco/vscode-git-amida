@@ -126,7 +126,7 @@ For a single commit:
 - Compare a root commit with Git's empty tree
 - Show the active parent for merge commits and later allow explicit parent selection
 
-The current virtual-document path assumes text content. Binary and image diffs must report or route unsupported content explicitly instead of coercing it into text.
+The virtual-document path accepts text blobs up to 5 MiB. Classify raster images, binary blobs, submodules, and oversized text before opening a diff, keep them visible in Changed files, and explain why the text comparison is unavailable. Do not decode unsupported content as UTF-8. Image preview and external-tool routing remain separate later checkpoints.
 
 ## Multiple-commit semantics
 

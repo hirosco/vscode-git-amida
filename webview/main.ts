@@ -443,10 +443,15 @@ function createFileRow(
   button.className = tree ? "file-row tree-file-row" : "file-row";
   button.dataset.filePath = file.path;
   button.setAttribute("role", tree ? "treeitem" : "option");
-  button.title = fileDisplayPath(file);
+  const status = fileStatusLabel(file);
+  button.title = `${fileDisplayPath(file)} · ${status}`;
+  button.setAttribute("aria-label", `${fileDisplayPath(file)}, ${status}`);
   button.append(
     span("path", label),
-    span(`status status-${file.status[0] ?? "X"}`, statusLabel(file.status)),
+    span(
+      `status status-${file.status[0] ?? "X"}`,
+      fileStatusShortLabel(file),
+    ),
   );
   button.addEventListener("click", () => selectFile(file.path));
   button.addEventListener("dblclick", () => openDiff(file.path));
@@ -1015,6 +1020,43 @@ function statusLabel(status: string): string {
     X: "Unknown",
   };
   return labels[status[0] ?? "X"] ?? status;
+}
+
+function fileStatusLabel(file: ChangedFile): string {
+  const status = statusLabel(file.status);
+  if (file.content === undefined) {
+    return status;
+  }
+  const content = {
+    binary: "Binary",
+    image: "Image",
+    submodule: "Submodule",
+    oversized:
+      file.content.size === undefined
+        ? "Large file"
+        : `Large · ${formatBytes(file.content.size)}`,
+  }[file.content.kind];
+  return `${status} · ${content}`;
+}
+
+function fileStatusShortLabel(file: ChangedFile): string {
+  if (file.content === undefined) {
+    return statusLabel(file.status);
+  }
+  const content = {
+    binary: "Binary",
+    image: "Image",
+    submodule: "Submodule",
+    oversized: "Large",
+  }[file.content.kind];
+  return `${file.status[0] ?? "X"} · ${content}`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${Math.ceil(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function element<T extends HTMLElement>(id: string): T {

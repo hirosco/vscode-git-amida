@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 
 import { GitContentProvider } from "./contentProvider";
 import { buildFileTree } from "./fileTree";
-import { GitClient, GitError } from "./git";
+import { GitClient, GitError, MAX_TEXT_BLOB_BYTES } from "./git";
 import type {
   ChangedFile,
   Commit,
@@ -314,6 +314,13 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         : selection.newestHash;
     const beforePath = file.oldPath ?? file.path;
     const diffIdentity = selectionIdentity(selection);
+    const request = this.selectionRequest;
+
+    const unsupportedMessage = fileContentMessage(file);
+    if (unsupportedMessage !== undefined) {
+      await vscode.window.showInformationMessage(unsupportedMessage);
+      return;
+    }
 
     try {
       const [before, after] = await Promise.all([
@@ -321,6 +328,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         this.git.readBlob(repository, afterRef, file.path),
       ]);
       if (
+        request !== this.selectionRequest ||
         this.selection === undefined ||
         selectionIdentity(this.selection) !== diffIdentity
       ) {
@@ -328,7 +336,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
       if (isBinary(before) || isBinary(after)) {
         await vscode.window.showInformationMessage(
-          "GitAmida: Binary and image diffs are not available yet.",
+          "GitAmida: This file contains binary data, so a text diff was not opened.",
         );
         return;
       }
@@ -525,7 +533,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       </section>
     </section>
   </main>
-  <footer id="status" role="status">Select a commit, or Shift+click another commit to review a linear Range.</footer>
+  <footer id="status" role="status">Select a commit, or Shift+click an ancestor-related commit to review a Range.</footer>
   <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -535,6 +543,33 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 function isBinary(content: Buffer): boolean {
   const sampleLength = Math.min(content.length, 8 * 1024);
   return content.subarray(0, sampleLength).includes(0);
+}
+
+function fileContentMessage(file: ChangedFile): string | undefined {
+  const content = file.content;
+  if (content === undefined) {
+    return undefined;
+  }
+  switch (content.kind) {
+    case "image":
+      return "GitAmida: Image comparison is not available yet. The image remains listed in the selected changes.";
+    case "binary":
+      return "GitAmida: This is a binary file, so a text diff cannot be opened.";
+    case "submodule":
+      return "GitAmida: This path is a Git submodule. Its commit change is listed, but submodule comparison is not available yet.";
+    case "oversized": {
+      const actual =
+        content.size === undefined ? "This file" : formatBytes(content.size);
+      return `GitAmida: ${actual} exceeds the current ${formatBytes(MAX_TEXT_BLOB_BYTES)} text-diff limit.`;
+    }
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${Math.ceil(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function userMessage(error: unknown): string {

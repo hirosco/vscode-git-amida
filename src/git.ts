@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { basename } from "node:path";
+import { basename, extname } from "node:path";
 import { promisify } from "node:util";
 
 import { buildHistoryGraph } from "./graph";
@@ -15,6 +15,32 @@ const execFileAsync = promisify(execFile);
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const RECORD_MARKER = "\x1e";
 const MAX_BUFFER = 16 * 1024 * 1024;
+export const MAX_TEXT_BLOB_BYTES = 5 * 1024 * 1024;
+const IMAGE_EXTENSIONS = new Set([
+  ".avif",
+  ".bmp",
+  ".gif",
+  ".heic",
+  ".ico",
+  ".jpeg",
+  ".jpg",
+  ".png",
+  ".tif",
+  ".tiff",
+  ".webp",
+]);
+
+export interface RawDiffEntry extends ChangedFile {
+  oldMode: string;
+  newMode: string;
+  oldObject: string;
+  newObject: string;
+}
+
+interface ObjectInfo {
+  type: string;
+  size: number;
+}
 
 export class GitError extends Error {
   public constructor(
@@ -93,17 +119,48 @@ export class GitClient {
     base: string | undefined,
     tip: string,
   ): Promise<ChangedFile[]> {
-    const output = await this.run(repository, [
-      "diff",
-      "--name-status",
-      "--no-ext-diff",
-      "-z",
-      "-M",
-      base ?? EMPTY_TREE,
-      tip,
-      "--",
+    const baseRef = base ?? EMPTY_TREE;
+    const [rawOutput, numStatOutput] = await Promise.all([
+      this.run(repository, [
+        "diff",
+        "--raw",
+        "--no-abbrev",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-z",
+        "-M",
+        baseRef,
+        tip,
+        "--",
+      ]),
+      this.run(repository, [
+        "diff",
+        "--numstat",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-z",
+        "-M",
+        baseRef,
+        tip,
+        "--",
+      ]),
     ]);
-    return parseNameStatus(output);
+    const entries = parseRawDiff(rawOutput);
+    const binaryPaths = parseBinaryPaths(numStatOutput);
+    const objectInfo = await this.loadObjectInfo(
+      repository,
+      entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+    );
+
+    return entries.map((entry) => {
+      const content = classifyChangedFile(entry, binaryPaths, objectInfo);
+      return {
+        status: entry.status,
+        path: entry.path,
+        ...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
+        ...(content === undefined ? {} : { content }),
+      };
+    });
   }
 
   public async readBlob(
@@ -115,6 +172,22 @@ export class GitClient {
       return Buffer.alloc(0);
     }
     return this.run(repository, ["cat-file", "blob", `${ref}:${path}`]);
+  }
+
+  private async loadObjectInfo(
+    repository: string,
+    objectHashes: string[],
+  ): Promise<Map<string, ObjectInfo>> {
+    const hashes = [...new Set(objectHashes.filter(isObjectHash))];
+    if (hashes.length === 0) {
+      return new Map();
+    }
+    const output = await this.runWithInput(
+      repository,
+      ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
+      `${hashes.join("\n")}\n`,
+    );
+    return parseObjectInfo(output);
   }
 
   private async tryRun(
@@ -132,29 +205,14 @@ export class GitClient {
   }
 
   private async run(directory: string, args: string[]): Promise<Buffer> {
-    const gitArgs = [
-      "-C",
-      directory,
-      "--no-pager",
-      "-c",
-      "color.ui=false",
-      "-c",
-      "core.quotepath=false",
-      "-c",
-      "diff.external=",
-      ...args,
-    ];
+    const gitArgs = commandArgs(directory, args);
 
     try {
       const { stdout } = await execFileAsync("git", gitArgs, {
         encoding: "buffer",
         maxBuffer: MAX_BUFFER,
         timeout: 15_000,
-        env: {
-          ...process.env,
-          GIT_PAGER: "cat",
-          GIT_EXTERNAL_DIFF: "",
-        },
+        env: commandEnvironment(),
       });
       return stdout;
     } catch (error) {
@@ -171,6 +229,68 @@ export class GitClient {
       throw new GitError(reason, stderr, exitCode);
     }
   }
+
+  private runWithInput(
+    directory: string,
+    args: string[],
+    input: string,
+  ): Promise<Buffer> {
+    return new Promise((resolve, reject) => {
+      const child = execFile(
+        "git",
+        commandArgs(directory, args),
+        {
+          encoding: "buffer",
+          maxBuffer: MAX_BUFFER,
+          timeout: 15_000,
+          env: commandEnvironment(),
+        },
+        (error, stdout, stderr) => {
+          if (error === null) {
+            resolve(stdout);
+            return;
+          }
+          const details = error as NodeJS.ErrnoException & {
+            code?: string | number;
+          };
+          const stderrText = Buffer.isBuffer(stderr)
+            ? stderr.toString("utf8").trim()
+            : String(stderr ?? "").trim();
+          const exitCode =
+            typeof details.code === "number" ? details.code : undefined;
+          const reason = stderrText || details.message || "Git command failed.";
+          reject(new GitError(reason, stderrText, exitCode));
+        },
+      );
+      child.stdin?.once("error", (error) => {
+        reject(new GitError(error.message));
+      });
+      child.stdin?.end(input);
+    });
+  }
+}
+
+function commandArgs(directory: string, args: string[]): string[] {
+  return [
+    "-C",
+    directory,
+    "--no-pager",
+    "-c",
+    "color.ui=false",
+    "-c",
+    "core.quotepath=false",
+    "-c",
+    "diff.external=",
+    ...args,
+  ];
+}
+
+function commandEnvironment(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    GIT_PAGER: "cat",
+    GIT_EXTERNAL_DIFF: "",
+  };
 }
 
 export function parseHistory(
@@ -286,30 +406,131 @@ function compareRefs(left: CommitRef, right: CommitRef): number {
   return order[left.type] - order[right.type] || left.name.localeCompare(right.name);
 }
 
-export function parseNameStatus(output: Buffer): ChangedFile[] {
+export function parseRawDiff(output: Buffer): RawDiffEntry[] {
   const fields = output.toString("utf8").split("\x00");
-  const files: ChangedFile[] = [];
+  const entries: RawDiffEntry[] = [];
 
   for (let index = 0; index < fields.length; ) {
-    const status = fields[index++];
-    if (!status) {
+    const header = fields[index++];
+    if (!header) {
       break;
     }
-
-    if (status.startsWith("R") || status.startsWith("C")) {
-      const oldPath = fields[index++];
-      const path = fields[index++];
-      if (oldPath !== undefined && path !== undefined) {
-        files.push({ status, oldPath, path });
-      }
+    const match =
+      /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z][0-9]*)$/.exec(
+        header,
+      );
+    if (match === null) {
       continue;
     }
+    const [
+      ,
+      oldMode = "",
+      newMode = "",
+      oldObject = "",
+      newObject = "",
+      status = "",
+    ] = match;
+    const firstPath = fields[index++];
+    if (firstPath === undefined) {
+      break;
+    }
+    const renamed = status.startsWith("R") || status.startsWith("C");
+    const path = renamed ? fields[index++] : firstPath;
+    if (path === undefined) {
+      break;
+    }
+    entries.push({
+      status,
+      path,
+      ...(renamed ? { oldPath: firstPath } : {}),
+      oldMode,
+      newMode,
+      oldObject,
+      newObject,
+    });
+  }
 
-    const path = fields[index++];
-    if (path !== undefined) {
-      files.push({ status, path });
+  return entries;
+}
+
+export function parseBinaryPaths(output: Buffer): Set<string> {
+  const fields = output.toString("utf8").split("\x00");
+  const paths = new Set<string>();
+
+  for (let index = 0; index < fields.length; ) {
+    const record = fields[index++];
+    if (!record) {
+      break;
+    }
+    const firstSeparator = record.indexOf("\t");
+    const secondSeparator = record.indexOf("\t", firstSeparator + 1);
+    if (firstSeparator === -1 || secondSeparator === -1) {
+      continue;
+    }
+    const added = record.slice(0, firstSeparator);
+    const deleted = record.slice(firstSeparator + 1, secondSeparator);
+    const path = record.slice(secondSeparator + 1);
+    const renamed = path.length === 0;
+    if (renamed) {
+      index += 1;
+    }
+    const targetPath = renamed ? fields[index++] : path;
+    if (
+      targetPath !== undefined &&
+      (added === "-" || deleted === "-")
+    ) {
+      paths.add(targetPath);
     }
   }
 
-  return files;
+  return paths;
+}
+
+function parseObjectInfo(output: Buffer): Map<string, ObjectInfo> {
+  const info = new Map<string, ObjectInfo>();
+  for (const line of output.toString("utf8").trim().split("\n")) {
+    const match = /^([0-9a-f]+) ([a-z]+) ([0-9]+)$/.exec(line);
+    if (match === null) {
+      continue;
+    }
+    const [, hash = "", type = "", rawSize = ""] = match;
+    const size = Number(rawSize);
+    if (Number.isSafeInteger(size)) {
+      info.set(hash, { type, size });
+    }
+  }
+  return info;
+}
+
+function classifyChangedFile(
+  entry: RawDiffEntry,
+  binaryPaths: ReadonlySet<string>,
+  objectInfo: ReadonlyMap<string, ObjectInfo>,
+): ChangedFile["content"] {
+  if (entry.oldMode === "160000" || entry.newMode === "160000") {
+    return { kind: "submodule" };
+  }
+  const sizes = [entry.oldObject, entry.newObject]
+    .map((hash) => objectInfo.get(hash))
+    .filter((info): info is ObjectInfo => info?.type === "blob")
+    .map((info) => info.size);
+  const size = sizes.length === 0 ? undefined : Math.max(...sizes);
+  if (isImagePath(entry.path) || isImagePath(entry.oldPath ?? "")) {
+    return { kind: "image", ...(size === undefined ? {} : { size }) };
+  }
+  if (size !== undefined && size > MAX_TEXT_BLOB_BYTES) {
+    return { kind: "oversized", size };
+  }
+  if (binaryPaths.has(entry.path)) {
+    return { kind: "binary", ...(size === undefined ? {} : { size }) };
+  }
+  return undefined;
+}
+
+function isObjectHash(value: string): boolean {
+  return /^[0-9a-f]+$/.test(value) && !/^0+$/.test(value);
+}
+
+function isImagePath(path: string): boolean {
+  return IMAGE_EXTENSIONS.has(extname(path).toLowerCase());
 }

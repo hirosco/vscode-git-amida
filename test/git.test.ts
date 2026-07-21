@@ -1,11 +1,24 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-import { GitClient, parseHistory, parseNameStatus, parseRefs } from "../src/git";
+import {
+  GitClient,
+  MAX_TEXT_BLOB_BYTES,
+  parseBinaryPaths,
+  parseHistory,
+  parseRawDiff,
+  parseRefs,
+} from "../src/git";
 import { resolveRange } from "../src/selection";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -71,14 +84,44 @@ test("parseHistory reads commit records without terminal graph text", () => {
   ]);
 });
 
-test("parseNameStatus handles rename records and spaces", () => {
-  const output = Buffer.from(
-    "M\x00src/file name.ts\x00R100\x00old name.ts\x00new name.ts\x00",
+test("parseRawDiff and parseBinaryPaths preserve rename metadata", () => {
+  assert.deepEqual(
+    parseRawDiff(
+      Buffer.from(
+        ":100644 100644 abc def M\x00src/file name.ts\x00" +
+          ":100644 100644 123 456 R100\x00old.bin\x00new.bin\x00",
+      ),
+    ),
+    [
+      {
+        status: "M",
+        path: "src/file name.ts",
+        oldMode: "100644",
+        newMode: "100644",
+        oldObject: "abc",
+        newObject: "def",
+      },
+      {
+        status: "R100",
+        oldPath: "old.bin",
+        path: "new.bin",
+        oldMode: "100644",
+        newMode: "100644",
+        oldObject: "123",
+        newObject: "456",
+      },
+    ],
   );
-  assert.deepEqual(parseNameStatus(output), [
-    { status: "M", path: "src/file name.ts" },
-    { status: "R100", oldPath: "old name.ts", path: "new name.ts" },
-  ]);
+  assert.deepEqual(
+    parseBinaryPaths(
+      Buffer.from(
+        "1\t2\ttext.txt\x00" +
+          "-\t-\tbinary\tname.bin\x00" +
+          "-\t-\t\x00old.bin\x00new.bin\x00",
+      ),
+    ),
+    new Set(["binary\tname.bin", "new.bin"]),
+  );
 });
 
 test("GitClient loads root and later commit changes from a temporary repository", async (context) => {
@@ -218,6 +261,104 @@ test("GitClient compares the final effect of a linear commit range", async (cont
     (await client.readBlob(repository, third.hash, "shared.txt")).toString(),
     "third\n",
   );
+});
+
+test("GitClient preserves additions, deletions, and renames in a Range", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-range-files-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "delete.txt"), "delete me\n");
+  writeFileSync(join(repository, "old.txt"), "rename me\n");
+  git(repository, "add", "--", "delete.txt", "old.txt");
+  git(repository, "commit", "-q", "-m", "root");
+  const root = git(repository, "rev-parse", "HEAD").trim();
+
+  rmSync(join(repository, "delete.txt"));
+  renameSync(join(repository, "old.txt"), join(repository, "new.txt"));
+  writeFileSync(join(repository, "added.txt"), "added\n");
+  git(repository, "add", "--all");
+  git(repository, "commit", "-q", "-m", "change files");
+  const tip = git(repository, "rev-parse", "HEAD").trim();
+
+  const client = new GitClient();
+  assert.deepEqual(await client.changedFilesBetween(repository, root, tip), [
+    { status: "A", path: "added.txt" },
+    { status: "D", path: "delete.txt" },
+    { status: "R100", path: "new.txt", oldPath: "old.txt" },
+  ]);
+  assert.equal(
+    (await client.readBlob(repository, root, "old.txt")).toString(),
+    "rename me\n",
+  );
+  assert.equal(
+    (await client.readBlob(repository, tip, "new.txt")).toString(),
+    "rename me\n",
+  );
+});
+
+test("GitClient classifies unsupported changed content before opening a diff", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-content-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "root.txt"), "root\n");
+  git(repository, "add", "--", "root.txt");
+  git(repository, "commit", "-q", "-m", "root");
+  const root = git(repository, "rev-parse", "HEAD").trim();
+
+  writeFileSync(join(repository, "archive.bin"), Buffer.from([1, 0, 2]));
+  writeFileSync(
+    join(repository, "photo.png"),
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1]),
+  );
+  writeFileSync(
+    join(repository, "large.txt"),
+    Buffer.alloc(MAX_TEXT_BLOB_BYTES + 1, "a"),
+  );
+  git(repository, "add", "--", "archive.bin", "photo.png", "large.txt");
+  git(
+    repository,
+    "update-index",
+    "--add",
+    "--cacheinfo",
+    "160000",
+    root,
+    "vendor/module",
+  );
+  git(repository, "commit", "-q", "-m", "unsupported content");
+  const tip = git(repository, "rev-parse", "HEAD").trim();
+
+  const files = await new GitClient().changedFilesBetween(
+    repository,
+    root,
+    tip,
+  );
+  const byPath = new Map(files.map((file) => [file.path, file]));
+  assert.deepEqual(byPath.get("archive.bin"), {
+    status: "A",
+    path: "archive.bin",
+    content: { kind: "binary", size: 3 },
+  });
+  assert.deepEqual(byPath.get("photo.png"), {
+    status: "A",
+    path: "photo.png",
+    content: { kind: "image", size: 6 },
+  });
+  assert.deepEqual(byPath.get("large.txt"), {
+    status: "A",
+    path: "large.txt",
+    content: { kind: "oversized", size: MAX_TEXT_BLOB_BYTES + 1 },
+  });
+  assert.deepEqual(byPath.get("vendor/module"), {
+    status: "A",
+    path: "vendor/module",
+    content: { kind: "submodule" },
+  });
 });
 
 test("GitClient compares a merge range from its declared base to tip", async (context) => {

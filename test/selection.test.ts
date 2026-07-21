@@ -109,6 +109,43 @@ test("resolveRange uses the first parent when the oldest endpoint is a merge", (
   }
 });
 
+test("resolveRange keeps the same comparison when history presentation order changes", () => {
+  const dateOrder = commitMap([
+    commit("merge", ["main", "side"]),
+    commit("side", ["root"]),
+    commit("main", ["root"]),
+    commit("root", []),
+  ]);
+  const topologyOrder = commitMap([
+    commit("merge", ["main", "side"]),
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ]);
+
+  const dateResult = resolveRange(dateOrder, "main", "merge");
+  const topologyResult = resolveRange(topologyOrder, "main", "merge");
+  assert.equal(dateResult.ok, true);
+  assert.equal(topologyResult.ok, true);
+  if (!dateResult.ok || !topologyResult.ok) {
+    return;
+  }
+  assert.deepEqual(
+    {
+      base: dateResult.selection.baseHash,
+      oldest: dateResult.selection.oldestHash,
+      newest: dateResult.selection.newestHash,
+      commits: new Set(dateResult.selection.commitHashes),
+    },
+    {
+      base: topologyResult.selection.baseHash,
+      oldest: topologyResult.selection.oldestHash,
+      newest: topologyResult.selection.newestHash,
+      commits: new Set(topologyResult.selection.commitHashes),
+    },
+  );
+});
+
 test("resolveRange rejects unrelated endpoints explicitly", () => {
   const commits = commitMap([
     commit("main", ["root"]),

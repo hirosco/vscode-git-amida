@@ -24,10 +24,11 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
 - Opens each single-commit or Range file comparison in a separate pinned native diff on double-click or Enter
 - Compares normal commits with their first parent and root commits with Git's empty tree
+- Keeps raster images, binary files, submodules, and text blobs over 5 MiB visible and labeled without decoding them as text
 - Runs read-only Git commands without a shell
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
-Range content hardening, non-contiguous Selection, paged automatic history loading, file-history tabs, branch switching, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
+Non-contiguous Selection, paged automatic history loading, file-history tabs, branch switching, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
 
 ## Try it in Cursor
 
