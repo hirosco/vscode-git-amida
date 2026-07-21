@@ -320,7 +320,9 @@ function createRefList(
   isHead: boolean,
 ): HTMLSpanElement | undefined {
   const currentBranch = commit.refs.find((ref) => ref.current);
-  const visibleRefs = commit.refs.filter((ref) => !ref.current);
+  const visibleRefs = commit.refs.filter(
+    (ref) => !ref.current || isPrimaryLocalBranch(ref),
+  );
   if (!isHead && visibleRefs.length === 0) {
     return undefined;
   }
@@ -343,6 +345,10 @@ function createRefList(
       list.append(createHeadIndicator(ref.type, description));
       continue;
     }
+    if (isPrimaryLocalBranch(ref)) {
+      list.append(createNamedRefIndicator(ref, description));
+      continue;
+    }
 
     const indicator = document.createElement("span");
     indicator.className = `ref-indicator ref-${ref.type}`;
@@ -352,6 +358,25 @@ function createRefList(
     list.append(indicator);
   }
   return list;
+}
+
+function isPrimaryLocalBranch(ref: Commit["refs"][number]): boolean {
+  return (
+    ref.type === "localBranch" &&
+    (ref.name === "main" || ref.name === "master")
+  );
+}
+
+function createNamedRefIndicator(
+  ref: Commit["refs"][number],
+  description: string,
+): HTMLSpanElement {
+  const indicator = document.createElement("span");
+  indicator.className = `ref-named ref-${ref.type}`;
+  indicator.setAttribute("role", "img");
+  indicator.setAttribute("aria-label", description);
+  indicator.append(span("ref-symbol", ""), span("ref-name", ref.name));
+  return indicator;
 }
 
 function createHeadIndicator(
@@ -468,14 +493,12 @@ function createFileRow(
   const description =
     `${fileDisplayPath(file)} · ${status}` +
     (contributors === undefined ? "" : ` · commits ${contributors}`);
+  const statusClass = `status-${file.status[0] ?? "X"}`;
   button.title = description;
   button.setAttribute("aria-label", description);
   button.append(
-    span("path", label),
-    span(
-      `status status-${file.status[0] ?? "X"}`,
-      fileStatusShortLabel(file),
-    ),
+    span(`path ${statusClass}`, label),
+    span(`status ${statusClass}`, fileStatusShortLabel(file)),
   );
   button.addEventListener("click", () => selectFile(file.path));
   button.addEventListener("dblclick", () => openDiff(file.path));

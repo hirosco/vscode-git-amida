@@ -483,6 +483,7 @@ h2 {
 }
 
 .ref-head,
+.ref-named,
 .ref-indicator {
   display: inline-flex;
   height: 14px;
@@ -497,7 +498,8 @@ h2 {
   margin-left: 0;
 }
 
-.ref-head {
+.ref-head,
+.ref-named {
   gap: 2px;
   padding: 0 2px;
   font-size: 9px;

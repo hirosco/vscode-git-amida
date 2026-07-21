@@ -33,6 +33,7 @@ The commit list is optimized for scanning a large history.
 - Order commits by commit date while ensuring that no parent appears before its children, and show the committed timestamp in the date column
 - Give the subject flexible width and truncate it with an accessible full-value label
 - Mark local and remote HEAD positions with compact, unbordered icon-and-text `HEAD` indicators instead of competing with the graph gutter
+- Label local `main` or `master` refs as compact orientation anchors; keep other branch refs icon-only unless daily use demonstrates that more names justify the width
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
 - Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI
@@ -52,6 +53,8 @@ The right side is split vertically:
 The divider is resizable. Commit details can be collapsed, but changed files must retain a usable minimum height.
 
 Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree mode starts fully expanded whenever files are loaded and provides expand-all and collapse-all actions. Expansion state is intentionally not persisted across commit changes, refreshes, or editor restarts.
+
+Color file paths with the same VS Code Git decoration token as their displayed status. Keep unsupported content such as images labeled separately because change status and content type answer different questions.
 
 The vertical split between Repository History and inspection is resizable and shared across workspaces in the same editor profile. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
 

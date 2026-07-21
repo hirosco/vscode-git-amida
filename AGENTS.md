@@ -53,11 +53,13 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Use the editor's `scmGraph.foreground1` through `scmGraph.foreground5` theme colors with safe workbench fallbacks.
 - Show graph, subject, inline ref indicators, and date on one physical row. Truncate the subject and then excessive refs as space narrows.
 - Represent local and remote HEAD positions with unbordered icon-and-text `HEAD` indicators. Distinguish local, remote, and tag refs by fill and shape as well as color.
+- Label local `main` or `master` refs as orientation anchors and keep other branch names out of the compact row unless requirements change.
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI.
 - Keep author information in commit details instead of spending permanent history width.
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
 - Keep both the Repository History/inspection split and the changed-files/details split resizable.
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
+- Color changed-file paths with the same Git decoration token as their displayed status; keep content-kind labels separate from Git status.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
 - Preserve selection and scroll state while File History tabs or native diffs are active.
