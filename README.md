@@ -44,6 +44,25 @@ npm run build
 
 Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Click a commit, Shift+click an ancestor-related commit to select a Range, or use Cmd/Ctrl+click to toggle commits in an explicit Selection. With a history row focused, Space provides the same toggle action. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor.
 
+## Install locally
+
+Create an unsigned local VSIX after a clean install:
+
+```sh
+npm ci
+npm run package:vsix
+```
+
+The command prints the generated filename. Install the current package in Cursor with:
+
+```sh
+cursor --install-extension git-amida-0.0.1.vsix --force
+```
+
+Use `code --install-extension git-amida-0.0.1.vsix --force` for VS Code when its CLI is available. Reload the editor window after installing or replacing the same local version. Generated `*.vsix` files are local artifacts and remain ignored by Git.
+
+This command deliberately skips a license-file requirement only for local evaluation while the package is marked `UNLICENSED`. Define the public license and use a reviewed publication workflow before distributing GitAmida.
+
 ## Product principles
 
 - **Repository history first**: Keep the repository-wide log as the stable center of navigation

@@ -84,6 +84,9 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Prefer no runtime dependencies. Inspect source, lifecycle scripts, provenance, and the transitive graph before adding a dependency.
 - Do not approve an install script broadly. Add an exact package version to `allowScripts` only after review.
 - Do not run untrusted scripts with broad access to credentials, the home directory, synced storage, or external storage.
+- Use `npm run package:inspect` to review the exact VSIX contents and `npm run package:vsix` to create the unsigned local evaluation package.
+- Keep VSIX contents behind the `package.json#files` allowlist. Do not add a competing `.vscodeignore` strategy.
+- Treat `--skip-license` as a local-only exception while the package is `UNLICENSED`; do not reuse that exception for public distribution.
 
 ## Git CLI handling
 

@@ -6,6 +6,10 @@
   "private": true,
   "publisher": "hirosco",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hirosco/git-amida.git"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -15,8 +19,8 @@
   ],
   "main": "./dist/src/extension.js",
   "files": [
-    "dist/src/**",
-    "dist/webview/**",
+    "dist/src/**/*.js",
+    "dist/webview/**/*.js",
     "media/**",
     "README.md"
   ],
@@ -64,17 +68,24 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run build",
     "build": "npm run build:extension && npm run build:webview",
     "build:extension": "tsc -p tsconfig.json",
     "build:webview": "tsc -p tsconfig.webview.json",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
     "test": "npm run build && node --test dist/test/*.test.js",
-    "package:inspect": "npm pack --dry-run --allow-directory=all --cache .npm-cache"
+    "package:inspect": "vsce ls --no-dependencies",
+    "package:vsix": "vsce package --no-dependencies --skip-license"
   },
   "devDependencies": {
     "@types/node": "24.8.1",
     "@types/vscode": "1.100.0",
+    "@vscode/vsce": "3.9.2",
     "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign@2.0.9": false,
+    "keytar@7.9.0": false
   },
   "packageManager": "npm@11.16.0"
 }
