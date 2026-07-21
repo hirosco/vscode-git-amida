@@ -646,6 +646,7 @@ code {
   display: grid;
   min-width: 0;
   min-height: 0;
+  container-type: inline-size;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -688,13 +689,17 @@ code {
   overflow-wrap: anywhere;
 }
 
-.range-commits-heading {
+.details-subheading {
   margin: 14px 0 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.details-content > .details-subheading:first-child {
+  margin-top: 0;
 }
 
 .range-commit-list {
@@ -710,7 +715,7 @@ code {
   min-width: 0;
   min-height: 20px;
   align-items: center;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
   gap: 8px;
   font-size: 11px;
 }
@@ -724,6 +729,13 @@ code {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.range-commit-date {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+  font-size: 10px;
   white-space: nowrap;
 }
 
@@ -758,6 +770,16 @@ footer {
 @container (max-width: 570px) {
   .history-columns {
     grid-template-columns: var(--graph-column-width) minmax(120px, 1fr) 108px;
+  }
+}
+
+@container (max-width: 360px) {
+  .range-commit-date {
+    display: none;
+  }
+
+  .range-commit-item {
+    grid-template-columns: max-content minmax(0, 1fr);
   }
 }
 

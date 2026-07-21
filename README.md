@@ -22,7 +22,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Shows full commit metadata in a resizable, collapsible details pane
 - Selects a linear commit Range with Shift+click, shows its explicit base, tip, and selected commits, and aggregates the final changed files from that comparison
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
-- Opens a single-commit or Range file comparison in the editor's native side-by-side diff on double-click or Enter
+- Opens each single-commit or Range file comparison in a separate pinned native diff on double-click or Enter
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Runs read-only Git commands without a shell
 - Uses the active workspace folder, or the first workspace folder when no editor is active

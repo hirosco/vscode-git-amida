@@ -46,6 +46,7 @@ This checkpoint is complete when branching and merge history cannot silently cha
 
 - Add Cmd/Ctrl+click and a keyboard equivalent for explicitly adding or removing individual commits
 - Label the mode as **Selection** so it cannot be confused with Range endpoint semantics
+- Allow explicit commits from different branches without converting them into one Range or hypothetical merged tree
 - Aggregate and deduplicate files while showing the selected commits that contribute to each file
 - Exclude files changed only by unselected commits
 - Combine a file into one diff only when the selected revisions form an exact, explainable chain

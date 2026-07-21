@@ -519,9 +519,13 @@ function renderSelectionDetails(): void {
 function renderRangeDetails(
   range: Extract<RepositorySelection, { mode: "range" }>,
 ): void {
-  elements.detailsHeading.textContent = "Range details";
+  elements.detailsHeading.textContent = "Commit details";
   const oldest = commits.get(range.oldestHash);
   const newest = commits.get(range.newestHash);
+
+  const rangeHeading = document.createElement("h3");
+  rangeHeading.className = "details-subheading";
+  rangeHeading.textContent = "Range details";
 
   const subject = document.createElement("p");
   subject.className = "details-subject";
@@ -547,7 +551,7 @@ function renderRangeDetails(
   );
 
   const commitsHeading = document.createElement("h3");
-  commitsHeading.className = "range-commits-heading";
+  commitsHeading.className = "details-subheading";
   commitsHeading.textContent =
     `Selected commits (${range.commitHashes.length})`;
 
@@ -568,11 +572,25 @@ function renderRangeDetails(
       commit?.subject || "(no subject)",
     );
     commitSubject.title = commit?.subject ?? "";
-    item.append(hashValue, commitSubject);
+    const commitDate = span(
+      "range-commit-date",
+      commit === undefined ? "—" : formatRowDate(commit.committedAt),
+    );
+    commitDate.title =
+      commit === undefined
+        ? "Commit date unavailable"
+        : `Committed ${formatFullDate(commit.committedAt)}`;
+    item.append(hashValue, commitSubject, commitDate);
     commitList.append(item);
   }
 
-  elements.details.append(subject, list, commitsHeading, commitList);
+  elements.details.append(
+    rangeHeading,
+    subject,
+    list,
+    commitsHeading,
+    commitList,
+  );
 }
 
 function appendDetail(

@@ -117,6 +117,8 @@ Branch switching changes the working tree but not Git history. Keep it behind a 
 
 Load before and after Git blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command.
 
+Double-click and Enter are explicit open actions. Open their native diffs as pinned, non-preview editor tabs so inspecting another file does not replace an existing comparison.
+
 For a single commit:
 
 - Compare an ordinary commit with its first parent
@@ -141,7 +143,7 @@ IntelliJ IDEA is an interaction reference for familiar selection and aggregation
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
-Range details keep the comparison basis prominent, then show a compact oldest-to-newest list of selected commits using short hashes and subjects. Do not repeat complete author and timestamp metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact oldest-to-newest list using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
 
 Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
@@ -152,6 +154,8 @@ The current Range checkpoint accepts endpoints only when one is a direct ancesto
 ### Selection
 
 A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history.
+
+A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate their changed files and keep each contributing commit visible, but do not imply that the selection is one real final repository state. If revisions of the same file do not form an exact chain, present their commit diffs separately. A hypothetical merged branch result would require separate merge-preview semantics and is not part of Selection.
 
 Aggregate and deduplicate changed files, retain the selected commits relevant to each file, and present their diffs in chronological order. Changes may be combined only when their before and after revisions form an exact, explainable chain that does not absorb an unselected change. When an omitted commit creates a gap in the same file, keep that file's selected commit diffs separate.
 

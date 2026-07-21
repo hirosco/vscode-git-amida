@@ -349,7 +349,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         left,
         right,
         `${basename(file.path)} (${label})`,
-        { preview: true },
+        { preview: false },
       );
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
