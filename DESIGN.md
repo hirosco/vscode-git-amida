@@ -127,13 +127,41 @@ The current virtual-document path assumes text content. Binary and image diffs m
 
 ## Multiple-commit semantics
 
-### Contiguous range
+IntelliJ IDEA is an interaction reference for familiar selection and aggregation, not the authority for GitAmida's result semantics. Every multi-commit result must remain explainable from actual Git revisions.
 
-Treat everything from immediately before the oldest selected commit through the newest selected commit as one change. Show deduplicated files and the final diff for the whole range.
+- Store selection by commit hash so Date/Topology ordering and unrelated rows between selected commits do not change the result
+- Distinguish a **Range**, which compares two real repository states, from a **Selection**, which investigates an explicit set of commit changes
+- Show the comparison basis or contributing commits instead of presenting an unexplained combined diff
+- Never create a virtual tree by cherry-picking selected commits
+- Never attribute an unselected commit's change to a Selection merely to produce a convenient two-pane diff
+- Fall back to per-commit diffs when selected changes cannot be composed without a hidden gap
+- Treat ambiguity as a presentation constraint, not an error: keep the selected commits and explain why their diffs remain separate
 
-### Non-contiguous selection
+### Range
 
-Do not create a virtual tree by cherry-picking selected commits. Aggregate changed files, show the relevant commits for each file, and present per-commit diffs in chronological order.
+A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
+
+Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
+
+The first multiple-commit implementation slice supports only single selection and Range. It must complete the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added. Linear history comes first; branch and merge cases then harden the same Range model rather than introducing another selection mode.
+
+### Selection
+
+A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history.
+
+Aggregate and deduplicate changed files, retain the selected commits relevant to each file, and present their diffs in chronological order. Changes may be combined only when their before and after revisions form an exact, explainable chain that does not absorb an unselected change. When an omitted commit creates a gap in the same file, keep that file's selected commit diffs separate.
+
+The familiar interaction target is Shift selection for an initial range and Cmd/Ctrl toggling for individual inclusion. The interaction may follow IntelliJ conventions, but the displayed result remains governed by the rules above.
+
+### Acceptance invariants
+
+- Linear Range results match the diff between the declared base and tip
+- An unrelated branch row appearing between endpoints does not change a hash-based selection
+- A file changed only by an omitted commit is absent from Selection results
+- An omitted same-file change is not silently folded into a selected commit's diff
+- Merge comparisons identify the active parent
+- The same selected hashes produce the same result under Date and Topology ordering
+- Additions, deletions, renames, cancellations, and unsupported content remain explicit rather than being dropped during deduplication
 
 ### Entire branch
 
