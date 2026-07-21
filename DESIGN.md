@@ -118,7 +118,7 @@ Branch switching changes the working tree but not Git history. Keep it behind a 
 
 Load before and after Git blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command.
 
-Double-click and Enter are explicit open actions. Open their native diffs as pinned, non-preview editor tabs so inspecting another file does not replace an existing comparison.
+Double-click and Enter are explicit open actions. Open Repository History comparisons in the editor's preview tab so inspecting another changed file replaces the current comparison instead of accumulating one tab per file. Users may pin a comparison with the editor's normal tab interaction when they need to retain it.
 
 For a single commit:
 

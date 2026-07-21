@@ -24,7 +24,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Adds or removes individual commits with Cmd/Ctrl+click or Space, including unrelated branches, and labels the result as an explicit Selection rather than a hypothetical merged tree
 - Deduplicates Selection files, identifies every contributing commit, and offers one combined file diff only when the selected revisions form an exact chain; otherwise it offers the real per-commit diffs
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
-- Opens each single-commit, Range, or Selection file comparison in a separate pinned native diff on double-click or Enter
+- Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; pinning remains available through the editor
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Keeps raster images, binary files, submodules, and text blobs over 5 MiB visible and labeled without decoding them as text
 - Runs read-only Git commands without a shell
