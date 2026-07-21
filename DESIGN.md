@@ -94,11 +94,17 @@ Path history must handle additions, deletions, renames, merge simplification, an
 
 GitAmida plans to support switching to a named branch. It does not provide direct switching to an arbitrary commit.
 
+- Keep history ref indicators display-only; their small targets are not suitable branch-switch controls
+- Open the editor-native Webview context menu from a Repository History commit row and expose **Switch Branch…** only when the commit has a switchable local branch
+- Use Quick Pick to show every local branch pointing at that commit, excluding the already checked-out branch
+- Provide the same Quick Pick from a keyboard-accessible command for the selected commit
+- Resolve and validate branch candidates again in the Extension Host instead of trusting stale Webview state
 - Use `git switch` with an argument array and no shell
 - Check working-tree changes, untracked conflicts, in-progress Git operations, submodules, and worktree branch occupancy before switching
 - Never stash, discard, force, or save editor contents automatically
 - Explain why switching is blocked and leave the repository unchanged
 - Refresh HEAD, branch, history, changed files, details, and relevant file histories after a successful switch
+- Do not create a local tracking branch from a remote-tracking ref in the initial implementation
 
 The commit hash remains copyable so an informed user can run `git switch --detach <hash>` manually. Do not label a detached-HEAD action as ordinary switching.
 

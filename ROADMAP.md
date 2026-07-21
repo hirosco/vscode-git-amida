@@ -22,12 +22,15 @@ This checkpoint is complete when a long history can be scanned quickly without l
 
 ## 2. Safe branch switching
 
-- List and switch among local branches from Repository History
+- Keep ref indicators display-only and add **Switch Branch…** to a commit row's native Webview context menu
+- Open a Quick Pick containing every other local branch that points at the selected commit; hide or disable switching when no candidate exists
+- Provide a keyboard-accessible command that opens the same Quick Pick for the selected commit
+- Re-resolve branch candidates in the Extension Host immediately before switching
 - Check dirty tracked files, untracked conflicts, in-progress operations, submodules, and worktree occupancy
 - Explain blocked switches without stashing, discarding, forcing, or saving automatically
 - Refresh all repository state after a successful switch
 - Keep arbitrary commit switching out of the product and provide copyable commit IDs instead
-- Decide remote-tracking behavior only after local branch switching is reliable
+- Do not create tracking branches from remote-tracking refs until local branch switching is reliable
 
 This checkpoint is complete when switching behaves predictably in a clean repository and safely refuses every ambiguous state.
 
