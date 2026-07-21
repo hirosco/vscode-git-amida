@@ -203,30 +203,42 @@ function createRefList(
   const list = document.createElement("span");
   list.className = "ref-list";
   if (isHead) {
-    const head = document.createElement("span");
     const description =
       currentBranch === undefined
         ? `HEAD · Detached at ${commit.shortHash}`
-        : `HEAD · ${refTooltip(currentBranch)}`;
-    head.className = "ref-head";
-    head.title = description;
-    head.setAttribute("role", "img");
-    head.setAttribute("aria-label", description);
-    head.append(span("ref-symbol", ""), span("ref-head-label", "HEAD"));
-    list.append(head);
+        : `HEAD · ${refDescription(currentBranch)}`;
+    list.append(
+      createHeadIndicator(currentBranch?.type ?? "detached", description),
+    );
   }
 
   for (const ref of visibleRefs) {
+    const description = refDescription(ref);
+    if (ref.type === "remoteBranch" && ref.name.endsWith("/HEAD")) {
+      list.append(createHeadIndicator(ref.type, description));
+      continue;
+    }
+
     const indicator = document.createElement("span");
-    const description = refTooltip(ref);
     indicator.className = `ref-indicator ref-${ref.type}`;
-    indicator.title = description;
     indicator.setAttribute("role", "img");
     indicator.setAttribute("aria-label", description);
     indicator.append(span("ref-symbol", ""));
     list.append(indicator);
   }
   return list;
+}
+
+function createHeadIndicator(
+  type: Commit["refs"][number]["type"] | "detached",
+  description: string,
+): HTMLSpanElement {
+  const head = document.createElement("span");
+  head.className = `ref-head ref-${type}`;
+  head.setAttribute("role", "img");
+  head.setAttribute("aria-label", description);
+  head.append(span("ref-symbol", ""), span("ref-head-label", "HEAD"));
+  return head;
 }
 
 function renderFiles(): void {
@@ -680,7 +692,7 @@ function collectDirectoryPaths(nodes: FileTreeNode[]): Set<string> {
   return paths;
 }
 
-function refTooltip(ref: Commit["refs"][number]): string {
+function refDescription(ref: Commit["refs"][number]): string {
   const type = {
     localBranch: "Local branch",
     remoteBranch: "Remote-tracking branch",

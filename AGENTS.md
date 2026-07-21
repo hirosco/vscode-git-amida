@@ -49,8 +49,9 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 - Keep exactly one pinned, non-closable Repository History tab.
 - Render each commit as one logical row with a non-wrapping subject line.
-- Show graph, subject, and date in the primary line; render refs as compact indicators below the subject, with complete tooltip and accessible labels.
-- Represent the checked-out position with an icon-and-text `HEAD` badge. Distinguish local, remote, and tag refs by fill and shape as well as color.
+- Show graph, subject, inline ref indicators, and date on one physical row. Truncate the subject and then excessive refs as space narrows.
+- Represent local and remote HEAD positions with unbordered icon-and-text `HEAD` indicators. Distinguish local, remote, and tag refs by fill and shape as well as color.
+- Keep complete ref names in commit details and accessible labels rather than hover-only UI.
 - Keep author information in commit details instead of spending permanent history width.
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
 - Keep both the Repository History/inspection split and the changed-files/details split resizable.

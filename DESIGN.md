@@ -28,12 +28,14 @@ Detailed text comparisons open in the editor's native diff view instead of consu
 The commit list is optimized for scanning a large history.
 
 - Render every commit as one logical row with a compact primary line
-- Never wrap the subject; place compact ref indicators in a secondary band and expose complete names through tooltips and accessible labels
+- Never wrap the subject; place compact ref indicators after it on the same physical line
 - Show graph, subject, and date in the history list; keep author information in commit details
 - Give the subject flexible width and truncate it with an accessible full-value label
-- Mark the checked-out position with a compact icon-and-text `HEAD` badge instead of competing with the graph gutter
+- Mark local and remote HEAD positions with compact, unbordered icon-and-text `HEAD` indicators instead of competing with the graph gutter
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
-- Keep graph alignment stable while ref indicators change row height
+- Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
+- Keep complete ref names in commit details and accessible labels rather than hover-only UI
+- Keep graph alignment stable while refs appear or disappear
 - Keep the selected row visually distinct without relying on color alone
 
 The full commit hash and other secondary metadata do not need permanent space in every row.

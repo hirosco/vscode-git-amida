@@ -306,7 +306,8 @@ h2 {
 
 .history-row {
   overflow: hidden;
-  align-items: start;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .history-row:hover,
@@ -334,7 +335,6 @@ h2 {
 
 .graph {
   overflow: hidden;
-  padding-top: 3px;
   color: var(--vscode-gitDecoration-modifiedResourceForeground);
   font-family: var(--vscode-editor-font-family);
   text-overflow: clip;
@@ -351,63 +351,68 @@ h2 {
 }
 
 .commit-cell {
-  position: relative;
   display: flex;
   min-width: 0;
-  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .date {
-  padding-top: 3px;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
 }
 
+.commit-cell .subject {
+  flex: 1 1 auto;
+}
+
 .ref-list {
-  display: flex;
+  display: block;
   min-width: 0;
-  min-height: 16px;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-top: 2px;
-  white-space: normal;
+  max-width: 42%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ref-head,
 .ref-indicator {
   display: inline-flex;
-  height: 16px;
+  height: 14px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
+  margin-left: 2px;
+  vertical-align: middle;
+}
+
+.ref-list > :first-child {
+  margin-left: 0;
 }
 
 .ref-head {
-  gap: 3px;
-  padding: 0 5px 0 3px;
-  border: 1px solid currentColor;
-  border-radius: 8px;
-  color: var(--vscode-charts-blue, var(--vscode-focusBorder));
+  gap: 2px;
+  padding: 0 2px;
   font-size: 9px;
   font-weight: 600;
   line-height: 14px;
 }
 
 .ref-indicator {
-  width: 16px;
+  width: 14px;
 }
 
 .ref-symbol {
   display: block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border: 1.5px solid currentColor;
   border-radius: 50%;
   background: transparent;
 }
 
-.ref-head .ref-symbol,
 .ref-localBranch .ref-symbol {
   border-color: currentColor;
   background: currentColor;
@@ -426,12 +431,16 @@ h2 {
 }
 
 .ref-tag .ref-symbol {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border: 0;
   border-radius: 1px;
   background: currentColor;
   clip-path: polygon(0 0, 62% 0, 100% 50%, 62% 100%, 0 100%);
+}
+
+.ref-detached {
+  color: var(--vscode-descriptionForeground);
 }
 
 .date,
