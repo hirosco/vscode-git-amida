@@ -6,15 +6,22 @@ import * as vscode from "vscode";
 import { GitContentProvider } from "./contentProvider";
 import { buildFileTree } from "./fileTree";
 import { GitClient, GitError } from "./git";
-import type { ChangedFile, Commit } from "./model";
+import type {
+  ChangedFile,
+  Commit,
+  RepositoryNavigationState,
+  RepositoryViewPreferences,
+  RepositoryViewState,
+} from "./model";
 import type { HostToWebviewMessage } from "./protocol";
 import {
-  DEFAULT_VIEW_STATE,
-  mergeViewState,
-  sanitizeViewState,
+  mergeViewPreferences,
+  restoreViewState,
 } from "./viewState";
 
-const VIEW_STATE_KEY = "gitAmida.repositoryViewState";
+const LEGACY_VIEW_STATE_KEY = "gitAmida.repositoryViewState";
+const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
+const VIEW_PREFERENCES_KEY = "gitAmida.repositoryViewPreferences";
 
 export class HistoryViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "gitAmida.history";
@@ -23,7 +30,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private repository?: string;
   private readonly commits = new Map<string, Commit>();
   private readonly filesByCommit = new Map<string, ChangedFile[]>();
-  private viewState = { ...DEFAULT_VIEW_STATE };
+  private navigationState: RepositoryNavigationState;
+  private viewPreferences: RepositoryViewPreferences;
+  private readonly stateReady: Promise<void>;
   private historyRequest = 0;
   private filesRequest = 0;
 
@@ -32,10 +41,16 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     private readonly git: GitClient,
     private readonly contentProvider: GitContentProvider,
     private readonly workspaceState: vscode.Memento,
+    private readonly globalState: vscode.Memento,
   ) {
-    this.viewState = sanitizeViewState(
-      this.workspaceState.get<unknown>(VIEW_STATE_KEY),
+    const restored = restoreViewState(
+      this.globalState.get<unknown>(VIEW_PREFERENCES_KEY),
+      this.workspaceState.get<unknown>(NAVIGATION_STATE_KEY),
+      this.workspaceState.get<unknown>(LEGACY_VIEW_STATE_KEY),
     );
+    this.navigationState = restored.navigation;
+    this.viewPreferences = restored.preferences;
+    this.stateReady = this.migrateLegacyState(restored);
   }
 
   public resolveWebviewView(view: vscode.WebviewView): void {
@@ -59,6 +74,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     await this.post({ type: "historyLoading" });
 
     try {
+      await this.stateReady;
       const folder = this.workspaceFolder();
       if (folder === undefined) {
         throw new GitError("Open a folder containing a Git repository first.");
@@ -78,25 +94,24 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
       const firstCommit = history.rows[0];
       const selectedHash =
-        this.viewState.selectedHash !== undefined &&
-        this.commits.has(this.viewState.selectedHash)
-          ? this.viewState.selectedHash
+        this.navigationState.selectedHash !== undefined &&
+        this.commits.has(this.navigationState.selectedHash)
+          ? this.navigationState.selectedHash
           : firstCommit?.commit.hash;
-      this.viewState = {
-        ...this.viewState,
+      this.navigationState = {
         selectedHash,
         selectedFilePath:
-          selectedHash === this.viewState.selectedHash
-            ? this.viewState.selectedFilePath
+          selectedHash === this.navigationState.selectedHash
+            ? this.navigationState.selectedFilePath
             : undefined,
       };
-      await this.persistViewState();
+      await this.persistNavigationState();
 
       await this.post({
         type: "history",
         ...history,
         selectedHash,
-        viewState: this.viewState,
+        viewState: this.viewState(),
       });
       if (selectedHash !== undefined) {
         await this.loadFiles(selectedHash);
@@ -110,6 +125,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async receiveMessage(message: unknown): Promise<void> {
+    await this.stateReady;
     if (message === null || typeof message !== "object") {
       return;
     }
@@ -124,12 +140,12 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       if (!this.commits.has(value.hash)) {
         return;
       }
-      this.viewState = {
-        ...this.viewState,
+      this.navigationState = {
+        ...this.navigationState,
         selectedHash: value.hash,
         selectedFilePath: undefined,
       };
-      await this.persistViewState();
+      await this.persistNavigationState();
       await this.loadFiles(value.hash);
       return;
     }
@@ -140,12 +156,12 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       typeof value.path === "string" &&
       this.findFile(value.hash, value.path) !== undefined
     ) {
-      this.viewState = {
-        ...this.viewState,
+      this.navigationState = {
+        ...this.navigationState,
         selectedHash: value.hash,
         selectedFilePath: value.path,
       };
-      await this.persistViewState();
+      await this.persistNavigationState();
       return;
     }
 
@@ -159,8 +175,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (value.type === "updateViewState") {
-      this.viewState = mergeViewState(this.viewState, value.patch);
-      await this.persistViewState();
+      this.viewPreferences = mergeViewPreferences(
+        this.viewPreferences,
+        value.patch,
+      );
+      await this.persistViewPreferences();
     }
   }
 
@@ -180,12 +199,17 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
       this.filesByCommit.set(hash, files);
       if (
-        this.viewState.selectedHash === hash &&
-        this.viewState.selectedFilePath !== undefined &&
-        !files.some((file) => file.path === this.viewState.selectedFilePath)
+        this.navigationState.selectedHash === hash &&
+        this.navigationState.selectedFilePath !== undefined &&
+        !files.some(
+          (file) => file.path === this.navigationState.selectedFilePath,
+        )
       ) {
-        this.viewState = { ...this.viewState, selectedFilePath: undefined };
-        await this.persistViewState();
+        this.navigationState = {
+          ...this.navigationState,
+          selectedFilePath: undefined,
+        };
+        await this.persistNavigationState();
       }
       await this.post({
         type: "files",
@@ -257,8 +281,33 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     return this.filesByCommit.get(hash)?.find((file) => file.path === path);
   }
 
-  private async persistViewState(): Promise<void> {
-    await this.workspaceState.update(VIEW_STATE_KEY, this.viewState);
+  private viewState(): RepositoryViewState {
+    return { ...this.viewPreferences, ...this.navigationState };
+  }
+
+  private async persistNavigationState(): Promise<void> {
+    await this.workspaceState.update(
+      NAVIGATION_STATE_KEY,
+      this.navigationState,
+    );
+  }
+
+  private async persistViewPreferences(): Promise<void> {
+    await this.globalState.update(VIEW_PREFERENCES_KEY, this.viewPreferences);
+  }
+
+  private async migrateLegacyState(
+    restored: ReturnType<typeof restoreViewState>,
+  ): Promise<void> {
+    if (restored.migratePreferences) {
+      await this.persistViewPreferences();
+    }
+    if (restored.migrateNavigation) {
+      await this.persistNavigationState();
+    }
+    if (restored.removeLegacy) {
+      await this.workspaceState.update(LEGACY_VIEW_STATE_KEY, undefined);
+    }
   }
 
   private async post(message: HostToWebviewMessage): Promise<void> {

@@ -42,7 +42,7 @@ export class GitClient {
         "--branches",
         "--remotes",
         "--tags",
-        "--topo-order",
+        "--date-order",
         "--color=never",
         "--no-decorate",
         `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,

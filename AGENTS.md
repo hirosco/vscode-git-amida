@@ -62,6 +62,8 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
 - Preserve selection and scroll state while File History tabs or native diffs are active.
 - Prefetch history automatically near the loaded end; do not use a routine **Load more** button. Offer retry only after a loading failure.
+- Keep visual preferences global to the current editor profile. Reserve workspace state for repository-specific navigation such as the selected commit and file, and do not persist transient tree expansion.
+- Keep commit ordering and other future behavioral options global rather than allowing workspace-specific overrides.
 
 ## File History UI
 

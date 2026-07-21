@@ -224,6 +224,77 @@ test("GitClient builds connected lanes for a merge history", async (context) => 
   );
 });
 
+test("GitClient orders independent lanes by commit date", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-order-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  const root = commitTree(repository, "root", "2026-07-21T00:00:00Z");
+  const mainEarly = commitTree(
+    repository,
+    "main early",
+    "2026-07-21T01:00:00Z",
+    root,
+  );
+  const mainTip = commitTree(
+    repository,
+    "main tip",
+    "2026-07-21T05:00:00Z",
+    mainEarly,
+  );
+  const sideMiddle = commitTree(
+    repository,
+    "side middle",
+    "2026-07-21T03:00:00Z",
+    root,
+  );
+  const sideTip = commitTree(
+    repository,
+    "side tip",
+    "2026-07-21T04:00:00Z",
+    sideMiddle,
+  );
+  git(repository, "update-ref", "refs/heads/main", mainTip);
+  git(repository, "update-ref", "refs/heads/side", sideTip);
+
+  const history = await new GitClient().loadHistory(repository);
+  assert.deepEqual(
+    history.rows.map((row) => row.commit.subject),
+    ["main tip", "side tip", "side middle", "main early", "root"],
+  );
+});
+
+function commitTree(
+  repository: string,
+  message: string,
+  timestamp: string,
+  parent?: string,
+): string {
+  return execFileSync(
+    "git",
+    [
+      "-C",
+      repository,
+      "commit-tree",
+      EMPTY_TREE,
+      ...(parent === undefined ? [] : ["-p", parent]),
+      "-m",
+      message,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_AUTHOR_DATE: timestamp,
+        GIT_COMMITTER_DATE: timestamp,
+      },
+    },
+  ).trim();
+}
+
 function git(repository: string, ...args: string[]): string {
   return execFileSync("git", ["-C", repository, ...args], {
     encoding: "utf8",

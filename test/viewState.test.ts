@@ -2,15 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  DEFAULT_VIEW_STATE,
-  mergeViewState,
-  sanitizeViewState,
+  DEFAULT_VIEW_PREFERENCES,
+  mergeViewPreferences,
+  restoreViewState,
+  sanitizeNavigationState,
+  sanitizeViewPreferences,
 } from "../src/viewState";
 
-test("sanitizeViewState supplies safe defaults for untrusted state", () => {
-  assert.deepEqual(sanitizeViewState(null), DEFAULT_VIEW_STATE);
+test("view preferences and navigation state sanitize independently", () => {
+  assert.deepEqual(sanitizeViewPreferences(null), DEFAULT_VIEW_PREFERENCES);
   assert.deepEqual(
-    sanitizeViewState({
+    sanitizeViewPreferences({
       selectedHash: 12,
       fileViewMode: "unknown",
       historyRatio: 38,
@@ -25,19 +27,27 @@ test("sanitizeViewState supplies safe defaults for untrusted state", () => {
       detailsCollapsed: false,
     },
   );
+  assert.deepEqual(
+    sanitizeNavigationState({
+      selectedHash: "abc",
+      selectedFilePath: "src/file.ts",
+      fileViewMode: "tree",
+    }),
+    { selectedHash: "abc", selectedFilePath: "src/file.ts" },
+  );
+  assert.deepEqual(
+    sanitizeNavigationState({ selectedHash: 12, selectedFilePath: "" }),
+    {},
+  );
 });
 
-test("mergeViewState retains existing values and snaps the divider", () => {
+test("mergeViewPreferences retains existing values and snaps the divider", () => {
   assert.deepEqual(
-    mergeViewState(
-      {
-        ...DEFAULT_VIEW_STATE,
-        selectedHash: "abc",
-      },
+    mergeViewPreferences(
+      DEFAULT_VIEW_PREFERENCES,
       { fileViewMode: "tree", historyRatio: 63, filesRatio: 57 },
     ),
     {
-      selectedHash: "abc",
       fileViewMode: "tree",
       historyRatio: 65,
       filesRatio: 55,
@@ -46,22 +56,73 @@ test("mergeViewState retains existing values and snaps the divider", () => {
   );
 });
 
-test("mergeViewState ignores selection fields from a presentation patch", () => {
+test("mergeViewPreferences ignores navigation fields", () => {
   assert.deepEqual(
-    mergeViewState(
-      { ...DEFAULT_VIEW_STATE, selectedHash: "trusted" },
+    mergeViewPreferences(
+      DEFAULT_VIEW_PREFERENCES,
       { selectedHash: "untrusted", selectedFilePath: "outside.txt" },
     ),
-    { ...DEFAULT_VIEW_STATE, selectedHash: "trusted" },
+    DEFAULT_VIEW_PREFERENCES,
   );
 });
 
-test("mergeViewState can expand details after they were collapsed", () => {
-  const collapsed = mergeViewState(DEFAULT_VIEW_STATE, {
+test("mergeViewPreferences can expand details after they were collapsed", () => {
+  const collapsed = mergeViewPreferences(DEFAULT_VIEW_PREFERENCES, {
     detailsCollapsed: true,
   });
   assert.equal(collapsed.detailsCollapsed, true);
 
-  const expanded = mergeViewState(collapsed, { detailsCollapsed: false });
+  const expanded = mergeViewPreferences(collapsed, {
+    detailsCollapsed: false,
+  });
   assert.equal(expanded.detailsCollapsed, false);
+});
+
+test("restoreViewState migrates the legacy workspace value into split state", () => {
+  assert.deepEqual(
+    restoreViewState(undefined, undefined, {
+      selectedHash: "legacy",
+      selectedFilePath: "legacy.txt",
+      fileViewMode: "tree",
+      historyRatio: 64,
+      filesRatio: 58,
+      detailsCollapsed: true,
+    }),
+    {
+      navigation: {
+        selectedHash: "legacy",
+        selectedFilePath: "legacy.txt",
+      },
+      preferences: {
+        fileViewMode: "tree",
+        historyRatio: 65,
+        filesRatio: 60,
+        detailsCollapsed: true,
+      },
+      migrateNavigation: true,
+      migratePreferences: true,
+      removeLegacy: true,
+    },
+  );
+});
+
+test("restoreViewState prefers established global and workspace values", () => {
+  assert.deepEqual(
+    restoreViewState(
+      { ...DEFAULT_VIEW_PREFERENCES, historyRatio: 70 },
+      { selectedHash: "current" },
+      {
+        selectedHash: "legacy",
+        fileViewMode: "tree",
+        historyRatio: 45,
+      },
+    ),
+    {
+      navigation: { selectedHash: "current" },
+      preferences: { ...DEFAULT_VIEW_PREFERENCES, historyRatio: 70 },
+      migrateNavigation: false,
+      migratePreferences: false,
+      removeLegacy: true,
+    },
+  );
 });

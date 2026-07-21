@@ -160,7 +160,7 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     const refNames = row.commit.refs.map((ref) => ref.name).join(", ");
     button.setAttribute(
       "aria-label",
-      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
+      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.committedAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
     );
 
     const graph = createGraph(row.graph, graphLaneCount, metrics.width);
@@ -174,8 +174,8 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     if (refs !== undefined) {
       commitCell.append(refs);
     }
-    const date = span("date", formatRowDate(row.commit.authoredAt));
-    date.title = `Authored ${formatFullDate(row.commit.authoredAt)}`;
+    const date = span("date", formatRowDate(row.commit.committedAt));
+    date.title = `Committed ${formatFullDate(row.commit.committedAt)}`;
     button.append(graph, commitCell, date);
     button.addEventListener("click", () => selectCommit(row.commit.hash));
     button.addEventListener("keydown", (event) => {

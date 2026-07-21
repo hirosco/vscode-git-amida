@@ -1,15 +1,65 @@
-import type { RepositoryViewState } from "./model";
+import type {
+  RepositoryNavigationState,
+  RepositoryViewPreferences,
+} from "./model";
 
-export const DEFAULT_VIEW_STATE: RepositoryViewState = {
+export const DEFAULT_VIEW_PREFERENCES: RepositoryViewPreferences = {
   fileViewMode: "flat",
   historyRatio: 55,
   filesRatio: 65,
   detailsCollapsed: false,
 };
 
-export function sanitizeViewState(value: unknown): RepositoryViewState {
+export interface RestoredViewState {
+  navigation: RepositoryNavigationState;
+  preferences: RepositoryViewPreferences;
+  migrateNavigation: boolean;
+  migratePreferences: boolean;
+  removeLegacy: boolean;
+}
+
+export function restoreViewState(
+  preferencesValue: unknown,
+  navigationValue: unknown,
+  legacyValue: unknown,
+): RestoredViewState {
+  const hasPreferences = preferencesValue !== undefined;
+  const hasNavigation = navigationValue !== undefined;
+  const hasLegacy = legacyValue !== undefined;
+  return {
+    preferences: sanitizeViewPreferences(
+      hasPreferences ? preferencesValue : legacyValue,
+    ),
+    navigation: sanitizeNavigationState(
+      hasNavigation ? navigationValue : legacyValue,
+    ),
+    migratePreferences: hasLegacy && !hasPreferences,
+    migrateNavigation: hasLegacy && !hasNavigation,
+    removeLegacy: hasLegacy,
+  };
+}
+
+export function sanitizeViewPreferences(
+  value: unknown,
+): RepositoryViewPreferences {
   if (value === null || typeof value !== "object") {
-    return { ...DEFAULT_VIEW_STATE };
+    return { ...DEFAULT_VIEW_PREFERENCES };
+  }
+
+  const candidate = value as Record<string, unknown>;
+  return {
+    fileViewMode: candidate.fileViewMode === "tree" ? "tree" : "flat",
+    historyRatio: sanitizeRatio(candidate.historyRatio, 45, 70, 55),
+    filesRatio: sanitizeRatio(candidate.filesRatio, 30, 80, 65),
+    detailsCollapsed: candidate.detailsCollapsed === true,
+  };
+}
+
+export function sanitizeNavigationState(
+  value: unknown,
+): RepositoryNavigationState {
+  if (value === null || typeof value !== "object") {
+    return {};
   }
 
   const candidate = value as Record<string, unknown>;
@@ -18,22 +68,18 @@ export function sanitizeViewState(value: unknown): RepositoryViewState {
   return {
     ...(selectedHash === undefined ? {} : { selectedHash }),
     ...(selectedFilePath === undefined ? {} : { selectedFilePath }),
-    fileViewMode: candidate.fileViewMode === "tree" ? "tree" : "flat",
-    historyRatio: sanitizeRatio(candidate.historyRatio, 45, 70, 55),
-    filesRatio: sanitizeRatio(candidate.filesRatio, 30, 80, 65),
-    detailsCollapsed: candidate.detailsCollapsed === true,
   };
 }
 
-export function mergeViewState(
-  current: RepositoryViewState,
+export function mergeViewPreferences(
+  current: RepositoryViewPreferences,
   patch: unknown,
-): RepositoryViewState {
+): RepositoryViewPreferences {
   if (patch === null || typeof patch !== "object") {
     return current;
   }
   const value = patch as Record<string, unknown>;
-  return sanitizeViewState({
+  return sanitizeViewPreferences({
     ...current,
     fileViewMode: value.fileViewMode ?? current.fileViewMode,
     historyRatio: value.historyRatio ?? current.historyRatio,

@@ -62,20 +62,24 @@ export interface HistoryResult {
 
 export type FileViewMode = "flat" | "tree";
 
-export interface RepositoryViewState {
+export interface RepositoryNavigationState {
   selectedHash?: string;
   selectedFilePath?: string;
+}
+
+export interface RepositoryViewPreferences {
   fileViewMode: FileViewMode;
   historyRatio: number;
   filesRatio: number;
   detailsCollapsed: boolean;
 }
 
+export interface RepositoryViewState
+  extends RepositoryNavigationState,
+    RepositoryViewPreferences {}
+
 export type RepositoryViewStatePatch = Partial<
-  Pick<
-    RepositoryViewState,
-    "fileViewMode" | "historyRatio" | "filesRatio" | "detailsCollapsed"
-  >
+  RepositoryViewPreferences
 >;
 
 export interface FileTreeDirectory {

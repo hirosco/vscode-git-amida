@@ -11,6 +11,7 @@ GitAmida's current product target is:
 - Verify all five SCM graph theme colors in primary, light, and high-contrast themes
 - Keep commit subjects, refs, and dates aligned as the graph column changes width
 - Confirm that selected and hovered rows retain visible commit nodes and lines
+- Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly without terminal color artifacts or excessive horizontal cost.
 

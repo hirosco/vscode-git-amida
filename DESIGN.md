@@ -30,6 +30,7 @@ The commit list is optimized for scanning a large history.
 - Render every commit as one logical row with a compact primary line
 - Never wrap the subject; place compact ref indicators after it on the same physical line
 - Show graph, subject, and date in the history list; keep author information in commit details
+- Order commits by commit date while ensuring that no parent appears before its children, and show the committed timestamp in the date column
 - Give the subject flexible width and truncate it with an accessible full-value label
 - Mark local and remote HEAD positions with compact, unbordered icon-and-text `HEAD` indicators instead of competing with the graph gutter
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
@@ -51,7 +52,7 @@ The divider is resizable. Commit details can be collapsed, but changed files mus
 
 Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree mode starts fully expanded whenever files are loaded and provides expand-all and collapse-all actions. Expansion state is intentionally not persisted across commit changes, refreshes, or editor restarts.
 
-The vertical split between Repository History and inspection is resizable and persisted per workspace. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
+The vertical split between Repository History and inspection is resizable and shared across workspaces in the same editor profile. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
 
 Persistent borders are reserved for the structural boundaries between Repository History and inspection, and between changed files and commit details. Repeated rows, headings, status labels, and view switches rely on spacing, backgrounds, and focus states instead because themes may render `panel.border` with deliberately high contrast. Resizers keep a forgiving hit area while drawing only a one-pixel resting divider.
 
@@ -181,6 +182,8 @@ The production target uses 100 commits as a page size, not a product limit. Pref
 ## Logical architecture
 
 The Webview renders trusted view models and emits validated user intentions. Extension Host application services own repository state, Repository History, open File History sessions, Git queries, branch-switch preflight, and virtual diff documents. The Git adapter does not import VS Code or Webview types.
+
+Presentation preferences such as Flat or Tree mode, divider ratios, and details visibility belong to extension-global state so one adjustment applies to every workspace in the current editor profile. Repository-specific navigation state, including the selected commit and file, belongs to workspace state. Transient interactions such as tree-folder expansion are not persisted. Future behavioral options such as commit ordering must also have one global value rather than accumulating workspace overrides.
 
 Do not introduce a second frontend or shared cross-language core unless a current product requirement justifies it.
 
