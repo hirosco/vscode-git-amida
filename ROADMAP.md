@@ -2,20 +2,11 @@
 
 GitAmida's current product target is:
 
-> Keep Repository History as a compact navigation center, open several file investigations without losing it, and inspect every selected change in the native editor diff.
+> Keep Repository History as a compact navigation center, open several file investigations without losing it, and inspect selected file scope through explainable native diffs between real Git states.
 
-## 1. Commit graph validation
+The remaining checkpoints build on selection-scoped, endpoint-based comparison and contain only work still needed to validate and extend that baseline.
 
-- Validate connected linear, branch, and merge lanes in real repositories
-- Tune line thickness, node size, lane spacing, and graph-column width without reducing subject readability
-- Verify all five SCM graph theme colors in primary, light, and high-contrast themes
-- Keep commit subjects, refs, and dates aligned as the graph column changes width
-- Confirm that selected and hovered rows retain visible commit nodes and lines
-- Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
-
-This checkpoint is complete when branch ancestry can be followed quickly without terminal color artifacts or excessive horizontal cost.
-
-## 2. Local extension installation
+## 1. Local extension installation
 
 - Produce one reviewed VSIX that can be installed in both Cursor and VS Code
 - Add a reproducible packaging command with pinned development tooling after dependency and lifecycle-script review
@@ -24,6 +15,17 @@ This checkpoint is complete when branch ancestry can be followed quickly without
 - Keep Marketplace publication and automatic update distribution out of this checkpoint
 
 This checkpoint is complete when the multi-commit workflow can be evaluated in a normal daily-use editor window without launching a development host.
+
+## 2. Daily-use commit graph validation
+
+- Validate connected linear, branch, and merge lanes in real repositories
+- Tune line thickness, node size, lane spacing, and graph-column width without reducing subject readability
+- Verify all five SCM graph theme colors in primary, light, and high-contrast themes
+- Keep commit subjects, refs, and dates aligned as the graph column changes width
+- Confirm that selected and hovered rows retain visible commit nodes and lines
+- Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
+
+This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
 ## 3. Safe branch switching
 

@@ -50,7 +50,7 @@ Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension*
 - **History stays visible**: Preserve review context while files and diffs open elsewhere
 - **Natural traversal**: Move between repository history, several file histories, and diffs without discarding state
 - **Dense but readable**: Keep every commit on one row and move secondary information into details
-- **Multiple commits as one view**: Treat several commits as one coherent change when explicitly selected
+- **Explainable aggregation**: Let selected commits define the file scope, compare actual Git states at visible endpoints, and never imply a synthesized tree or branch merge
 - **Safe workspace changes**: Add branch switching only with explicit preflight checks and no automatic stash or force
 - **Focused**: Exclude history editing and unrelated Git-client operations
 - **Evidence-driven minimalism**: Keep only features that prove useful in daily use

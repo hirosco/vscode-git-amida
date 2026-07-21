@@ -6,7 +6,7 @@ GitAmida is a focused history navigator for understanding how a repository and i
 
 The central experience is Repository History: scan a compact commit graph, inspect changed files and commit details, and open native diffs without hiding the log. File histories branch from that center as independent investigation tabs and can link back to the relevant repository commit.
 
-Reviewing multiple commits as one coherent change remains a distinctive goal, but it belongs inside this broader history-navigation model rather than defining a separate tool.
+Reviewing selected commit changes through one explainable, file-oriented view remains a distinctive goal, but it belongs inside this broader history-navigation model rather than defining a separate tool.
 
 ## Product surface
 
@@ -130,7 +130,9 @@ The virtual-document path accepts text blobs up to 5 MiB. Classify raster images
 
 ## Multiple-commit semantics
 
-IntelliJ IDEA is an interaction reference for familiar selection and aggregation, not the authority for GitAmida's result semantics. Every multi-commit result must remain explainable from actual Git revisions.
+GitAmida uses **selection-scoped, endpoint-based comparison**. A selection determines which changed paths belong to the investigation; each file diff compares actual Git states at visible endpoints. GitAmida never invents an intermediate tree or presents unrelated branch changes as a merged result.
+
+This rule, rather than compatibility with another product, is the authority for GitAmida's result semantics. IntelliJ IDEA remains an interaction reference, and comparison against its observed behavior is useful supporting evidence when the result also satisfies GitAmida's explainability and safety requirements.
 
 - Store selection by commit hash so unrelated rows between selected commits do not silently become selected
 - Distinguish a **Range**, which compares two real repository states, from a **Selection**, which investigates an explicit set of commit changes
@@ -158,7 +160,7 @@ A Selection is an explicit set of commits, including a set formed by adding or r
 
 A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate only paths changed by the selected commits and keep each contributing commit visible, but do not imply that the selection is one real final repository state.
 
-For each aggregated path, compare the state before its oldest selected change with the state after its newest selected change, using the newest-first order shown in Repository History. This matches the observed IntelliJ interaction: a file changed only by an omitted commit stays absent, while an omitted revision of a selected file appears inside that file's endpoint diff. When selected commits come from unrelated branches, the newest contributing commit supplies the after-state; GitAmida does not merge the branches or synthesize a tree.
+For each aggregated path, compare the state before its oldest selected change with the state after its newest selected change, using the newest-first order shown in Repository History. A file changed only by an omitted commit stays absent, while an omitted revision of a selected file appears inside that file's endpoint diff. When selected commits come from unrelated branches, the newest contributing commit supplies the after-state; GitAmida does not merge the branches or synthesize a tree. The observed IntelliJ behavior matches these rules, but that observation validates the interaction rather than defining it.
 
 Changed files show how many selected commits contributed to each path. Selecting a file shows its actual before and after endpoint hashes and explains the inclusion of intervening same-path changes. Double-click or Enter opens that endpoint comparison directly in the reusable native preview diff; it does not ask users to choose among contributing commit diffs. The Extension Host derives both endpoints from parsed commit changes, so the Webview never supplies revision IDs for a diff.
 

@@ -117,6 +117,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 ## Diff conventions
 
+- Keep every aggregate explainable as a selected file scope plus visible endpoints that identify actual Git states.
 - Compare a normal commit with its first parent.
 - Compare a root commit with Git's empty tree.
 - For a contiguous range, compare immediately before the oldest commit with the newest commit.
