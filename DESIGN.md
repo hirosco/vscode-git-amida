@@ -53,6 +53,8 @@ Changed files support a flat full-path list and a user-controlled Tree mode for 
 
 The vertical split between Repository History and inspection is resizable and persisted per workspace. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
 
+Persistent borders are reserved for the structural boundaries between Repository History and inspection, and between changed files and commit details. Repeated rows, headings, status labels, and view switches rely on spacing, backgrounds, and focus states instead because themes may render `panel.border` with deliberately high contrast. Resizers keep a forgiving hit area while drawing only a one-pixel resting divider.
+
 The details pane shows:
 
 - Full commit subject
