@@ -64,9 +64,11 @@ export function sanitizeNavigationState(
 
   const candidate = value as Record<string, unknown>;
   const selectedHash = optionalString(candidate.selectedHash);
+  const rangeAnchorHash = optionalString(candidate.rangeAnchorHash);
   const selectedFilePath = optionalString(candidate.selectedFilePath);
   return {
     ...(selectedHash === undefined ? {} : { selectedHash }),
+    ...(rangeAnchorHash === undefined ? {} : { rangeAnchorHash }),
     ...(selectedFilePath === undefined ? {} : { selectedFilePath }),
   };
 }

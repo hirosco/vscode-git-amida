@@ -81,15 +81,26 @@ export class GitClient {
     repository: string,
     commit: Commit,
   ): Promise<ChangedFile[]> {
-    const rootParent = commit.parents[0] ?? EMPTY_TREE;
+    return this.changedFilesBetween(
+      repository,
+      commit.parents[0],
+      commit.hash,
+    );
+  }
+
+  public async changedFilesBetween(
+    repository: string,
+    base: string | undefined,
+    tip: string,
+  ): Promise<ChangedFile[]> {
     const output = await this.run(repository, [
       "diff",
       "--name-status",
       "--no-ext-diff",
       "-z",
       "-M",
-      rootParent,
-      commit.hash,
+      base ?? EMPTY_TREE,
+      tip,
       "--",
     ]);
     return parseNameStatus(output);

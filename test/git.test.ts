@@ -171,6 +171,54 @@ test("GitClient loads all branch, remote, and tag history in one evaluation pass
   assert.equal(hashes.has(stashed), false);
 });
 
+test("GitClient compares the final effect of a linear commit range", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-range-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "shared.txt"), "root\n");
+  writeFileSync(join(repository, "stable.txt"), "stable\n");
+  git(repository, "add", "--", "shared.txt", "stable.txt");
+  git(repository, "commit", "-q", "-m", "root");
+  writeFileSync(join(repository, "shared.txt"), "second\n");
+  writeFileSync(join(repository, "transient.txt"), "temporary\n");
+  git(repository, "add", "--", "shared.txt", "transient.txt");
+  git(repository, "commit", "-q", "-m", "second");
+  writeFileSync(join(repository, "shared.txt"), "third\n");
+  rmSync(join(repository, "transient.txt"));
+  writeFileSync(join(repository, "final.txt"), "final\n");
+  git(repository, "add", "--", "shared.txt", "transient.txt", "final.txt");
+  git(repository, "commit", "-q", "-m", "third");
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const bySubject = new Map(
+    history.rows.map((row) => [row.commit.subject, row.commit]),
+  );
+  const root = bySubject.get("root");
+  const third = bySubject.get("third");
+  assert.ok(root);
+  assert.ok(third);
+
+  assert.deepEqual(
+    await client.changedFilesBetween(repository, root.hash, third.hash),
+    [
+      { status: "A", path: "final.txt" },
+      { status: "M", path: "shared.txt" },
+    ],
+  );
+  assert.equal(
+    (await client.readBlob(repository, root.hash, "shared.txt")).toString(),
+    "root\n",
+  );
+  assert.equal(
+    (await client.readBlob(repository, third.hash, "shared.txt")).toString(),
+    "third\n",
+  );
+});
+
 test("GitClient builds connected lanes for a merge history", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-merge-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));

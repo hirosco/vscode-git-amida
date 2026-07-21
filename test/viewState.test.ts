@@ -30,10 +30,15 @@ test("view preferences and navigation state sanitize independently", () => {
   assert.deepEqual(
     sanitizeNavigationState({
       selectedHash: "abc",
+      rangeAnchorHash: "def",
       selectedFilePath: "src/file.ts",
       fileViewMode: "tree",
     }),
-    { selectedHash: "abc", selectedFilePath: "src/file.ts" },
+    {
+      selectedHash: "abc",
+      rangeAnchorHash: "def",
+      selectedFilePath: "src/file.ts",
+    },
   );
   assert.deepEqual(
     sanitizeNavigationState({ selectedHash: 12, selectedFilePath: "" }),

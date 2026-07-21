@@ -145,6 +145,8 @@ Range meaning comes from its displayed base and tip, not from every row physical
 
 The first multiple-commit implementation slice supports only single selection and Range. It must complete the whole path from choosing endpoints, through aggregated changed files, to a native file diff before explicit non-contiguous Selection is added. Linear history comes first; branch and merge cases then harden the same Range model rather than introducing another selection mode.
 
+The current Range checkpoint accepts endpoints only when one is a direct ancestor of the other through a path containing no merge commit. An unsupported Shift selection leaves the current selection unchanged and explains the constraint instead of guessing a comparison parent. This restriction is temporary until Range topology hardening makes branch and merge boundaries explicit.
+
 ### Selection
 
 A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history.

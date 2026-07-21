@@ -2,6 +2,7 @@ import type {
   ChangedFile,
   FileTreeNode,
   HistoryResult,
+  RepositorySelection,
   RepositoryViewState,
   RepositoryViewStatePatch,
 } from "./model";
@@ -10,23 +11,32 @@ export type HostToWebviewMessage =
   | { type: "historyLoading" }
   | (HistoryResult & {
       type: "history";
-      selectedHash?: string;
+      selection?: RepositorySelection;
       viewState: RepositoryViewState;
     })
-  | { type: "filesLoading"; hash: string }
+  | { type: "filesLoading"; selection: RepositorySelection }
   | {
       type: "files";
-      hash: string;
+      selection: RepositorySelection;
       files: ChangedFile[];
       tree: FileTreeNode[];
     }
-  | { type: "filesError"; hash: string; message: string }
+  | {
+      type: "filesError";
+      selection: RepositorySelection;
+      message: string;
+    }
+  | {
+      type: "selectionError";
+      selection?: RepositorySelection;
+      message: string;
+    }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "refresh" }
-  | { type: "selectCommit"; hash: string }
-  | { type: "selectFile"; hash: string; path: string }
-  | { type: "openDiff"; hash: string; path: string }
+  | { type: "selectCommit"; hash: string; extend: boolean }
+  | { type: "selectFile"; path: string }
+  | { type: "openDiff"; path: string }
   | { type: "updateViewState"; patch: RepositoryViewStatePatch };

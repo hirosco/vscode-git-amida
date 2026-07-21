@@ -10,10 +10,16 @@ import type {
   ChangedFile,
   Commit,
   RepositoryNavigationState,
+  RepositorySelection,
   RepositoryViewPreferences,
   RepositoryViewState,
 } from "./model";
 import type { HostToWebviewMessage } from "./protocol";
+import {
+  resolveLinearRange,
+  selectionIdentity,
+  singleCommitSelection,
+} from "./selection";
 import {
   mergeViewPreferences,
   restoreViewState,
@@ -29,12 +35,14 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private view?: vscode.WebviewView;
   private repository?: string;
   private readonly commits = new Map<string, Commit>();
-  private readonly filesByCommit = new Map<string, ChangedFile[]>();
+  private selection?: RepositorySelection;
+  private currentFiles: ChangedFile[] = [];
   private navigationState: RepositoryNavigationState;
   private viewPreferences: RepositoryViewPreferences;
   private readonly stateReady: Promise<void>;
   private historyRequest = 0;
   private filesRequest = 0;
+  private selectionRequest = 0;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -71,6 +79,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   public async refresh(): Promise<void> {
     const request = ++this.historyRequest;
     ++this.filesRequest;
+    ++this.selectionRequest;
     await this.post({ type: "historyLoading" });
 
     try {
@@ -87,7 +96,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
       this.repository = history.repository.root;
       this.commits.clear();
-      this.filesByCommit.clear();
+      this.currentFiles = [];
       for (const row of history.rows) {
         this.commits.set(row.commit.hash, row.commit);
       }
@@ -98,8 +107,14 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         this.commits.has(this.navigationState.selectedHash)
           ? this.navigationState.selectedHash
           : firstCommit?.commit.hash;
+      this.selection = this.restoreSelection(selectedHash);
+      const rangeAnchorHash =
+        this.selection?.mode === "range"
+          ? this.selection.anchorHash
+          : undefined;
       this.navigationState = {
-        selectedHash,
+        selectedHash: this.selection?.activeHash,
+        rangeAnchorHash,
         selectedFilePath:
           selectedHash === this.navigationState.selectedHash
             ? this.navigationState.selectedFilePath
@@ -110,11 +125,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       await this.post({
         type: "history",
         ...history,
-        selectedHash,
+        selection: this.selection,
         viewState: this.viewState(),
       });
-      if (selectedHash !== undefined) {
-        await this.loadFiles(selectedHash);
+      if (this.selection !== undefined) {
+        await this.loadFiles(this.selection);
       }
     } catch (error) {
       if (request !== this.historyRequest) {
@@ -136,29 +151,47 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    if (value.type === "selectCommit" && typeof value.hash === "string") {
+    if (
+      value.type === "selectCommit" &&
+      typeof value.hash === "string" &&
+      typeof value.extend === "boolean"
+    ) {
       if (!this.commits.has(value.hash)) {
         return;
       }
-      this.navigationState = {
-        ...this.navigationState,
-        selectedHash: value.hash,
-        selectedFilePath: undefined,
-      };
-      await this.persistNavigationState();
-      await this.loadFiles(value.hash);
+      if (value.extend) {
+        const anchorHash =
+          this.navigationState.rangeAnchorHash ??
+          this.navigationState.selectedHash;
+        if (anchorHash !== undefined && anchorHash !== value.hash) {
+          const result = resolveLinearRange(
+            this.commits,
+            anchorHash,
+            value.hash,
+          );
+          if (!result.ok) {
+            await this.post({
+              type: "selectionError",
+              selection: this.selection,
+              message: result.message,
+            });
+            return;
+          }
+          await this.selectAndLoad(result.selection);
+          return;
+        }
+      }
+      await this.selectAndLoad(singleCommitSelection(value.hash));
       return;
     }
 
     if (
       value.type === "selectFile" &&
-      typeof value.hash === "string" &&
       typeof value.path === "string" &&
-      this.findFile(value.hash, value.path) !== undefined
+      this.findFile(value.path) !== undefined
     ) {
       this.navigationState = {
         ...this.navigationState,
-        selectedHash: value.hash,
         selectedFilePath: value.path,
       };
       await this.persistNavigationState();
@@ -167,10 +200,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
     if (
       value.type === "openDiff" &&
-      typeof value.hash === "string" &&
       typeof value.path === "string"
     ) {
-      await this.openDiff(value.hash, value.path);
+      await this.openDiff(value.path);
       return;
     }
 
@@ -183,23 +215,48 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async loadFiles(hash: string): Promise<void> {
-    const commit = this.commits.get(hash);
+  private async selectAndLoad(selection: RepositorySelection): Promise<void> {
+    const request = ++this.selectionRequest;
+    this.selection = selection;
+    this.currentFiles = [];
+    this.navigationState = {
+      selectedHash: selection.activeHash,
+      rangeAnchorHash:
+        selection.mode === "range" ? selection.anchorHash : undefined,
+      selectedFilePath: undefined,
+    };
+    await this.persistNavigationState();
+    if (request !== this.selectionRequest) {
+      return;
+    }
+    await this.loadFiles(selection);
+  }
+
+  private async loadFiles(selection: RepositorySelection): Promise<void> {
+    const commit = this.commits.get(selection.activeHash);
     const repository = this.repository;
     if (commit === undefined || repository === undefined) {
       return;
     }
 
     const request = ++this.filesRequest;
-    await this.post({ type: "filesLoading", hash });
+    await this.post({ type: "filesLoading", selection });
     try {
-      const files = await this.git.changedFiles(repository, commit);
+      const files =
+        selection.mode === "single"
+          ? await this.git.changedFiles(repository, commit)
+          : await this.git.changedFilesBetween(
+              repository,
+              selection.baseHash,
+              selection.newestHash,
+            );
       if (request !== this.filesRequest) {
         return;
       }
-      this.filesByCommit.set(hash, files);
+      this.currentFiles = files;
       if (
-        this.navigationState.selectedHash === hash &&
+        selectionIdentity(this.selection ?? selection) ===
+          selectionIdentity(selection) &&
         this.navigationState.selectedFilePath !== undefined &&
         !files.some(
           (file) => file.path === this.navigationState.selectedFilePath,
@@ -213,7 +270,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
       await this.post({
         type: "files",
-        hash,
+        selection,
         files,
         tree: buildFileTree(files),
       });
@@ -223,30 +280,52 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
       await this.post({
         type: "filesError",
-        hash,
+        selection,
         message: userMessage(error),
       });
     }
   }
 
-  private async openDiff(hash: string, path: string): Promise<void> {
-    const commit = this.commits.get(hash);
-    const file = this.findFile(hash, path);
+  private async openDiff(path: string): Promise<void> {
+    const selection = this.selection;
+    const file = this.findFile(path);
     const repository = this.repository;
-    if (commit === undefined || file === undefined || repository === undefined) {
+    if (
+      selection === undefined ||
+      file === undefined ||
+      repository === undefined
+    ) {
       return;
     }
 
-    const parent = commit.parents[0];
-    const beforeRef = file.status.startsWith("A") ? undefined : parent;
-    const afterRef = file.status.startsWith("D") ? undefined : commit.hash;
+    const activeCommit = this.commits.get(selection.activeHash);
+    if (activeCommit === undefined) {
+      return;
+    }
+    const beforeRef = file.status.startsWith("A")
+      ? undefined
+      : selection.mode === "single"
+        ? activeCommit.parents[0]
+        : selection.baseHash;
+    const afterRef = file.status.startsWith("D")
+      ? undefined
+      : selection.mode === "single"
+        ? activeCommit.hash
+        : selection.newestHash;
     const beforePath = file.oldPath ?? file.path;
+    const diffIdentity = selectionIdentity(selection);
 
     try {
       const [before, after] = await Promise.all([
         this.git.readBlob(repository, beforeRef, beforePath),
         this.git.readBlob(repository, afterRef, file.path),
       ]);
+      if (
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== diffIdentity
+      ) {
+        return;
+      }
       if (isBinary(before) || isBinary(after)) {
         await vscode.window.showInformationMessage(
           "GitAmida: Binary and image diffs are not available yet.",
@@ -254,22 +333,22 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      const shortHash = commit.shortHash;
+      const label = this.selectionLabel(selection);
       const left = this.contentProvider.add(
         beforePath,
-        `${shortHash}-parent`,
+        `${label}-base`,
         before.toString("utf8"),
       );
       const right = this.contentProvider.add(
         file.path,
-        shortHash,
+        label,
         after.toString("utf8"),
       );
       await vscode.commands.executeCommand(
         "vscode.diff",
         left,
         right,
-        `${basename(file.path)} (${shortHash})`,
+        `${basename(file.path)} (${label})`,
         { preview: true },
       );
     } catch (error) {
@@ -277,8 +356,48 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private findFile(hash: string, path: string): ChangedFile | undefined {
-    return this.filesByCommit.get(hash)?.find((file) => file.path === path);
+  private findFile(path: string): ChangedFile | undefined {
+    return this.currentFiles.find((file) => file.path === path);
+  }
+
+  private restoreSelection(
+    selectedHash: string | undefined,
+  ): RepositorySelection | undefined {
+    if (selectedHash === undefined) {
+      return undefined;
+    }
+    const anchorHash = this.navigationState.rangeAnchorHash;
+    if (
+      anchorHash !== undefined &&
+      anchorHash !== selectedHash &&
+      this.commits.has(anchorHash)
+    ) {
+      const result = resolveLinearRange(
+        this.commits,
+        anchorHash,
+        selectedHash,
+      );
+      if (result.ok) {
+        return result.selection;
+      }
+    }
+    return singleCommitSelection(selectedHash);
+  }
+
+  private selectionLabel(selection: RepositorySelection): string {
+    if (selection.mode === "single") {
+      return (
+        this.commits.get(selection.activeHash)?.shortHash ??
+        selection.activeHash.slice(0, 8)
+      );
+    }
+    const oldest =
+      this.commits.get(selection.oldestHash)?.shortHash ??
+      selection.oldestHash.slice(0, 8);
+    const newest =
+      this.commits.get(selection.newestHash)?.shortHash ??
+      selection.newestHash.slice(0, 8);
+    return `${oldest}…${newest}`;
   }
 
   private viewState(): RepositoryViewState {
@@ -406,7 +525,7 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       </section>
     </section>
   </main>
-  <footer id="status" role="status">Select a commit, then double-click a file to open the editor diff.</footer>
+  <footer id="status" role="status">Select a commit, or Shift+click another commit to review a linear Range.</footer>
   <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;

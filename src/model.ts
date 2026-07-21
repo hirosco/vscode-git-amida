@@ -60,10 +60,30 @@ export interface HistoryResult {
   graphLaneCount: number;
 }
 
+export interface SingleCommitSelection {
+  mode: "single";
+  activeHash: string;
+}
+
+export interface CommitRangeSelection {
+  mode: "range";
+  anchorHash: string;
+  activeHash: string;
+  oldestHash: string;
+  newestHash: string;
+  baseHash?: string;
+  commitHashes: string[];
+}
+
+export type RepositorySelection =
+  | SingleCommitSelection
+  | CommitRangeSelection;
+
 export type FileViewMode = "flat" | "tree";
 
 export interface RepositoryNavigationState {
   selectedHash?: string;
+  rangeAnchorHash?: string;
   selectedFilePath?: string;
 }
 

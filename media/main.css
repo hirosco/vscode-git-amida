@@ -340,6 +340,24 @@ h2 {
   background: var(--vscode-list-hoverBackground);
 }
 
+.history-row.range-selected {
+  background: var(
+    --vscode-list-inactiveSelectionBackground,
+    var(--vscode-list-hoverBackground)
+  );
+}
+
+.history-row.range-selected .graph-node {
+  stroke: var(
+    --vscode-list-inactiveSelectionBackground,
+    var(--vscode-list-hoverBackground)
+  );
+}
+
+.history-row.range-endpoint {
+  box-shadow: inset 2px 0 var(--vscode-focusBorder);
+}
+
 .history-row.selected,
 .file-row.selected {
   color: var(--vscode-list-activeSelectionForeground);

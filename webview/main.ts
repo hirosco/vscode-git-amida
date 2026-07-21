@@ -7,6 +7,7 @@ import type {
   GraphLine,
   HistoryRow,
   RepositoryInfo,
+  RepositorySelection,
   RepositoryViewState,
   RepositoryViewStatePatch,
 } from "../src/model";
@@ -24,6 +25,7 @@ declare function acquireVsCodeApi(): VsCodeApi;
 const vscode = acquireVsCodeApi();
 const elements = {
   details: element<HTMLDivElement>("details"),
+  detailsHeading: element<HTMLElement>("details-heading"),
   collapseAll: element<HTMLButtonElement>("collapse-all"),
   detailsResizer: element<HTMLDivElement>("details-resizer"),
   detailsSection: element<HTMLElement>("details-section"),
@@ -44,7 +46,7 @@ const elements = {
   workspaceResizer: element<HTMLDivElement>("workspace-resizer"),
 };
 
-let selectedHash: string | undefined;
+let selection: RepositorySelection | undefined;
 let currentHead: string | undefined;
 let selectedFilePath: string | undefined;
 let commits = new Map<string, Commit>();
@@ -92,25 +94,29 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       break;
     case "history":
       applyViewState(message.viewState);
-      selectedHash = message.selectedHash;
+      selection = message.selection;
       currentHead = message.repository.head;
       renderRepository(message.repository);
       renderHistory(message.rows, message.graphLaneCount);
-      renderSelectedCommit();
+      renderSelectionDetails();
       break;
     case "filesLoading":
-      selectedHash = message.hash;
+      if (!sameSelection(message.selection, selection)) {
+        selectedFilePath = undefined;
+      }
+      selection = message.selection;
       currentFiles = [];
       currentTree = [];
       updateCommitSelection();
-      renderSelectedCommit();
+      renderSelectionDetails();
       setEmpty(elements.files, "Loading changed files…");
-      elements.selectedCommit.textContent =
-        commits.get(message.hash)?.shortHash ?? shortHash(message.hash);
+      elements.selectedCommit.textContent = selectionLabel(
+        message.selection,
+      );
       setStatus("Loading changed files…");
       break;
     case "files":
-      if (message.hash === selectedHash) {
+      if (sameSelection(message.selection, selection)) {
         currentFiles = message.files;
         currentTree = message.tree;
         expandedTreePaths = collectDirectoryPaths(currentTree);
@@ -118,13 +124,20 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       }
       break;
     case "filesError":
-      if (message.hash === selectedHash) {
+      if (sameSelection(message.selection, selection)) {
         setEmpty(elements.files, message.message, true);
         setStatus(message.message, true);
       }
       break;
+    case "selectionError":
+      selection = message.selection;
+      updateCommitSelection();
+      renderSelectionDetails();
+      setStatus(message.message, true);
+      break;
     case "error":
       commits.clear();
+      selection = undefined;
       setEmpty(elements.history, message.message, true);
       setEmpty(elements.files, "No changed files.");
       setEmpty(elements.details, "No commit selected.");
@@ -177,12 +190,14 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     const date = span("date", formatRowDate(row.commit.committedAt));
     date.title = `Committed ${formatFullDate(row.commit.committedAt)}`;
     button.append(graph, commitCell, date);
-    button.addEventListener("click", () => selectCommit(row.commit.hash));
+    button.addEventListener("click", (event) =>
+      selectCommit(row.commit.hash, event.shiftKey),
+    );
     button.addEventListener("keydown", (event) => {
-      navigateRows(event, ".history-row", () => {
-        const hash = button.dataset.hash;
+      navigateRows(event, ".history-row", (target) => {
+        const hash = target.dataset.hash;
         if (hash !== undefined) {
-          selectCommit(hash);
+          selectCommit(hash, event.shiftKey);
         }
       });
     });
@@ -190,7 +205,9 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
   }
 
   updateCommitSelection();
-  setStatus("Select a commit, then double-click a file to open the editor diff.");
+  setStatus(
+    "Select a commit, or Shift+click another commit to review a linear Range.",
+  );
 }
 
 type GraphSize = "small" | "medium" | "large" | "xlarge" | "wide";
@@ -339,8 +356,9 @@ function createHeadIndicator(
 function renderFiles(): void {
   elements.files.replaceChildren();
   if (currentFiles.length === 0) {
-    setEmpty(elements.files, "This commit has no file changes.");
-    setStatus("No file changes in the selected commit.");
+    const noun = selection?.mode === "range" ? "Range" : "commit";
+    setEmpty(elements.files, `This ${noun} has no final file changes.`);
+    setStatus(`No final file changes in the selected ${noun}.`);
     return;
   }
 
@@ -355,7 +373,8 @@ function renderFiles(): void {
   }
   updateFileSelection();
   setStatus(
-    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}. Double-click or press Enter to open a diff.`,
+    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${selection?.mode === "range" ? " in this Range" : ""}. ` +
+      "Double-click or press Enter to open a diff.",
   );
 }
 
@@ -437,18 +456,36 @@ function createFileRow(
       openDiff(file.path);
       return;
     }
-    navigateRows(event, ".file-row", () => selectFile(file.path));
+    navigateRows(event, ".file-row", (target) => {
+      const path = target.dataset.filePath;
+      if (path !== undefined) {
+        selectFile(path);
+      }
+    });
   });
   return button;
 }
 
-function renderSelectedCommit(): void {
-  const commit = selectedHash === undefined ? undefined : commits.get(selectedHash);
+function renderSelectionDetails(): void {
   elements.details.replaceChildren();
-  if (commit === undefined) {
+  if (selection === undefined) {
+    elements.detailsHeading.textContent = "Commit details";
     setEmpty(elements.details, "No commit selected.");
     return;
   }
+
+  if (selection.mode === "range") {
+    renderRangeDetails(selection);
+    return;
+  }
+
+  const commit = commits.get(selection.activeHash);
+  if (commit === undefined) {
+    elements.detailsHeading.textContent = "Commit details";
+    setEmpty(elements.details, "No commit selected.");
+    return;
+  }
+  elements.detailsHeading.textContent = "Commit details";
 
   const subject = document.createElement("p");
   subject.className = "details-subject";
@@ -479,6 +516,44 @@ function renderSelectedCommit(): void {
   elements.details.append(subject, list);
 }
 
+function renderRangeDetails(
+  range: Extract<RepositorySelection, { mode: "range" }>,
+): void {
+  elements.detailsHeading.textContent = "Range details";
+  const oldest = commits.get(range.oldestHash);
+  const newest = commits.get(range.newestHash);
+
+  const subject = document.createElement("p");
+  subject.className = "details-subject";
+  subject.textContent = `${oldest?.subject || "(no subject)"} → ${newest?.subject || "(no subject)"}`;
+
+  const list = document.createElement("dl");
+  list.className = "details-list";
+  appendDetail(list, "Mode", "Range");
+  appendDetail(list, "Commits", String(range.commitHashes.length));
+  appendDetail(
+    list,
+    "Oldest",
+    commitDescription(range.oldestHash),
+  );
+  appendDetail(
+    list,
+    "Newest",
+    commitDescription(range.newestHash),
+  );
+  appendDetail(
+    list,
+    "Compared with",
+    range.baseHash ?? "Empty tree (root commit)",
+  );
+  appendDetail(
+    list,
+    "Comparison",
+    `${range.baseHash ?? "Empty tree"} → ${range.newestHash}`,
+  );
+  elements.details.append(subject, list);
+}
+
 function appendDetail(
   list: HTMLDListElement,
   label: string,
@@ -495,34 +570,46 @@ function appendDetail(
   list.append(term, description);
 }
 
-function selectCommit(hash: string): void {
-  if (hash === selectedHash) {
+function selectCommit(hash: string, extend: boolean): void {
+  if (
+    !extend &&
+    selection?.mode === "single" &&
+    hash === selection.activeHash
+  ) {
     return;
   }
-  selectedHash = hash;
-  selectedFilePath = undefined;
-  currentFiles = [];
-  currentTree = [];
-  updateCommitSelection();
-  renderSelectedCommit();
-  vscode.postMessage({ type: "selectCommit", hash });
+  vscode.postMessage({ type: "selectCommit", hash, extend });
 }
 
 function selectFile(path: string): void {
   selectedFilePath = path;
   updateFileSelection();
-  if (selectedHash !== undefined) {
-    vscode.postMessage({ type: "selectFile", hash: selectedHash, path });
+  if (selection !== undefined) {
+    vscode.postMessage({ type: "selectFile", path });
   }
 }
 
 function updateCommitSelection(): void {
+  const selectedHashes =
+    selection?.mode === "range"
+      ? new Set(selection.commitHashes)
+      : new Set(selection === undefined ? [] : [selection.activeHash]);
   for (const row of elements.history.querySelectorAll<HTMLElement>(
     ".history-row",
   )) {
-    const selected = row.dataset.hash === selectedHash;
-    row.classList.toggle("selected", selected);
-    row.setAttribute("aria-selected", String(selected));
+    const hash = row.dataset.hash;
+    const inSelection = hash !== undefined && selectedHashes.has(hash);
+    const active = hash !== undefined && hash === selection?.activeHash;
+    const endpoint =
+      selection?.mode === "range" &&
+      (hash === selection.oldestHash || hash === selection.newestHash);
+    row.classList.toggle(
+      "range-selected",
+      selection?.mode === "range" && inSelection,
+    );
+    row.classList.toggle("range-endpoint", endpoint);
+    row.classList.toggle("selected", active);
+    row.setAttribute("aria-selected", String(inSelection));
   }
 }
 
@@ -535,8 +622,8 @@ function updateFileSelection(): void {
 }
 
 function openDiff(path: string): void {
-  if (selectedHash !== undefined) {
-    vscode.postMessage({ type: "openDiff", hash: selectedHash, path });
+  if (selection !== undefined) {
+    vscode.postMessage({ type: "openDiff", path });
   }
 }
 
@@ -719,7 +806,7 @@ function updateViewState(patch: RepositoryViewStatePatch): void {
 function navigateRows(
   event: KeyboardEvent,
   selector: string,
-  selectCurrent: () => void,
+  selectTarget: (target: HTMLElement) => void,
 ): void {
   const current = event.currentTarget;
   if (!(current instanceof HTMLElement)) {
@@ -740,9 +827,10 @@ function navigateRows(
   if (target !== undefined) {
     event.preventDefault();
     target.focus();
-    target.click();
+    selectTarget(target);
   } else if (event.key === " " || event.key === "Enter") {
-    selectCurrent();
+    event.preventDefault();
+    selectTarget(current);
   }
 }
 
@@ -772,6 +860,40 @@ function span(className: string, text: string): HTMLSpanElement {
 
 function shortHash(hash: string, length = 8): string {
   return hash.slice(0, length);
+}
+
+function sameSelection(
+  left: RepositorySelection,
+  right: RepositorySelection | undefined,
+): boolean {
+  if (right === undefined || left.mode !== right.mode) {
+    return false;
+  }
+  return left.mode === "single"
+    ? left.activeHash === right.activeHash
+    : right.mode === "range" &&
+        left.anchorHash === right.anchorHash &&
+        left.activeHash === right.activeHash;
+}
+
+function selectionLabel(value: RepositorySelection): string {
+  if (value.mode === "single") {
+    return (
+      commits.get(value.activeHash)?.shortHash ?? shortHash(value.activeHash)
+    );
+  }
+  const oldest =
+    commits.get(value.oldestHash)?.shortHash ?? shortHash(value.oldestHash);
+  const newest =
+    commits.get(value.newestHash)?.shortHash ?? shortHash(value.newestHash);
+  return `Range ${oldest}…${newest}`;
+}
+
+function commitDescription(hash: string): string {
+  const commit = commits.get(hash);
+  return commit === undefined
+    ? hash
+    : `${commit.hash} · ${commit.subject || "(no subject)"}`;
 }
 
 function collectDirectoryPaths(nodes: FileTreeNode[]): Set<string> {
