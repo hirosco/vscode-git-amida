@@ -341,17 +341,12 @@ h2 {
 }
 
 .history-row.range-selected {
-  background: var(
-    --vscode-list-inactiveSelectionBackground,
-    var(--vscode-list-hoverBackground)
-  );
+  color: var(--vscode-list-activeSelectionForeground);
+  background: var(--vscode-list-activeSelectionBackground);
 }
 
 .history-row.range-selected .graph-node {
-  stroke: var(
-    --vscode-list-inactiveSelectionBackground,
-    var(--vscode-list-hoverBackground)
-  );
+  stroke: var(--vscode-list-activeSelectionBackground);
 }
 
 .history-row.range-endpoint {
