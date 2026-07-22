@@ -386,7 +386,7 @@ function createRefList(
 ): HTMLSpanElement | undefined {
   const currentBranch = commit.refs.find((ref) => ref.current);
   const visibleRefs = commit.refs
-    .filter((ref) => !ref.current || primaryBranchLabel(ref) !== undefined)
+    .filter((ref) => !ref.current)
     .sort(
       (left, right) =>
         refPresentationOrder(left) - refPresentationOrder(right),
@@ -403,14 +403,18 @@ function createRefList(
         ? `HEAD · Detached at ${commit.shortHash}`
         : `HEAD · ${refDescription(currentBranch)}`;
     list.append(
-      createHeadIndicator(currentBranch?.type ?? "detached", description),
+      createHeadIndicator(
+        currentBranch?.type ?? "detached",
+        currentBranch?.name ?? commit.shortHash,
+        description,
+      ),
     );
   }
 
   for (const ref of visibleRefs) {
     const description = refDescription(ref);
     if (ref.type === "remoteBranch" && ref.name.endsWith("/HEAD")) {
-      list.append(createHeadIndicator(ref.type, description));
+      list.append(createHeadIndicator(ref.type, "HEAD", description));
       continue;
     }
     const primaryLabel = primaryBranchLabel(ref);
@@ -469,13 +473,14 @@ function createNamedRefIndicator(
 
 function createHeadIndicator(
   type: Commit["refs"][number]["type"] | "detached",
+  label: string,
   description: string,
 ): HTMLSpanElement {
   const head = document.createElement("span");
   head.className = `ref-head ref-${type}`;
   head.setAttribute("role", "img");
   head.setAttribute("aria-label", description);
-  head.append(span("ref-symbol", ""), span("ref-head-label", "HEAD"));
+  head.append(span("ref-symbol", ""), span("ref-head-label", label));
   return head;
 }
 

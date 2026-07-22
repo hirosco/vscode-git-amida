@@ -32,8 +32,8 @@ The commit list is optimized for scanning a large history.
 - Show graph, subject, and date in the history list; keep author information in commit details
 - Order commits by commit date while ensuring that no parent appears before its children, and show the committed timestamp in the date column
 - Give the subject flexible width and truncate it with an accessible full-value label
-- Mark local HEAD with a ring around a visible center dot while retaining compact local and remote icon-and-text `HEAD` indicators for explicit identification
-- Label local and remote-tracking `main` or `master` refs as compact orientation anchors; render each ref independently even when both point to the same commit, and distinguish them through filled and outlined symbols
+- Mark local HEAD with a ring around a visible center dot and label it with the checked-out local branch; show the short commit hash instead when HEAD is detached, and retain the remote icon-and-text `HEAD` indicator
+- Label local and remote-tracking `main` or `master` refs as compact orientation anchors; when the local primary branch is checked out, use the current-branch label instead of rendering that local ref twice, while retaining an independent remote indicator at the same commit
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
 - Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI

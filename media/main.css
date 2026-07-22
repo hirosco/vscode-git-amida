@@ -511,9 +511,21 @@ h2 {
 .ref-named {
   gap: 2px;
   padding: 0 2px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 14px;
+}
+
+.ref-head {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ref-head-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ref-indicator {
@@ -522,8 +534,8 @@ h2 {
 
 .ref-symbol {
   display: block;
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border: 1.5px solid currentColor;
   border-radius: 50%;
   background: transparent;
@@ -553,8 +565,8 @@ h2 {
 }
 
 .ref-tag .ref-symbol {
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border: 0;
   border-radius: 1px;
   background: currentColor;

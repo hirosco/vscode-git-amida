@@ -19,7 +19,7 @@ This checkpoint is complete when the installed extension retains its state in no
 - Observe dense branch and merge histories during normal repository work
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
 - Verify all five SCM graph theme colors in light and high-contrast themes
-- Confirm that commit subjects, local and remote HEAD/main indicators, and dates remain aligned in narrow Panels
+- Confirm that commit subjects, the checked-out branch or detached hash, remote HEAD/main indicators, and dates remain aligned in narrow Panels
 - Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.

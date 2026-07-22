@@ -52,7 +52,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Derive graph lanes from commit hashes and parents; do not send terminal graph text or ANSI color sequences to the Webview.
 - Use the editor's `scmGraph.foreground1` through `scmGraph.foreground5` theme colors with safe workbench fallbacks.
 - Show graph, subject, inline ref indicators, and date on one physical row. Truncate the subject and then excessive refs as space narrows.
-- Mark local HEAD with a ring-and-center-dot graph node and retain local and remote icon-and-text `HEAD` indicators. Distinguish local, remote, and tag refs by fill and shape as well as color.
+- Mark local HEAD with a ring-and-center-dot graph node and label it with the checked-out branch, or the short commit hash when detached. Retain the remote icon-and-text `HEAD` indicator. Distinguish local, remote, and tag refs by fill and shape as well as color.
 - Label local and remote-tracking `main` or `master` refs independently as orientation anchors, even at the same commit, and keep other branch names out of the compact row unless requirements change.
 - Keep the primary branch's first-parent backbone on a stable graph color and let other tips retain a different color until they converge at a commit node.
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI.

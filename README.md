@@ -17,7 +17,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Adds `GitAmida` beside Terminal, Problems, and Output in the bottom Panel
 - Loads all commits reachable from local branches, remote-tracking branches, and tags in one bounded evaluation pass, ordered by commit date without placing a parent before its children
 - Shows a theme-aware lane graph derived from commit parents, keeps the primary-branch backbone visually stable, joins lines at their parent nodes, and places a non-wrapping subject, inline ref indicators, and date on one physical row
-- Marks local HEAD with a ring-and-center-dot graph node, retains explicit local and remote `HEAD` indicators, labels local and remote `main` or `master` positions independently, and keeps other refs compact through fill and shape
+- Marks local HEAD with a ring-and-center-dot graph node, labels it with the checked-out branch or short commit hash when detached, retains the remote `HEAD` indicator, labels local and remote `main` or `master` positions independently, and keeps other refs compact through fill and shape
 - Shows status-colored changed-file paths in Flat or initially expanded Tree mode, with expand-all and collapse-all actions
 - Shows full commit metadata in a resizable, collapsible details pane
 - Selects an ancestor-related commit Range with Shift+click, shows its explicit base, tip, and contributing commits across merges, and aggregates the final changed files from that comparison
