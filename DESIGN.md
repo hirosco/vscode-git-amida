@@ -21,6 +21,8 @@ Opening the same file history twice focuses its existing tab. File-history tabs 
 
 Detailed text comparisons open in the editor's native diff view instead of consuming the limited height of the bottom Panel.
 
+Do not spend permanent Webview height on repository metadata that is already implied by a single-root workspace and repeated at HEAD. Use the editor-native View title for commands. When multi-root selection is implemented, add a compact repository chooser only when more than one repository is available.
+
 ## Repository History
 
 ### Commit list
@@ -42,6 +44,20 @@ The commit list is optimized for scanning a large history.
 - Keep the selected row visually distinct without relying on color alone
 
 The full commit hash and other secondary metadata do not need permanent space in every row.
+
+### Working tree
+
+When saved uncommitted changes exist, show one visually distinct **Uncommitted changes** row above the commits. It represents the working tree relative to the current HEAD, not a commit that GitAmida may include in a Range or Selection.
+
+- Include staged and unstaged tracked changes in their combined saved working-tree state, plus untracked files
+- Exclude unsaved editor buffers until they are saved to disk
+- Show the row only while at least one changed path exists and include the changed-file count
+- Use a dedicated graph marker without commit metadata or a fabricated timestamp
+- Keep the checked-out branch label on the real HEAD commit
+- Preserve the current commit selection and visible scroll position when the row appears or disappears
+- If the working tree is selected when it becomes clean, return selection to HEAD
+- Compare a tracked path from HEAD to its current saved filesystem content; compare untracked files from an empty before-state
+- Keep the working tree out of Shift ranges and Cmd/Ctrl explicit commit selections
 
 ### Changed files and commit details
 
@@ -71,6 +87,8 @@ The details pane shows:
 - The active comparison parent for a merge commit
 
 Selecting a commit updates both changed files and details. Loading either area must not block or clear the other area unnecessarily.
+
+Selecting **Uncommitted changes** keeps the stable details area but replaces commit metadata with the HEAD comparison basis, changed-file count, and an explicit note that unsaved editor buffers are excluded.
 
 ### Commit graph
 
@@ -128,6 +146,8 @@ For a single commit:
 - Compare an ordinary commit with its first parent
 - Compare a root commit with Git's empty tree
 - Show the active parent for merge commits and later allow explicit parent selection
+
+For the working tree, read the saved filesystem state through a repository-scoped path boundary and compare it with the corresponding HEAD blob. Do not use the editor buffer as the comparison endpoint because an unsaved document is not yet part of Git's working tree.
 
 The virtual-document path accepts text blobs up to 5 MiB. Classify raster images, binary blobs, submodules, and oversized text before opening a diff, keep them visible in Changed files, and explain why the text comparison is unavailable. Do not decode unsupported content as UTF-8. Image preview and external-tool routing remain separate later checkpoints.
 
@@ -228,6 +248,8 @@ The production target uses 100 commits as a page size, not a product limit. Pref
 ## Logical architecture
 
 The Webview renders trusted view models and emits validated user intentions. Extension Host application services own repository state, Repository History, open File History sessions, Git queries, branch-switch preflight, and virtual diff documents. The Git adapter does not import VS Code or Webview types.
+
+Observe the built-in Git extension's repository change event and debounce bursts. Refresh only the working-tree snapshot while HEAD and refs are unchanged; reload complete history when HEAD, branch, or refs change. Also schedule a working-tree refresh directly after a file document is saved so editor changes do not depend on the Git extension's refresh timing. Continue refreshing while the retained View is hidden, do not steal selection or scroll position, and recheck when the View becomes visible. Keep **GitAmida: Refresh** available from the Command Palette and show an inline retry after failures, but do not reserve a routine refresh button in the UI.
 
 Presentation preferences such as Flat or Tree mode, divider ratios, and details visibility belong to extension-global state so one adjustment applies to every workspace in the current editor profile. Repository-specific navigation state, including the selected commit and file, belongs to workspace state. Transient interactions such as tree-folder expansion are not persisted. Future behavioral options such as commit ordering must also have one global value rather than accumulating workspace overrides.
 

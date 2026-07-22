@@ -63,11 +63,13 @@ export function sanitizeNavigationState(
   }
 
   const candidate = value as Record<string, unknown>;
+  const selectedWorkingTree = candidate.selectedWorkingTree === true;
   const selectedHash = optionalString(candidate.selectedHash);
   const rangeAnchorHash = optionalString(candidate.rangeAnchorHash);
   const selectionHashes = optionalStringArray(candidate.selectionHashes);
   const selectedFilePath = optionalString(candidate.selectedFilePath);
   return {
+    ...(selectedWorkingTree ? { selectedWorkingTree: true } : {}),
     ...(selectedHash === undefined ? {} : { selectedHash }),
     ...(rangeAnchorHash === undefined ? {} : { rangeAnchorHash }),
     ...(selectionHashes === undefined ? {} : { selectionHashes }),

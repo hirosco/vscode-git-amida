@@ -17,6 +17,13 @@ export function singleCommitSelection(hash: string): RepositorySelection {
   return { mode: "single", activeHash: hash };
 }
 
+export function workingTreeSelection(
+  headHash: string,
+  version: number,
+): RepositorySelection {
+  return { mode: "workingTree", headHash, version };
+}
+
 export function explicitCommitSelection(
   commits: ReadonlyMap<string, Commit>,
   hashes: Iterable<string>,
@@ -46,6 +53,9 @@ export function toggleExplicitCommit(
   hash: string,
 ): RepositorySelection {
   if (current === undefined || !commits.has(hash)) {
+    return singleCommitSelection(hash);
+  }
+  if (current.mode === "workingTree") {
     return singleCommitSelection(hash);
   }
   const selected = new Set(
@@ -149,6 +159,9 @@ export function resolveRange(
 }
 
 export function selectionIdentity(selection: RepositorySelection): string {
+  if (selection.mode === "workingTree") {
+    return `workingTree:${selection.headHash}:${selection.version}`;
+  }
   if (selection.mode === "single") {
     return `single:${selection.activeHash}`;
   }

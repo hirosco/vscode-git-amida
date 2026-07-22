@@ -21,7 +21,7 @@ body {
 
 body {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 button {
@@ -29,34 +29,22 @@ button {
   font: inherit;
 }
 
-.repository-bar,
 .pane-heading,
 footer {
   min-height: 30px;
   padding: 5px 10px;
 }
 
-.repository-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.repository-identity,
 .heading-label {
   min-width: 0;
 }
 
-#repository-name,
-#repository-meta,
 .secondary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-#repository-meta,
 .secondary {
   margin-left: 8px;
   color: var(--vscode-descriptionForeground);
@@ -397,6 +385,25 @@ h2 {
 .graph-head-center {
   fill: currentColor;
   stroke: none;
+}
+
+.working-tree-marker {
+  fill: transparent;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 1.75px;
+  vector-effect: non-scaling-stroke;
+}
+
+.working-tree-graph {
+  color: var(
+    --vscode-gitDecoration-modifiedResourceForeground,
+    var(--vscode-descriptionForeground)
+  );
+}
+
+.working-tree-cell .subject {
+  font-weight: 600;
 }
 
 .history-row:hover .graph-head-node {
@@ -803,6 +810,35 @@ code {
   margin: 0;
   padding: 16px;
   color: var(--vscode-descriptionForeground);
+}
+
+.retry-state,
+footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.retry-button {
+  border: 0;
+  padding: 0;
+  color: var(--vscode-textLink-foreground);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.status-message {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.retry-button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 2px;
 }
 
 .error,

@@ -13,6 +13,9 @@
   "engines": {
     "vscode": "^1.100.0"
   },
+  "extensionDependencies": [
+    "vscode.git"
+  ],
   "categories": [
     "SCM Providers",
     "Visualization"
@@ -54,15 +57,6 @@
           "type": "webview",
           "icon": "media/git-amida.svg",
           "contextualTitle": "GitAmida"
-        }
-      ]
-    },
-    "menus": {
-      "view/title": [
-        {
-          "command": "gitAmida.refresh",
-          "when": "view == gitAmida.history",
-          "group": "navigation"
         }
       ]
     }

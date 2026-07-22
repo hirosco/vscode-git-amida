@@ -8,6 +8,7 @@ import {
   selectionIdentity,
   singleCommitSelection,
   toggleExplicitCommit,
+  workingTreeSelection,
 } from "../src/selection";
 
 test("resolveRange derives the same base and tip in either selection direction", () => {
@@ -219,6 +220,16 @@ test("explicitCommitSelection supports unrelated commits and collapses to single
   assert.deepEqual(toggleExplicitCommit(commits, selection, "main"), {
     mode: "single",
     activeHash: "side",
+  });
+});
+
+test("working tree selection stays outside commit Selection", () => {
+  const commits = commitMap([commit("head", ["root"]), commit("root", [])]);
+  const workingTree = workingTreeSelection("head", 3);
+  assert.equal(selectionIdentity(workingTree), "workingTree:head:3");
+  assert.deepEqual(toggleExplicitCommit(commits, workingTree, "head"), {
+    mode: "single",
+    activeHash: "head",
   });
 });
 

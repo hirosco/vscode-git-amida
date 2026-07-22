@@ -14,6 +14,7 @@ import type {
   RepositorySelection,
   RepositoryViewPreferences,
   RepositoryViewState,
+  WorkingTreeState,
 } from "./model";
 import type { HostToWebviewMessage } from "./protocol";
 import {
@@ -22,6 +23,7 @@ import {
   selectionIdentity,
   singleCommitSelection,
   toggleExplicitCommit,
+  workingTreeSelection,
 } from "./selection";
 import {
   buildSelectionFiles,
@@ -37,12 +39,17 @@ const LEGACY_VIEW_STATE_KEY = "gitAmida.repositoryViewState";
 const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
 const VIEW_PREFERENCES_KEY = "gitAmida.repositoryViewPreferences";
 
-export class HistoryViewProvider implements vscode.WebviewViewProvider {
+export class HistoryViewProvider
+  implements vscode.WebviewViewProvider, vscode.Disposable
+{
   public static readonly viewType = "gitAmida.history";
 
   private view?: vscode.WebviewView;
   private repository?: string;
+  private headHash?: string;
   private readonly commits = new Map<string, Commit>();
+  private workingTree?: WorkingTreeState;
+  private workingTreeVersion = 0;
   private selection?: RepositorySelection;
   private currentFiles: ChangedFile[] = [];
   private readonly selectionFiles = new Map<string, SelectionFileState>();
@@ -54,8 +61,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   private viewPreferences: RepositoryViewPreferences;
   private readonly stateReady: Promise<void>;
   private historyRequest = 0;
+  private workingTreeRequest = 0;
   private filesRequest = 0;
   private selectionRequest = 0;
+  private refreshTimer?: ReturnType<typeof setTimeout>;
+  private pendingRefresh?: "workingTree" | "history";
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -87,13 +97,62 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     view.webview.onDidReceiveMessage((message: unknown) => {
       void this.receiveMessage(message);
     });
+    view.onDidChangeVisibility(() => {
+      if (view.visible) {
+        this.scheduleRefresh(this.pendingRefresh ?? "workingTree");
+      }
+    });
   }
 
-  public async refresh(): Promise<void> {
+  public dispose(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+  }
+
+  public scheduleRefresh(
+    scope: "workingTree" | "history",
+    repository?: string,
+  ): void {
+    if (
+      repository !== undefined &&
+      this.repository !== undefined &&
+      vscode.Uri.file(repository).toString() !==
+        vscode.Uri.file(this.repository).toString()
+    ) {
+      return;
+    }
+    if (scope === "history" || this.pendingRefresh === undefined) {
+      this.pendingRefresh = scope;
+    }
+    if (this.view === undefined) {
+      return;
+    }
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      const pending = this.pendingRefresh;
+      this.pendingRefresh = undefined;
+      if (pending === "history") {
+        void this.refresh(false);
+      } else if (pending === "workingTree") {
+        void this.refreshWorkingTree();
+      }
+    }, 300);
+  }
+
+  public async refresh(showLoading = true): Promise<void> {
+    this.pendingRefresh = undefined;
     const request = ++this.historyRequest;
+    ++this.workingTreeRequest;
     ++this.filesRequest;
     ++this.selectionRequest;
-    await this.post({ type: "historyLoading" });
+    if (showLoading) {
+      await this.post({ type: "historyLoading" });
+    }
 
     try {
       await this.stateReady;
@@ -103,11 +162,19 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
 
       const history = await this.git.loadHistory(folder.uri.fsPath);
+      const workingTree = await this.git.workingTreeChanges(
+        history.repository.root,
+        history.repository.head,
+      );
       if (request !== this.historyRequest) {
         return;
       }
 
       this.repository = history.repository.root;
+      this.headHash = history.repository.head;
+      this.workingTree =
+        workingTree.files.length === 0 ? undefined : workingTree;
+      this.workingTreeVersion += 1;
       this.commits.clear();
       this.currentFiles = [];
       this.selectionFiles.clear();
@@ -117,12 +184,21 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       }
 
       const firstCommit = history.rows[0];
-      const selectedHash =
-        this.navigationState.selectedHash !== undefined &&
-        this.commits.has(this.navigationState.selectedHash)
+      const restoreWorkingTree =
+        this.navigationState.selectedWorkingTree === true &&
+        this.workingTree !== undefined;
+      const selectedHash = restoreWorkingTree
+        ? undefined
+        : this.navigationState.selectedHash !== undefined &&
+            this.commits.has(this.navigationState.selectedHash)
           ? this.navigationState.selectedHash
           : firstCommit?.commit.hash;
-      this.selection = this.restoreSelection(selectedHash);
+      this.selection = restoreWorkingTree
+        ? workingTreeSelection(
+            this.workingTree?.headHash ?? history.repository.head,
+            this.workingTreeVersion,
+          )
+        : this.restoreSelection(selectedHash);
       const rangeAnchorHash =
         this.selection?.mode === "range"
           ? this.selection.anchorHash
@@ -132,7 +208,13 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
           ? this.selection.commitHashes
           : undefined;
       this.navigationState = {
-        selectedHash: this.selection?.activeHash,
+        selectedWorkingTree:
+          this.selection?.mode === "workingTree" ? true : undefined,
+        selectedHash:
+          this.selection !== undefined &&
+          this.selection.mode !== "workingTree"
+            ? this.selection.activeHash
+            : undefined,
         rangeAnchorHash,
         selectionHashes,
         selectedFilePath:
@@ -147,6 +229,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
         ...history,
         selection: this.selection,
         viewState: this.viewState(),
+        ...(this.workingTree === undefined
+          ? {}
+          : { workingTree: this.workingTree }),
       });
       if (this.selection !== undefined) {
         await this.loadFiles(this.selection);
@@ -159,6 +244,67 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  private async refreshWorkingTree(): Promise<void> {
+    const repository = this.repository;
+    const headHash = this.currentHead();
+    if (repository === undefined || headHash === undefined) {
+      return;
+    }
+    const request = ++this.workingTreeRequest;
+    try {
+      const state = await this.git.workingTreeChanges(repository, headHash);
+      if (request !== this.workingTreeRequest) {
+        return;
+      }
+      this.workingTree = state.files.length === 0 ? undefined : state;
+      this.workingTreeVersion += 1;
+
+      if (this.selection?.mode === "workingTree") {
+        if (this.workingTree === undefined) {
+          const headSelection = singleCommitSelection(headHash);
+          await this.post({
+            type: "workingTree",
+            workingTree: undefined,
+            selection: headSelection,
+          });
+          await this.selectAndLoad(headSelection);
+          return;
+        }
+        const nextSelection = workingTreeSelection(
+          headHash,
+          this.workingTreeVersion,
+        );
+        this.selection = nextSelection;
+        this.navigationState = {
+          selectedWorkingTree: true,
+          selectedFilePath: this.navigationState.selectedFilePath,
+        };
+        await this.persistNavigationState();
+        await this.post({
+          type: "workingTree",
+          workingTree: this.workingTree,
+          selection: nextSelection,
+        });
+        await this.loadFiles(nextSelection);
+        return;
+      }
+
+      await this.post({
+        type: "workingTree",
+        workingTree: this.workingTree,
+        selection: this.selection,
+      });
+    } catch (error) {
+      if (request !== this.workingTreeRequest) {
+        return;
+      }
+      await this.post({
+        type: "workingTreeError",
+        message: userMessage(error),
+      });
+    }
+  }
+
   private async receiveMessage(message: unknown): Promise<void> {
     await this.stateReady;
     if (message === null || typeof message !== "object") {
@@ -168,6 +314,19 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
 
     if (value.type === "ready" || value.type === "refresh") {
       await this.refresh();
+      return;
+    }
+
+    if (value.type === "selectWorkingTree") {
+      const workingTree = this.workingTree;
+      if (workingTree !== undefined) {
+        await this.selectAndLoad(
+          workingTreeSelection(
+            workingTree.headHash,
+            this.workingTreeVersion,
+          ),
+        );
+      }
       return;
     }
 
@@ -248,7 +407,10 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     this.currentFiles = [];
     this.selectionFiles.clear();
     this.navigationState = {
-      selectedHash: selection.activeHash,
+      selectedWorkingTree:
+        selection.mode === "workingTree" ? true : undefined,
+      selectedHash:
+        selection.mode === "workingTree" ? undefined : selection.activeHash,
       rangeAnchorHash:
         selection.mode === "range" ? selection.anchorHash : undefined,
       selectionHashes:
@@ -263,9 +425,8 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async loadFiles(selection: RepositorySelection): Promise<void> {
-    const commit = this.commits.get(selection.activeHash);
     const repository = this.repository;
-    if (commit === undefined || repository === undefined) {
+    if (repository === undefined) {
       return;
     }
 
@@ -274,13 +435,22 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
     try {
       let states: SelectionFileState[] | undefined;
       let files: ChangedFile[];
-      if (selection.mode === "selection") {
+      if (selection.mode === "workingTree") {
+        files =
+          this.workingTree?.headHash === selection.headHash
+            ? this.workingTree.files
+            : [];
+      } else if (selection.mode === "selection") {
         states = await this.loadSelectionFiles(
           repository,
           selection.commitHashes,
         );
         files = states.map((state) => state.file);
       } else if (selection.mode === "single") {
+        const commit = this.commits.get(selection.activeHash);
+        if (commit === undefined) {
+          return;
+        }
         files = await this.git.changedFiles(repository, commit);
       } else {
         files = await this.git.changedFilesBetween(
@@ -341,6 +511,11 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    if (selection.mode === "workingTree") {
+      await this.openWorkingTreeDiff(selection, file, repository);
+      return;
+    }
+
     if (selection.mode === "selection") {
       const state = this.selectionFiles.get(path);
       if (state !== undefined) {
@@ -381,6 +556,63 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       diffIdentity,
       request,
     );
+  }
+
+  private async openWorkingTreeDiff(
+    selection: Extract<RepositorySelection, { mode: "workingTree" }>,
+    file: ChangedFile,
+    repository: string,
+  ): Promise<void> {
+    const unsupportedMessage = fileContentMessage(file.content);
+    if (unsupportedMessage !== undefined) {
+      await vscode.window.showInformationMessage(unsupportedMessage);
+      return;
+    }
+    const identity = selectionIdentity(selection);
+    const request = this.selectionRequest;
+    const beforePath = file.oldPath ?? file.path;
+    try {
+      const [before, after] = await Promise.all([
+        file.status.startsWith("A")
+          ? Promise.resolve(Buffer.alloc(0))
+          : this.git.readBlob(repository, selection.headHash, beforePath),
+        file.status.startsWith("D")
+          ? Promise.resolve(Buffer.alloc(0))
+          : this.git.readWorkingFile(repository, file.path),
+      ]);
+      if (
+        request !== this.selectionRequest ||
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== identity
+      ) {
+        return;
+      }
+      if (isBinary(before) || isBinary(after)) {
+        await vscode.window.showInformationMessage(
+          "GitAmida: This file contains binary data, so a text diff was not opened.",
+        );
+        return;
+      }
+      const left = this.contentProvider.add(
+        beforePath,
+        "Working-Tree-base",
+        before.toString("utf8"),
+      );
+      const right = this.contentProvider.add(
+        file.path,
+        "Working-Tree",
+        after.toString("utf8"),
+      );
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        left,
+        right,
+        `${basename(file.path)} (Working Tree)`,
+        { preview: true },
+      );
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
   }
 
   private async openSelectionDiff(
@@ -507,6 +739,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   }
 
   private selectionLabel(selection: RepositorySelection): string {
+    if (selection.mode === "workingTree") {
+      return "Working-Tree";
+    }
     if (selection.mode === "single") {
       return (
         this.commits.get(selection.activeHash)?.shortHash ??
@@ -523,6 +758,10 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
       this.commits.get(selection.newestHash)?.shortHash ??
       selection.newestHash.slice(0, 8);
     return `${oldest}…${newest}`;
+  }
+
+  private currentHead(): string | undefined {
+    return this.headHash;
   }
 
   private async loadSelectionFiles(
@@ -629,16 +868,9 @@ export class HistoryViewProvider implements vscode.WebviewViewProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <link href="${styleUri}" rel="stylesheet">
-  <title>GitAmida</title>
+<title>GitAmida</title>
 </head>
 <body>
-  <header class="repository-bar">
-    <div class="repository-identity">
-      <strong id="repository-name">GitAmida</strong>
-      <span id="repository-meta">Open a Git repository to begin</span>
-    </div>
-    <button id="refresh" class="icon-button" type="button" title="Refresh history" aria-label="Refresh history">↻</button>
-  </header>
   <main id="workspace" class="workspace" data-history-ratio="55">
     <section class="pane history-pane" aria-labelledby="history-heading">
       <div class="pane-heading">

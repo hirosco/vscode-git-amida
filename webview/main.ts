@@ -6,10 +6,10 @@ import type {
   FileViewMode,
   GraphLine,
   HistoryRow,
-  RepositoryInfo,
   RepositorySelection,
   RepositoryViewState,
   RepositoryViewStatePatch,
+  WorkingTreeState,
 } from "../src/model";
 import type {
   HostToWebviewMessage,
@@ -35,8 +35,6 @@ const elements = {
   history: element<HTMLDivElement>("history"),
   historyCount: element<HTMLSpanElement>("history-count"),
   inspection: element<HTMLElement>("inspection"),
-  repositoryMeta: element<HTMLSpanElement>("repository-meta"),
-  repositoryName: element<HTMLElement>("repository-name"),
   selectedCommit: element<HTMLSpanElement>("selected-commit"),
   status: element<HTMLElement>("status"),
   toggleDetails: element<HTMLButtonElement>("toggle-details"),
@@ -48,6 +46,7 @@ const elements = {
 
 let selection: RepositorySelection | undefined;
 let currentHead: string | undefined;
+let workingTree: WorkingTreeState | undefined;
 let selectedFilePath: string | undefined;
 let commits = new Map<string, Commit>();
 let currentFiles: ChangedFile[] = [];
@@ -57,10 +56,6 @@ let historyRatio = 55;
 let filesRatio = 65;
 let detailsCollapsed = false;
 let expandedTreePaths = new Set<string>();
-
-element<HTMLButtonElement>("refresh").addEventListener("click", () => {
-  vscode.postMessage({ type: "refresh" });
-});
 
 elements.flatMode.addEventListener("click", () => setFileViewMode("flat"));
 elements.treeMode.addEventListener("click", () => setFileViewMode("tree"));
@@ -96,9 +91,27 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       applyViewState(message.viewState);
       selection = message.selection;
       currentHead = message.repository.head;
-      renderRepository(message.repository);
+      workingTree = message.workingTree;
       renderHistory(message.rows, message.graphLaneCount);
       renderSelectionDetails();
+      break;
+    case "workingTree":
+      workingTree = message.workingTree;
+      selection = message.selection;
+      const restoreHistoryFocus = renderWorkingTreeRow();
+      updateCommitSelection();
+      if (restoreHistoryFocus) {
+        elements.history
+          .querySelector<HTMLElement>(".history-row.selected")
+          ?.focus({ preventScroll: true });
+      }
+      renderSelectionDetails();
+      setStatus(
+        "Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.",
+      );
+      break;
+    case "workingTreeError":
+      setStatusWithRetry(message.message);
       break;
     case "filesLoading":
       if (!sameSelection(message.selection, selection)) {
@@ -138,8 +151,9 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       break;
     case "error":
       commits.clear();
+      workingTree = undefined;
       selection = undefined;
-      setEmpty(elements.history, message.message, true);
+      setEmptyWithRetry(elements.history, message.message);
       setEmpty(elements.files, "No changed files.");
       setEmpty(elements.details, "No commit selected.");
       setStatus(message.message, true);
@@ -147,13 +161,15 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
   }
 });
 
-function renderRepository(repository: RepositoryInfo): void {
-  elements.repositoryName.textContent = repository.name;
-  elements.repositoryMeta.textContent = `${repository.branch} · ${shortHash(repository.head, 12)}`;
-  elements.repositoryMeta.title = repository.root;
-}
-
 function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
+  const scrollTop = elements.history.scrollTop;
+  const selectedRow = elements.history.querySelector<HTMLElement>(
+    ".history-row.selected",
+  );
+  const selectedOffset =
+    selectedRow === null ? undefined : selectedRow.offsetTop - scrollTop;
+  const restoreFocus =
+    selectedRow !== null && selectedRow.contains(document.activeElement);
   elements.history.replaceChildren();
   commits = new Map();
   const historyPane = elements.history.closest<HTMLElement>(".history-pane");
@@ -162,6 +178,8 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     historyPane.dataset.graphSize = metrics.size;
   }
   elements.historyCount.textContent = `${rows.length} commits`;
+
+  renderWorkingTreeRow();
 
   for (const row of rows) {
     commits.set(row.commit.hash, row.commit);
@@ -213,19 +231,98 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
         return;
       }
       navigateRows(event, ".history-row", (target) => {
-        const hash = target.dataset.hash;
-        if (hash !== undefined) {
-          selectCommit(hash, event.shiftKey, false);
-        }
+        selectHistoryTarget(target, event.shiftKey);
       });
     });
     elements.history.append(button);
   }
 
   updateCommitSelection();
+  const nextSelectedRow = elements.history.querySelector<HTMLElement>(
+    ".history-row.selected",
+  );
+  elements.history.scrollTop =
+    selectedOffset === undefined || nextSelectedRow === null
+      ? scrollTop
+      : Math.max(0, nextSelectedRow.offsetTop - selectedOffset);
+  if (restoreFocus) {
+    nextSelectedRow?.focus({ preventScroll: true });
+  }
   setStatus(
     "Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.",
   );
+}
+
+function renderWorkingTreeRow(): boolean {
+  const existing = elements.history.querySelector<HTMLElement>(
+    ".working-tree-row",
+  );
+  const hadRow = existing !== null;
+  const scrollTop = elements.history.scrollTop;
+  const rowHeight = existing?.offsetHeight ?? 25;
+  if (workingTree === undefined) {
+    const restoreFocus =
+      existing !== null && existing.contains(document.activeElement);
+    existing?.remove();
+    if (hadRow && scrollTop > 0) {
+      elements.history.scrollTop = Math.max(0, scrollTop - rowHeight);
+    }
+    return restoreFocus;
+  }
+
+  const fileCount = workingTree.files.length;
+  const label = `Uncommitted changes (${fileCount})`;
+  if (existing !== null) {
+    const subject = existing.querySelector<HTMLElement>(".subject");
+    if (subject !== null) {
+      subject.textContent = label;
+    }
+    existing.setAttribute(
+      "aria-label",
+      `${label}, saved working tree compared with HEAD`,
+    );
+    return false;
+  }
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-row history-columns working-tree-row";
+  button.dataset.workingTree = "true";
+  button.setAttribute("role", "option");
+  button.setAttribute(
+    "aria-label",
+    `${label}, saved working tree compared with HEAD`,
+  );
+  const commitCell = span("commit-cell working-tree-cell", "");
+  commitCell.append(span("subject", label));
+  button.append(createWorkingTreeMarker(), commitCell, span("date", ""));
+  button.addEventListener("click", () => selectWorkingTree());
+  button.addEventListener("keydown", (event) => {
+    navigateRows(event, ".history-row", (target) => {
+      selectHistoryTarget(target, event.shiftKey);
+    });
+  });
+  elements.history.prepend(button);
+  if (!hadRow && scrollTop > 0) {
+    elements.history.scrollTop = scrollTop + rowHeight;
+  }
+  return false;
+}
+
+function createWorkingTreeMarker(): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("graph", "working-tree-graph");
+  svg.setAttribute("viewBox", "0 0 54 25");
+  svg.setAttribute("preserveAspectRatio", "xMinYMid meet");
+  svg.setAttribute("aria-hidden", "true");
+  const marker = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+  marker.classList.add("working-tree-marker");
+  marker.setAttribute("d", "M 6 7 L 11 12.5 L 6 18 L 1 12.5 Z");
+  svg.append(marker);
+  return svg;
 }
 
 type GraphSize = "small" | "medium" | "large" | "xlarge" | "wide";
@@ -488,7 +585,7 @@ function renderFiles(): void {
   elements.files.replaceChildren();
   if (currentFiles.length === 0) {
     const noun = selectionNoun();
-    const qualifier = selection?.mode === "selection" ? "" : " final";
+    const qualifier = selection?.mode === "range" ? " final" : "";
     setEmpty(elements.files, `This ${noun} has no${qualifier} file changes.`);
     setStatus(`No${qualifier} file changes in the selected ${noun}.`);
     return;
@@ -629,6 +726,11 @@ function renderSelectionDetails(): void {
     return;
   }
 
+  if (selection.mode === "workingTree") {
+    renderWorkingTreeDetails(selection);
+    return;
+  }
+
   const commit = commits.get(selection.activeHash);
   if (commit === undefined) {
     elements.detailsHeading.textContent = "Commit details";
@@ -660,6 +762,25 @@ function renderSelectionDetails(): void {
     commit.parents[0] ?? "Empty tree (root commit)",
   );
   elements.details.append(subject, list);
+}
+
+function renderWorkingTreeDetails(
+  current: Extract<RepositorySelection, { mode: "workingTree" }>,
+): void {
+  elements.detailsHeading.textContent = "Commit details";
+  const heading = document.createElement("h3");
+  heading.className = "details-subheading";
+  heading.textContent = "Working tree details";
+  const subject = document.createElement("p");
+  subject.className = "details-subject";
+  subject.textContent = "Uncommitted changes";
+  const list = document.createElement("dl");
+  list.className = "details-list";
+  appendDetail(list, "Base HEAD", current.headHash);
+  appendDetail(list, "Files", String(workingTree?.files.length ?? 0));
+  appendDetail(list, "Comparison", "HEAD → saved working tree");
+  appendDetail(list, "Unsaved editors", "Excluded until saved");
+  elements.details.append(heading, subject, list);
 }
 
 function renderExplicitSelectionDetails(
@@ -898,6 +1019,23 @@ function selectCommit(hash: string, extend: boolean, toggle: boolean): void {
   vscode.postMessage({ type: "selectCommit", hash, extend, toggle });
 }
 
+function selectWorkingTree(): void {
+  if (selection?.mode !== "workingTree") {
+    vscode.postMessage({ type: "selectWorkingTree" });
+  }
+}
+
+function selectHistoryTarget(target: HTMLElement, extend: boolean): void {
+  if (target.dataset.workingTree === "true") {
+    selectWorkingTree();
+    return;
+  }
+  const hash = target.dataset.hash;
+  if (hash !== undefined) {
+    selectCommit(hash, extend, false);
+  }
+}
+
 function selectFile(path: string): void {
   selectedFilePath = path;
   updateFileSelection();
@@ -911,13 +1049,22 @@ function updateCommitSelection(): void {
   const selectedHashes =
     selection?.mode === "range" || selection?.mode === "selection"
       ? new Set(selection.commitHashes)
-      : new Set(selection === undefined ? [] : [selection.activeHash]);
+      : new Set(
+          selection === undefined || selection.mode === "workingTree"
+            ? []
+            : [selection.activeHash],
+        );
   for (const row of elements.history.querySelectorAll<HTMLElement>(
     ".history-row",
   )) {
+    const isWorkingTree = row.dataset.workingTree === "true";
     const hash = row.dataset.hash;
     const inSelection = hash !== undefined && selectedHashes.has(hash);
-    const active = hash !== undefined && hash === selection?.activeHash;
+    const active = isWorkingTree
+      ? selection?.mode === "workingTree"
+      : hash !== undefined &&
+        selection?.mode !== "workingTree" &&
+        hash === selection?.activeHash;
     const endpoint =
       selection?.mode === "range" &&
       (hash === selection.oldestHash || hash === selection.newestHash);
@@ -931,7 +1078,7 @@ function updateCommitSelection(): void {
     );
     row.classList.toggle("range-endpoint", endpoint);
     row.classList.toggle("selected", active);
-    row.setAttribute("aria-selected", String(inSelection));
+    row.setAttribute("aria-selected", String(isWorkingTree ? active : inSelection));
   }
 }
 
@@ -1168,9 +1315,34 @@ function setEmpty(
   container.append(paragraph);
 }
 
+function setEmptyWithRetry(container: HTMLElement, message: string): void {
+  container.replaceChildren();
+  const wrapper = document.createElement("div");
+  wrapper.className = "empty-state error retry-state";
+  wrapper.append(span("", message), createRetryButton());
+  container.append(wrapper);
+}
+
 function setStatus(message: string, error = false): void {
-  elements.status.textContent = message;
+  elements.status.replaceChildren(span("status-message", message));
   elements.status.classList.toggle("error", error);
+}
+
+function setStatusWithRetry(message: string): void {
+  elements.status.replaceChildren(
+    span("status-message", message),
+    createRetryButton(),
+  );
+  elements.status.classList.add("error");
+}
+
+function createRetryButton(): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "retry-button";
+  button.textContent = "Retry";
+  button.addEventListener("click", () => vscode.postMessage({ type: "refresh" }));
+  return button;
 }
 
 function span(className: string, text: string): HTMLSpanElement {
@@ -1191,8 +1363,15 @@ function sameSelection(
   if (right === undefined || left.mode !== right.mode) {
     return false;
   }
+  if (left.mode === "workingTree") {
+    return (
+      right.mode === "workingTree" &&
+      left.headHash === right.headHash &&
+      left.version === right.version
+    );
+  }
   if (left.mode === "single") {
-    return left.activeHash === right.activeHash;
+    return right.mode === "single" && left.activeHash === right.activeHash;
   }
   if (left.mode === "range") {
     return (
@@ -1208,6 +1387,9 @@ function sameSelection(
 }
 
 function selectionLabel(value: RepositorySelection): string {
+  if (value.mode === "workingTree") {
+    return "Working tree";
+  }
   if (value.mode === "single") {
     return (
       commits.get(value.activeHash)?.shortHash ?? shortHash(value.activeHash)
@@ -1223,7 +1405,10 @@ function selectionLabel(value: RepositorySelection): string {
   return `Range ${oldest}…${newest}`;
 }
 
-function selectionNoun(): "commit" | "Range" | "Selection" {
+function selectionNoun(): "commit" | "Range" | "Selection" | "working tree" {
+  if (selection?.mode === "workingTree") {
+    return "working tree";
+  }
   if (selection?.mode === "range") {
     return "Range";
   }

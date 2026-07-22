@@ -67,6 +67,10 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Prefetch history automatically near the loaded end; do not use a routine **Load more** button. Offer retry only after a loading failure.
 - Keep visual preferences global to the current editor profile. Reserve workspace state for repository-specific navigation such as the selected commit and file, and do not persist transient tree expansion.
 - Keep commit ordering and other future behavioral options global rather than allowing workspace-specific overrides.
+- Do not reserve Webview height for repository metadata in a single-root workspace. Add a compact repository chooser only when multi-root selection is implemented and multiple repositories are available.
+- Show saved working-tree changes as one transient row above commits only while dirty. Keep it visually distinct, compare it with HEAD, and never include it in Range or Selection.
+- Exclude unsaved editor buffers from the working-tree row until they are saved.
+- Preserve commit selection and scroll while working-tree updates appear or disappear; return a selected working-tree row to HEAD when the repository becomes clean.
 
 ## File History UI
 
@@ -120,6 +124,9 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Use VS Code theme tokens and accessibility semantics.
 - Use `TextDocumentContentProvider` for read-only historical text and `vscode.diff` for comparison.
 - Treat binary content, unsupported encodings, and oversized blobs explicitly rather than coercing them into a text diff.
+- Debounce built-in Git repository events. Refresh only working-tree state when HEAD and refs are stable, and reload history when their fingerprint changes.
+- Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.
+- Keep manual refresh available from the Command Palette and inline retry after errors, without a routine visible refresh button.
 
 ## Diff conventions
 

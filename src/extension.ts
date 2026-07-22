@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 
 import { GitContentProvider } from "./contentProvider";
 import { GitClient } from "./git";
+import { observeGitRepositories } from "./gitEvents";
 import { HistoryViewProvider } from "./panel";
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -31,7 +32,21 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("gitAmida.refresh", async () => {
       await historyProvider.refresh();
     }),
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      if (document.uri.scheme === "file") {
+        historyProvider.scheduleRefresh("workingTree");
+      }
+    }),
+    historyProvider,
   );
+  void observeGitRepositories(
+    context.subscriptions,
+    (repository, scope) => {
+      historyProvider.scheduleRefresh(scope, repository);
+    },
+  ).catch((error: unknown) => {
+    console.warn("GitAmida: automatic Git refresh is unavailable.", error);
+  });
 }
 
 export function deactivate(): void {}

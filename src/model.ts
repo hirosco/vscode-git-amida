@@ -85,6 +85,17 @@ export interface HistoryResult {
   graphLaneCount: number;
 }
 
+export interface WorkingTreeState {
+  headHash: string;
+  files: ChangedFile[];
+}
+
+export interface WorkingTreeSelection {
+  mode: "workingTree";
+  headHash: string;
+  version: number;
+}
+
 export interface SingleCommitSelection {
   mode: "single";
   activeHash: string;
@@ -107,6 +118,7 @@ export interface ExplicitCommitSelection {
 }
 
 export type RepositorySelection =
+  | WorkingTreeSelection
   | SingleCommitSelection
   | CommitRangeSelection
   | ExplicitCommitSelection;
@@ -114,6 +126,7 @@ export type RepositorySelection =
 export type FileViewMode = "flat" | "tree";
 
 export interface RepositoryNavigationState {
+  selectedWorkingTree?: boolean;
   selectedHash?: string;
   rangeAnchorHash?: string;
   selectionHashes?: string[];

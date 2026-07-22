@@ -29,6 +29,7 @@ test("view preferences and navigation state sanitize independently", () => {
   );
   assert.deepEqual(
     sanitizeNavigationState({
+      selectedWorkingTree: true,
       selectedHash: "abc",
       rangeAnchorHash: "def",
       selectionHashes: ["abc", "ghi", "abc", 42],
@@ -36,6 +37,7 @@ test("view preferences and navigation state sanitize independently", () => {
       fileViewMode: "tree",
     }),
     {
+      selectedWorkingTree: true,
       selectedHash: "abc",
       rangeAnchorHash: "def",
       selectionHashes: ["abc", "ghi"],
@@ -43,7 +45,11 @@ test("view preferences and navigation state sanitize independently", () => {
     },
   );
   assert.deepEqual(
-    sanitizeNavigationState({ selectedHash: 12, selectedFilePath: "" }),
+    sanitizeNavigationState({
+      selectedWorkingTree: false,
+      selectedHash: 12,
+      selectedFilePath: "",
+    }),
     {},
   );
 });

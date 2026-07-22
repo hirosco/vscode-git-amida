@@ -16,6 +16,7 @@ import {
   MAX_TEXT_BLOB_BYTES,
   parseBinaryPaths,
   parseHistory,
+  parseNulPaths,
   parseRawDiff,
   parseRefs,
 } from "../src/git";
@@ -125,6 +126,13 @@ test("parseRawDiff and parseBinaryPaths preserve rename metadata", () => {
   );
 });
 
+test("parseNulPaths preserves spaces and non-ASCII paths", () => {
+  assert.deepEqual(
+    parseNulPaths(Buffer.from("space name.txt\x00日本語.txt\x00")),
+    ["space name.txt", "日本語.txt"],
+  );
+});
+
 test("GitClient loads root and later commit changes from a temporary repository", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));
@@ -172,6 +180,59 @@ test("GitClient loads root and later commit changes from a temporary repository"
   assert.deepEqual(await client.changedFiles(history.repository.root, root), [
     { status: "A", path: "hello.txt" },
   ]);
+});
+
+test("GitClient loads saved tracked and untracked working tree changes", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-working-tree-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "modified.txt"), "base\n");
+  writeFileSync(join(repository, "staged.txt"), "base\n");
+  writeFileSync(join(repository, "deleted.txt"), "delete me\n");
+  writeFileSync(join(repository, "old name.txt"), "rename me\n");
+  git(repository, "add", "--", ".");
+  git(repository, "commit", "-q", "-m", "base");
+  const headHash = git(repository, "rev-parse", "HEAD").trim();
+
+  writeFileSync(join(repository, "modified.txt"), "working\n");
+  writeFileSync(join(repository, "staged.txt"), "staged\n");
+  git(repository, "add", "--", "staged.txt");
+  rmSync(join(repository, "deleted.txt"));
+  renameSync(
+    join(repository, "old name.txt"),
+    join(repository, "renamed name.txt"),
+  );
+  git(repository, "add", "--", "old name.txt", "renamed name.txt");
+  writeFileSync(join(repository, "日本語 space.txt"), "untracked\n");
+  writeFileSync(join(repository, "untracked.bin"), Buffer.from([0, 1, 2]));
+
+  const client = new GitClient();
+  const state = await client.workingTreeChanges(repository, headHash);
+  assert.equal(state.headHash, headHash);
+  const files = new Map(state.files.map((file) => [file.path, file]));
+  assert.equal(files.get("modified.txt")?.status, "M");
+  assert.equal(files.get("staged.txt")?.status, "M");
+  assert.equal(files.get("deleted.txt")?.status, "D");
+  assert.match(files.get("renamed name.txt")?.status ?? "", /^R/);
+  assert.equal(files.get("renamed name.txt")?.oldPath, "old name.txt");
+  assert.equal(files.get("日本語 space.txt")?.status, "A");
+  assert.deepEqual(files.get("untracked.bin")?.content, {
+    kind: "binary",
+    size: 3,
+  });
+  assert.equal(
+    (await client.readWorkingFile(repository, "日本語 space.txt")).toString(
+      "utf8",
+    ),
+    "untracked\n",
+  );
+  await assert.rejects(
+    client.readWorkingFile(repository, "../outside.txt"),
+    /outside the repository/,
+  );
 });
 
 test("GitClient loads all branch, remote, and tag history in one evaluation pass", async (context) => {

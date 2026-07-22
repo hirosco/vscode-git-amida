@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { basename, extname } from "node:path";
+import { lstat, open, readFile, readlink } from "node:fs/promises";
+import {
+  basename,
+  extname,
+  isAbsolute,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 import { promisify } from "node:util";
 
 import { buildHistoryGraph } from "./graph";
@@ -10,6 +18,7 @@ import type {
   CommitRef,
   HistoryResult,
   RepositoryInfo,
+  WorkingTreeState,
 } from "./model";
 
 const execFileAsync = promisify(execFile);
@@ -41,6 +50,11 @@ export interface RawDiffEntry extends ChangedFile {
 interface ObjectInfo {
   type: string;
   size: number;
+}
+
+interface WorkingFileInfo {
+  size: number;
+  binary: boolean;
 }
 
 export class GitError extends Error {
@@ -113,6 +127,80 @@ export class GitClient {
       commit.parents[0],
       commit.hash,
     );
+  }
+
+  public async workingTreeChanges(
+    repository: string,
+    headHash: string,
+  ): Promise<WorkingTreeState> {
+    const [rawOutput, numStatOutput, untrackedOutput] = await Promise.all([
+      this.run(repository, [
+        "diff",
+        "--raw",
+        "--no-abbrev",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-z",
+        "-M",
+        headHash,
+        "--",
+      ]),
+      this.run(repository, [
+        "diff",
+        "--numstat",
+        "--no-ext-diff",
+        "--no-textconv",
+        "-z",
+        "-M",
+        headHash,
+        "--",
+      ]),
+      this.run(repository, [
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "--",
+      ]),
+    ]);
+    const trackedEntries = parseRawDiff(rawOutput);
+    const untrackedPaths = parseNulPaths(untrackedOutput);
+    const entries: RawDiffEntry[] = [
+      ...trackedEntries,
+      ...untrackedPaths.map((path) => ({
+        status: "A",
+        path,
+        oldMode: "000000",
+        newMode: "100644",
+        oldObject: "0000000000000000000000000000000000000000",
+        newObject: "0000000000000000000000000000000000000000",
+      })),
+    ];
+    const [objectInfo, workingFileInfo] = await Promise.all([
+      this.loadObjectInfo(
+        repository,
+        entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      ),
+      loadWorkingFileInfo(repository, entries, new Set(untrackedPaths)),
+    ]);
+    const binaryPaths = parseBinaryPaths(numStatOutput);
+    const files = entries.map((entry) => {
+      const content = classifyWorkingTreeFile(
+        entry,
+        binaryPaths,
+        objectInfo,
+        workingFileInfo,
+      );
+      return {
+        ...changedFileFromEntry(entry),
+        ...(content === undefined ? {} : { content }),
+      };
+    });
+    files.sort((left, right) => left.path.localeCompare(right.path));
+    return {
+      headHash,
+      files,
+    };
   }
 
   public async changedFilesBetween(
@@ -196,6 +284,24 @@ export class GitClient {
       return Buffer.alloc(0);
     }
     return this.run(repository, ["cat-file", "blob", `${ref}:${path}`]);
+  }
+
+  public async readWorkingFile(
+    repository: string,
+    path: string,
+  ): Promise<Buffer> {
+    const absolutePath = resolveWorkingPath(repository, path);
+    const stats = await lstat(absolutePath);
+    if (stats.isSymbolicLink()) {
+      return Buffer.from(await readlink(absolutePath));
+    }
+    if (!stats.isFile()) {
+      throw new GitError(`Working tree path is not a regular file: ${path}`);
+    }
+    if (stats.size > MAX_TEXT_BLOB_BYTES) {
+      throw new GitError(`Working tree file is larger than 5 MiB: ${path}`);
+    }
+    return readFile(absolutePath);
   }
 
   private async loadObjectInfo(
@@ -510,6 +616,84 @@ export function parseBinaryPaths(output: Buffer): Set<string> {
   return paths;
 }
 
+export function parseNulPaths(output: Buffer): string[] {
+  return output
+    .toString("utf8")
+    .split("\x00")
+    .filter((path) => path.length > 0);
+}
+
+async function loadWorkingFileInfo(
+  repository: string,
+  entries: RawDiffEntry[],
+  binaryDetectionPaths: ReadonlySet<string>,
+): Promise<Map<string, WorkingFileInfo>> {
+  const info = new Map<string, WorkingFileInfo>();
+  const paths = [
+    ...new Set(
+      entries
+        .filter(
+          (entry) =>
+            entry.newMode !== "000000" && entry.newMode !== "160000",
+        )
+        .map((entry) => entry.path),
+    ),
+  ];
+  for (const path of paths) {
+    const absolutePath = resolveWorkingPath(repository, path);
+    try {
+      const stats = await lstat(absolutePath);
+      if (stats.isSymbolicLink()) {
+        const target = await readlink(absolutePath);
+        info.set(path, { size: Buffer.byteLength(target), binary: false });
+        continue;
+      }
+      if (!stats.isFile()) {
+        continue;
+      }
+      const binary = binaryDetectionPaths.has(path)
+        ? await workingFileContainsNul(absolutePath, stats.size)
+        : false;
+      info.set(path, { size: stats.size, binary });
+    } catch {
+      // The path may change again while Git status is being refreshed.
+      continue;
+    }
+  }
+  return info;
+}
+
+async function workingFileContainsNul(
+  absolutePath: string,
+  size: number,
+): Promise<boolean> {
+  if (size === 0) {
+    return false;
+  }
+  const handle = await open(absolutePath, "r");
+  try {
+    const sample = Buffer.alloc(Math.min(8 * 1024, size));
+    const { bytesRead } = await handle.read(sample, 0, sample.length, 0);
+    return sample.subarray(0, bytesRead).includes(0);
+  } finally {
+    await handle.close();
+  }
+}
+
+function resolveWorkingPath(repository: string, path: string): string {
+  const root = resolve(repository);
+  const absolutePath = resolve(root, path);
+  const relativePath = relative(root, absolutePath);
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    throw new GitError(`Working tree path is outside the repository: ${path}`);
+  }
+  return absolutePath;
+}
+
 function parseObjectInfo(output: Buffer): Map<string, ObjectInfo> {
   const info = new Map<string, ObjectInfo>();
   for (const line of output.toString("utf8").trim().split("\n")) {
@@ -546,6 +730,37 @@ function classifyChangedFile(
     return { kind: "oversized", size };
   }
   if (binaryPaths.has(entry.path)) {
+    return { kind: "binary", ...(size === undefined ? {} : { size }) };
+  }
+  return undefined;
+}
+
+function classifyWorkingTreeFile(
+  entry: RawDiffEntry,
+  binaryPaths: ReadonlySet<string>,
+  objectInfo: ReadonlyMap<string, ObjectInfo>,
+  workingFileInfo: ReadonlyMap<string, WorkingFileInfo>,
+): ChangedFile["content"] {
+  if (entry.oldMode === "160000" || entry.newMode === "160000") {
+    return { kind: "submodule" };
+  }
+  const objectSizes = [entry.oldObject, entry.newObject]
+    .map((hash) => objectInfo.get(hash))
+    .filter((info): info is ObjectInfo => info?.type === "blob")
+    .map((info) => info.size);
+  const workingInfo = workingFileInfo.get(entry.path);
+  const sizes = [
+    ...objectSizes,
+    ...(workingInfo === undefined ? [] : [workingInfo.size]),
+  ];
+  const size = sizes.length === 0 ? undefined : Math.max(...sizes);
+  if (isImagePath(entry.path) || isImagePath(entry.oldPath ?? "")) {
+    return { kind: "image", ...(size === undefined ? {} : { size }) };
+  }
+  if (size !== undefined && size > MAX_TEXT_BLOB_BYTES) {
+    return { kind: "oversized", size };
+  }
+  if (binaryPaths.has(entry.path) || workingInfo?.binary === true) {
     return { kind: "binary", ...(size === undefined ? {} : { size }) };
   }
   return undefined;
