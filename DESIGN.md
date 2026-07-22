@@ -32,7 +32,7 @@ The commit list is optimized for scanning a large history.
 - Show graph, subject, and date in the history list; keep author information in commit details
 - Order commits by commit date while ensuring that no parent appears before its children, and show the committed timestamp in the date column
 - Give the subject flexible width and truncate it with an accessible full-value label
-- Mark local and remote HEAD positions with compact, unbordered icon-and-text `HEAD` indicators instead of competing with the graph gutter
+- Mark local HEAD with a ring around a visible center dot while retaining compact local and remote icon-and-text `HEAD` indicators for explicit identification
 - Label local and remote-tracking `main` or `master` refs as compact orientation anchors; render each ref independently even when both point to the same commit, and distinguish them through filled and outlined symbols
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
 - Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
@@ -66,7 +66,7 @@ The details pane shows:
 - Full selectable commit hash without a persistent copy button; provide copying through contextual actions
 - Author name and email
 - Authored or committed time, with the chosen meaning labeled
-- Branch and tag refs pointing directly at the selected commit
+- Branch and tag refs pointing directly at the selected commit, shown one per line with the same local, remote, and tag indicators used in Repository History
 - Parent commits
 - The active comparison parent for a merge commit
 
@@ -74,9 +74,9 @@ Selecting a commit updates both changed files and details. Loading either area m
 
 ### Commit graph
 
-The Extension Host derives a lane model from commit hashes and parents instead of accepting terminal graph text from Git. Each history row carries typed line segments and a commit node; the Webview renders them as a compact SVG aligned with the row. Lane transitions use unsmoothed straight segments so branches and merges remain visually discrete in the dense Panel layout. This prevents terminal ANSI sequences from leaking into the browser and keeps graph structure independent of user Git color configuration.
+The Extension Host derives a lane model from commit hashes and parents instead of accepting terminal graph text from Git. Each history row carries typed line segments and a commit node; the Webview renders them as a compact SVG aligned with the row. Lane transitions use unsmoothed straight segments so branches and merges remain visually discrete in the dense Panel layout. Lines meet ordinary filled nodes without a background gap; local HEAD connections stop at the outside of its ring instead of crossing the marker. Lines that share a parent remain separate until they converge at that parent's node, making the exact branch point visible instead of joining between commits. This prevents terminal ANSI sequences from leaking into the browser and keeps graph structure independent of user Git color configuration.
 
-Lane colors use VS Code's `scmGraph.foreground1` through `scmGraph.foreground5` theme tokens with standard workbench fallbacks. The graph column grows in bounded steps as concurrent lanes increase, then compresses lane spacing rather than taking unbounded horizontal space from commit subjects. The current evaluation build lays out the complete loaded history in one pass; pagination must later preserve active lane and color state across loaded batches.
+Lane colors use VS Code's `scmGraph.foreground1` through `scmGraph.foreground5` theme tokens with standard workbench fallbacks. When local or remote-tracking `main` or `master` exists, its first-parent backbone reserves the primary graph color. When matching local and remote refs differ only by progress, use the most advanced first-parent tip; prefer the local ref when candidates are not on one first-parent path. Other tips keep a different lane color until they meet that backbone, so progress away from the primary branch remains visible even while only one lane is active. The graph column grows in bounded steps as concurrent lanes increase, then compresses lane spacing rather than taking unbounded horizontal space from commit subjects. The current evaluation build lays out the complete loaded history in one pass; pagination must later preserve active lane and color state across loaded batches.
 
 ## File History
 

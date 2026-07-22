@@ -346,11 +346,6 @@ h2 {
   background: var(--vscode-list-activeSelectionBackground);
 }
 
-.history-row.range-selected .graph-node,
-.history-row.selection-selected .graph-node {
-  stroke: var(--vscode-list-activeSelectionBackground);
-}
-
 .history-row.range-endpoint {
   box-shadow: inset 2px 0 var(--vscode-focusBorder);
 }
@@ -389,17 +384,31 @@ h2 {
 
 .graph-node {
   fill: currentColor;
-  stroke: var(--vscode-panel-background, var(--vscode-editor-background));
-  stroke-width: 1.5px;
+  stroke: none;
   vector-effect: non-scaling-stroke;
 }
 
-.history-row:hover .graph-node {
-  stroke: var(--vscode-list-hoverBackground);
+.graph-head-node {
+  fill: var(--vscode-panel-background, var(--vscode-editor-background));
+  stroke: currentColor;
+  stroke-width: 2px;
 }
 
-.history-row.selected .graph-node {
-  stroke: var(--vscode-list-activeSelectionBackground);
+.graph-head-center {
+  fill: currentColor;
+  stroke: none;
+}
+
+.history-row:hover .graph-head-node {
+  fill: var(--vscode-list-hoverBackground);
+  stroke: currentColor;
+}
+
+.history-row.range-selected .graph-head-node,
+.history-row.selection-selected .graph-head-node,
+.history-row.selected .graph-head-node {
+  fill: var(--vscode-list-activeSelectionBackground);
+  stroke: currentColor;
 }
 
 .graph-color-0 {
@@ -544,12 +553,11 @@ h2 {
 }
 
 .ref-tag .ref-symbol {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border: 0;
   border-radius: 1px;
   background: currentColor;
-  clip-path: polygon(0 0, 62% 0, 100% 50%, 62% 100%, 0 100%);
 }
 
 .ref-detached {
@@ -694,6 +702,28 @@ code {
 .details-list dd {
   min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.details-ref-list {
+  display: grid;
+  gap: 4px;
+}
+
+.details-ref-item {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+}
+
+.details-ref-item .ref-symbol {
+  flex: 0 0 auto;
+}
+
+.details-ref-name {
+  min-width: 0;
+  color: var(--vscode-foreground);
   overflow-wrap: anywhere;
 }
 

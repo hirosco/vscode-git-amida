@@ -177,7 +177,12 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
       `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.committedAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
     );
 
-    const graph = createGraph(row.graph, graphLaneCount, metrics.width);
+    const graph = createGraph(
+      row.graph,
+      graphLaneCount,
+      metrics.width,
+      isHead,
+    );
     graph.setAttribute("aria-hidden", "true");
     const commitCell = document.createElement("span");
     commitCell.className = "commit-cell";
@@ -224,6 +229,7 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
 }
 
 type GraphSize = "small" | "medium" | "large" | "xlarge" | "wide";
+const HEAD_NODE_RADIUS = 5;
 
 function graphMetrics(laneCount: number): { size: GraphSize; width: number } {
   if (laneCount <= 4) {
@@ -245,6 +251,7 @@ function createGraph(
   graph: CommitGraph,
   laneCount: number,
   width: number,
+  isHead: boolean,
 ): SVGSVGElement {
   const height = 25;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -255,19 +262,48 @@ function createGraph(
   for (const line of graph.lines) {
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.classList.add("graph-line", graphColorClass(line.color));
-    path.setAttribute("d", graphPath(line, laneCount, width, height));
+    path.setAttribute(
+      "d",
+      graphPath(
+        line,
+        laneCount,
+        width,
+        height,
+        isHead ? HEAD_NODE_RADIUS : 0,
+      ),
+    );
     svg.append(path);
   }
 
   const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   node.classList.add("graph-node", graphColorClass(graph.nodeColor));
+  if (isHead) {
+    node.classList.add("graph-head-node");
+  }
   node.setAttribute(
     "cx",
     formatGraphNumber(laneX(graph.nodeLane, laneCount, width)),
   );
   node.setAttribute("cy", formatGraphNumber(height / 2));
-  node.setAttribute("r", "3.5");
+  node.setAttribute("r", isHead ? String(HEAD_NODE_RADIUS) : "3.5");
   svg.append(node);
+  if (isHead) {
+    const center = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle",
+    );
+    center.classList.add(
+      "graph-head-center",
+      graphColorClass(graph.nodeColor),
+    );
+    center.setAttribute(
+      "cx",
+      formatGraphNumber(laneX(graph.nodeLane, laneCount, width)),
+    );
+    center.setAttribute("cy", formatGraphNumber(height / 2));
+    center.setAttribute("r", "2");
+    svg.append(center);
+  }
   return svg;
 }
 
@@ -276,14 +312,43 @@ function graphPath(
   laneCount: number,
   width: number,
   height: number,
+  nodeInset: number,
 ): string {
-  const fromX = laneX(line.fromLane, laneCount, width);
-  const toX = laneX(line.toLane, laneCount, width);
-  const fromY = endpointY(line.from, height);
-  const toY = endpointY(line.to, height);
-  const start = `${formatGraphNumber(fromX)} ${formatGraphNumber(fromY)}`;
-  const end = `${formatGraphNumber(toX)} ${formatGraphNumber(toY)}`;
+  let from = {
+    x: laneX(line.fromLane, laneCount, width),
+    y: endpointY(line.from, height),
+  };
+  let to = {
+    x: laneX(line.toLane, laneCount, width),
+    y: endpointY(line.to, height),
+  };
+  if (nodeInset > 0 && line.from === "node") {
+    from = movePointToward(from, to, nodeInset);
+  }
+  if (nodeInset > 0 && line.to === "node") {
+    to = movePointToward(to, from, nodeInset);
+  }
+  const start = `${formatGraphNumber(from.x)} ${formatGraphNumber(from.y)}`;
+  const end = `${formatGraphNumber(to.x)} ${formatGraphNumber(to.y)}`;
   return `M ${start} L ${end}`;
+}
+
+function movePointToward(
+  point: { x: number; y: number },
+  target: { x: number; y: number },
+  distance: number,
+): { x: number; y: number } {
+  const deltaX = target.x - point.x;
+  const deltaY = target.y - point.y;
+  const length = Math.hypot(deltaX, deltaY);
+  if (length === 0) {
+    return point;
+  }
+  const ratio = Math.min(distance / length, 1);
+  return {
+    x: point.x + deltaX * ratio,
+    y: point.y + deltaY * ratio,
+  };
 }
 
 function laneX(lane: number, laneCount: number, width: number): number {
@@ -582,11 +647,7 @@ function renderSelectionDetails(): void {
   );
   appendDetail(list, "Authored", formatFullDate(commit.authoredAt));
   appendDetail(list, "Committed", formatFullDate(commit.committedAt));
-  appendDetail(
-    list,
-    "Refs",
-    commit.refs.map((ref) => ref.name).join(", ") || "—",
-  );
+  appendRefsDetail(list, commit.refs);
   appendDetail(list, "Parents", commit.parents.join(", ") || "None (root commit)");
   appendDetail(
     list,
@@ -790,6 +851,33 @@ function appendDetail(
     description.className = "hash-value";
   }
   description.textContent = value;
+  list.append(term, description);
+}
+
+function appendRefsDetail(
+  list: HTMLDListElement,
+  refs: readonly Commit["refs"][number][],
+): void {
+  const term = document.createElement("dt");
+  term.textContent = "Refs";
+  const description = document.createElement("dd");
+  if (refs.length === 0) {
+    description.textContent = "—";
+    list.append(term, description);
+    return;
+  }
+
+  description.className = "details-ref-list";
+  for (const ref of refs) {
+    const item = document.createElement("span");
+    item.className = `details-ref-item ref-${ref.type}`;
+    item.title = refDescription(ref);
+    item.setAttribute("aria-label", refDescription(ref));
+    const symbol = span("ref-symbol", "");
+    symbol.setAttribute("aria-hidden", "true");
+    item.append(symbol, span("details-ref-name", ref.name));
+    description.append(item);
+  }
   list.append(term, description);
 }
 
