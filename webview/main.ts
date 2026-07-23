@@ -187,6 +187,14 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     button.type = "button";
     button.className = "history-row history-columns";
     button.dataset.hash = row.commit.hash;
+    button.dataset.vscodeContext = JSON.stringify({
+      webviewSection: "commit",
+      preventDefaultContextMenuItems: true,
+      gitAmidaCommitHash: row.commit.hash,
+      gitAmidaHasSwitchableBranch: row.commit.refs.some(
+        (ref) => ref.type === "localBranch" && !ref.current,
+      ),
+    });
     button.setAttribute("role", "option");
     const isHead = row.commit.hash === currentHead;
     const refNames = row.commit.refs.map((ref) => ref.name).join(", ");

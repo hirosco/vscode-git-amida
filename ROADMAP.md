@@ -24,19 +24,16 @@ This checkpoint is complete when the installed extension retains its state in no
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
-## 3. Safe branch switching
+## 3. Visual multi-commit selection
 
-- Keep ref indicators display-only and add **Switch Branch…** to a commit row's native Webview context menu
-- Open a Quick Pick containing every other local branch that points at the selected commit; hide or disable switching when no candidate exists
-- Provide a keyboard-accessible command that opens the same Quick Pick for the selected commit
-- Re-resolve branch candidates in the Extension Host immediately before switching
-- Check dirty tracked files, untracked conflicts, in-progress operations, submodules, and worktree occupancy
-- Explain blocked switches without stashing, discarding, forcing, or saving automatically
-- Refresh all repository state after a successful switch
-- Keep arbitrary commit switching out of the product and provide copyable commit IDs instead
-- Do not create tracking branches from remote-tracking refs until local branch switching is reliable
+- Make Shift selection include every visible commit row between the anchor and active row so the highlighted result matches ordinary contiguous-list selection
+- Keep Range when the visible selection exactly represents one ancestor-related before/after comparison
+- Automatically use explicit Selection when the visible interval contains divergent, unrelated, or date-interleaved commits instead of silently excluding them
+- Keep Changed files, details, and native diffs consistent with the automatically chosen Range or Selection semantics without requiring users to understand the distinction before selecting
+- Preserve Cmd/Ctrl+click and Space as individual inclusion toggles after the initial Shift selection
+- Test linear history, merged side branches, unrelated branches, and date-ordered interleaving where visual order differs from ancestry
 
-This checkpoint is complete when switching behaves predictably in a clean repository and safely refuses every ambiguous state.
+This checkpoint is complete when users can select what they see without learning Git ancestry rules, while every aggregate remains explainable as either a real Range or an explicit Selection.
 
 ## 4. File History investigations
 

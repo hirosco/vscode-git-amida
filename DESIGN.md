@@ -2,11 +2,13 @@
 
 ## Purpose
 
-GitAmida is a focused history navigator for understanding how a repository and its files changed over time.
+GitAmida is a history-centered repository state navigator for understanding where a repository is now and how its files changed over time.
 
 The central experience is Repository History: scan a compact commit graph, inspect changed files and commit details, and open native diffs without hiding the log. File histories branch from that center as independent investigation tabs and can link back to the relevant repository commit.
 
 Reviewing selected commit changes through one explainable, file-oriented view remains a distinctive goal, but it belongs inside this broader history-navigation model rather than defining a separate tool.
+
+The product should provide repository situational awareness in one stable landscape: current HEAD and branch, local and remote orientation, saved working-tree changes, commit relationships, selected change scope, and file-level evidence. VS Code and Cursor expose many of these capabilities across Source Control, the Status Bar, commands, editor diffs, and extensions; GitAmida avoids making users reconstruct the overall state by moving among those surfaces. It may add small navigation mutations such as safe named-branch switching when they follow naturally from the visible history, but it does not become a staging, commit, stash, conflict-resolution, or history-editing client.
 
 ## Product surface
 
@@ -126,8 +128,10 @@ GitAmida plans to support switching to a named branch. It does not provide direc
 - Resolve and validate branch candidates again in the Extension Host instead of trusting stale Webview state
 - Use `git switch` with an argument array and no shell
 - Check working-tree changes, untracked conflicts, in-progress Git operations, submodules, and worktree branch occupancy before switching
+- Refuse switching whenever the current worktree has staged, unstaged, untracked, or unsaved editor changes, even if Git itself could preserve some of them
+- Permit repositories that use worktrees; refuse only when another worktree already has the target branch checked out, and identify that worktree in the notification
 - Never stash, discard, force, or save editor contents automatically
-- Explain why switching is blocked and leave the repository unchanged
+- Explain why switching is blocked in a notification and leave the repository unchanged; do not redirect to Source Control or add recovery actions in the initial implementation
 - Refresh HEAD, branch, history, changed files, details, and relevant file histories after a successful switch
 - Do not create a local tracking branch from a remote-tracking ref in the initial implementation
 

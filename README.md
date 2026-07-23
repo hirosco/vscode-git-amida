@@ -27,12 +27,13 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Deduplicates paths changed by selected commits and opens each file directly from its oldest selected before-state to its newest selected after-state, including intervening revisions of that path without pretending to merge branches
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
 - Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; pinning remains available through the editor
+- Switches to another local branch from a commit's context menu or the Command Palette only after rejecting unsaved editors, dirty worktrees, in-progress Git operations, and targets occupied by another worktree
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Keeps raster images, binary files, submodules, and text blobs over 5 MiB visible and labeled without decoding them as text
 - Runs read-only Git commands without a shell
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
-Paged automatic history loading, file-history tabs, branch switching, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
+Paged automatic history loading, file-history tabs, remote-tracking branch creation, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
 
 ## Try it in Cursor
 
@@ -44,7 +45,7 @@ npm ci
 npm run build
 ```
 
-Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Save a file to inspect the automatically updated **Uncommitted changes** row. Click a commit, Shift+click an ancestor-related commit to select a Range, or use Cmd/Ctrl+click to toggle commits in an explicit Selection. With a history row focused, Space provides the same toggle action. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor.
+Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Save a file to inspect the automatically updated **Uncommitted changes** row. Click a commit, Shift+click an ancestor-related commit to select a Range, or use Cmd/Ctrl+click to toggle commits in an explicit Selection. With a history row focused, Space provides the same toggle action. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor. To switch safely, right-click a commit that has another local branch or focus it and run **GitAmida: Switch Branch…**. GitAmida leaves the repository unchanged and explains the reason whenever the current worktree is not clean or the target is unsafe.
 
 ## Install locally
 

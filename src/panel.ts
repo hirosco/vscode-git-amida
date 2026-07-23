@@ -1,8 +1,12 @@
 import { randomBytes } from "node:crypto";
-import { basename } from "node:path";
+import { basename, isAbsolute, relative, sep } from "node:path";
 
 import * as vscode from "vscode";
 
+import {
+  BranchMutationService,
+  BranchSwitchError,
+} from "./branchSwitcher";
 import { GitContentProvider } from "./contentProvider";
 import { buildFileTree } from "./fileTree";
 import { GitClient, GitError, MAX_TEXT_BLOB_BYTES } from "./git";
@@ -70,6 +74,7 @@ export class HistoryViewProvider
   public constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly git: GitClient,
+    private readonly branchMutations: BranchMutationService,
     private readonly contentProvider: GitContentProvider,
     private readonly workspaceState: vscode.Memento,
     private readonly globalState: vscode.Memento,
@@ -241,6 +246,63 @@ export class HistoryViewProvider
         return;
       }
       await this.post({ type: "error", message: userMessage(error) });
+    }
+  }
+
+  public async switchBranchAtCommit(commitHash?: string): Promise<void> {
+    const repository = this.repository;
+    const selectedHash =
+      commitHash ??
+      (this.selection === undefined || this.selection.mode === "workingTree"
+        ? undefined
+        : this.selection.activeHash);
+    if (
+      repository === undefined ||
+      selectedHash === undefined ||
+      !this.commits.has(selectedHash)
+    ) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a commit with a local branch first.",
+      );
+      return;
+    }
+
+    try {
+      const branches = await this.branchMutations.localBranchesAtCommit(
+        repository,
+        selectedHash,
+      );
+      if (branches.length === 0) {
+        await vscode.window.showInformationMessage(
+          "GitAmida: No other local branch points at this commit.",
+        );
+        return;
+      }
+      const branch = await vscode.window.showQuickPick(branches, {
+        title: "GitAmida: Switch Branch",
+        placeHolder: "Select a local branch pointing at this commit",
+      });
+      if (branch === undefined) {
+        return;
+      }
+
+      await this.branchMutations.switchBranch(
+        repository,
+        branch,
+        selectedHash,
+        this.unsavedEditorPaths(repository),
+      );
+      await this.refresh(false);
+      await vscode.window.showInformationMessage(
+        `GitAmida: Switched to branch "${branch}".`,
+      );
+    } catch (error) {
+      const message = userMessage(error);
+      if (error instanceof BranchSwitchError) {
+        await vscode.window.showWarningMessage(`GitAmida: ${message}`);
+      } else {
+        await vscode.window.showErrorMessage(`GitAmida: ${message}`);
+      }
     }
   }
 
@@ -704,6 +766,17 @@ export class HistoryViewProvider
     return this.currentFiles.find((file) => file.path === path);
   }
 
+  private unsavedEditorPaths(repository: string): string[] {
+    return vscode.workspace.textDocuments
+      .filter(
+        (document) =>
+          document.isDirty &&
+          document.uri.scheme === "file" &&
+          isPathInside(repository, document.uri.fsPath),
+      )
+      .map((document) => document.uri.fsPath);
+  }
+
   private restoreSelection(
     selectedHash: string | undefined,
   ): RepositorySelection | undefined {
@@ -965,4 +1038,14 @@ function userMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function isPathInside(repository: string, path: string): boolean {
+  const relativePath = relative(repository, path);
+  return (
+    relativePath === "" ||
+    (relativePath !== ".." &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath))
+  );
 }

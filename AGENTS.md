@@ -110,9 +110,11 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 - Support named branch switching separately from read-only Git queries.
 - Do not provide arbitrary commit switching or hide detached HEAD behind ordinary switch wording.
-- Before switching, inspect dirty tracked files, untracked conflicts, in-progress Git operations, submodules, and worktree branch occupancy.
+- Before switching, inspect staged, unstaged, untracked, and unsaved editor changes, in-progress Git operations, submodules, and worktree branch occupancy. Refuse any dirty current worktree even when Git could preserve its changes.
+- Do not reject a repository merely because it uses worktrees. Reject only a target branch already checked out by another worktree and identify its path.
 - Never stash, discard, force, or save editor contents automatically.
 - If safety is uncertain, leave the repository unchanged and explain the blocker.
+- Keep refusal handling inside a concise notification; do not redirect to Source Control unless product requirements change.
 - Refresh all repository and history state after a successful switch.
 
 ## Webview and editor integration

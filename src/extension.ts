@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { BranchMutationService } from "./branchSwitcher";
 import { GitContentProvider } from "./contentProvider";
 import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
@@ -7,10 +8,12 @@ import { HistoryViewProvider } from "./panel";
 
 export function activate(context: vscode.ExtensionContext): void {
   const git = new GitClient();
+  const branchMutations = new BranchMutationService();
   const contentProvider = new GitContentProvider();
   const historyProvider = new HistoryViewProvider(
     context.extensionUri,
     git,
+    branchMutations,
     contentProvider,
     context.workspaceState,
     context.globalState,
@@ -32,6 +35,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("gitAmida.refresh", async () => {
       await historyProvider.refresh();
     }),
+    vscode.commands.registerCommand(
+      "gitAmida.switchBranch",
+      async (contextValue?: unknown) => {
+        await historyProvider.switchBranchAtCommit(
+          contextCommitHash(contextValue),
+        );
+      },
+    ),
     vscode.workspace.onDidSaveTextDocument((document) => {
       if (document.uri.scheme === "file") {
         historyProvider.scheduleRefresh("workingTree");
@@ -50,3 +61,11 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {}
+
+function contextCommitHash(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  const hash = (value as Record<string, unknown>).gitAmidaCommitHash;
+  return typeof hash === "string" ? hash : undefined;
+}
