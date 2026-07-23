@@ -115,6 +115,7 @@ export interface ExplicitCommitSelection {
   mode: "selection";
   activeHash: string;
   commitHashes: string[];
+  anchorHash?: string;
 }
 
 export type RepositorySelection =
@@ -128,7 +129,7 @@ export type FileViewMode = "flat" | "tree";
 export interface RepositoryNavigationState {
   selectedWorkingTree?: boolean;
   selectedHash?: string;
-  rangeAnchorHash?: string;
+  selectionAnchorHash?: string;
   selectionHashes?: string[];
   selectedFilePath?: string;
 }

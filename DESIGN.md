@@ -161,9 +161,9 @@ GitAmida uses **selection-scoped, endpoint-based comparison**. A selection deter
 
 This rule, rather than compatibility with another product, is the authority for GitAmida's result semantics. IntelliJ IDEA remains an interaction reference, and comparison against its observed behavior is useful supporting evidence when the result also satisfies GitAmida's explainability and safety requirements.
 
-- Store selection by commit hash so unrelated rows between selected commits do not silently become selected
+- Include every visible row while constructing a Shift interval, then store the resolved selection by commit hash so later refreshes or ordering changes do not silently change it
 - Distinguish internally between a **Range**, which compares two real repository states, and a **Selection**, which investigates an explicit set of commit changes
-- Present the primary interaction as a common selected-commit count; explain the resolved Range or Selection comparison basis in details instead of requiring users to choose or understand the mode before selecting
+- Present the primary interaction as a common selected-commit count and use one **Selected commits** details heading; describe the comparison as a continuous range or per-file selected endpoints instead of exposing Range and Selection as modes users must choose or understand
 - Show the comparison basis or contributing commits instead of presenting an unexplained combined diff
 - Never create a virtual tree by cherry-picking selected commits
 - Exclude paths changed only by unselected commits
@@ -174,9 +174,9 @@ This rule, rather than compatibility with another product, is the authority for 
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
-The inspection pane keeps its stable **Commit details** heading. Range selection adds nested **Range details** and **Selected commits** sections: keep the comparison basis prominent, then show a compact newest-to-oldest list matching Repository History using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+The inspection pane keeps its stable **Commit details** heading. Multiple selection adds a shared **Selected commits** section: identify a Range comparison as a **Continuous range**, keep its comparison basis prominent, then show a compact **Included commits** list matching Repository History using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
 
-Range meaning comes from its displayed base and tip, not from every row physically located between the endpoints. Date-ordered interleaving must not silently redefine it. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
+Range meaning comes from its displayed base and tip. Use Range only when the visible interval contains exactly its contributing commits; classify an interval with unrelated or date-interleaved rows as Selection instead of silently redefining the Range. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 
 The current multiple-commit implementation supports single commits, Range, and explicit Selection. It completes the whole path from choosing commits, through aggregated changed files, to native file diffs without manufacturing a repository state that Git does not contain.
 
@@ -186,7 +186,7 @@ Range endpoints must have an ancestor relationship. Use the first parent of the 
 
 A Selection is an explicit set of commits, including a visible interval that cannot be represented exactly as one Range and a set formed by adding or removing individual commits from an initial visual interval. It is a review focus, not a rewritten history. Cmd/Ctrl+click toggles the pointed commit, while Space toggles the focused history row as the keyboard equivalent. A plain click returns to one commit. Shift selects every visible commit row between the anchor and active row without asking the user to choose a mode: use Range only when that visible interval exactly represents one ancestor-related before/after comparison, and otherwise use Selection.
 
-Keep the original Shift anchor while the active end moves so repeated Shift+click or Shift+keyboard navigation expands or contracts the same visible interval. Preserve that anchor even when the interval is classified as Selection rather than Range. Treat Range and Selection as secondary explanations of how the selected commits are compared, not as different selection gestures the user must learn first.
+Keep the original Shift anchor while the active end moves so repeated Shift+click or Shift+keyboard navigation expands or contracts the same visible interval. Preserve that anchor even when the interval is classified as Selection rather than Range. Keep Range and Selection as internal classifications and describe only how the selected commits are compared, not which selection mode the user entered.
 
 A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate only paths changed by the selected commits and keep each contributing commit visible, but do not imply that the selection is one real final repository state.
 

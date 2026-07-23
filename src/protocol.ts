@@ -34,11 +34,6 @@ export type HostToWebviewMessage =
       selection: RepositorySelection;
       message: string;
     }
-  | {
-      type: "selectionError";
-      selection?: RepositorySelection;
-      message: string;
-    }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =

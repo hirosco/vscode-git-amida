@@ -5,6 +5,7 @@ import type { Commit } from "../src/model";
 import {
   explicitCommitSelection,
   resolveRange,
+  resolveVisibleSelection,
   selectionIdentity,
   singleCommitSelection,
   toggleExplicitCommit,
@@ -159,6 +160,133 @@ test("resolveRange rejects unrelated endpoints explicitly", () => {
   assert.deepEqual(resolveRange(commits, "main", "unrelated"), {
     ok: false,
     message: "Range endpoints must have an ancestor relationship.",
+  });
+});
+
+test("resolveVisibleSelection keeps a linear visible interval as Range", () => {
+  const commits = commitMap([
+    commit("third", ["second"]),
+    commit("second", ["root"]),
+    commit("root", []),
+  ]);
+
+  assert.deepEqual(resolveVisibleSelection(commits, "root", "third"), {
+    mode: "range",
+    anchorHash: "root",
+    activeHash: "third",
+    oldestHash: "root",
+    newestHash: "third",
+    baseHash: undefined,
+    commitHashes: ["root", "second", "third"],
+  });
+});
+
+test("resolveVisibleSelection uses Range only when merge contributors match the visible interval", () => {
+  const matchingOrder = commitMap([
+    commit("merge", ["main", "side"]),
+    commit("side", ["root"]),
+    commit("main", ["root"]),
+    commit("root", []),
+  ]);
+  const interleavedOrder = commitMap([
+    commit("merge", ["main", "side"]),
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ]);
+
+  const matching = resolveVisibleSelection(matchingOrder, "main", "merge");
+  assert.equal(matching.mode, "range");
+  if (matching.mode === "range") {
+    assert.deepEqual(
+      new Set(matching.commitHashes),
+      new Set(["merge", "main", "side"]),
+    );
+  }
+
+  assert.deepEqual(
+    resolveVisibleSelection(interleavedOrder, "main", "merge"),
+    {
+      mode: "selection",
+      activeHash: "merge",
+      anchorHash: "main",
+      commitHashes: ["merge", "main"],
+    },
+  );
+});
+
+test("resolveVisibleSelection includes unrelated date-interleaved rows", () => {
+  const commits = commitMap([
+    commit("third", ["second"]),
+    commit("unrelated", ["unrelated-root"]),
+    commit("second", ["root"]),
+    commit("root", []),
+    commit("unrelated-root", []),
+  ]);
+
+  assert.deepEqual(resolveVisibleSelection(commits, "second", "third"), {
+    mode: "selection",
+    activeHash: "third",
+    anchorHash: "second",
+    commitHashes: ["third", "unrelated", "second"],
+  });
+});
+
+test("resolveVisibleSelection selects unrelated endpoints instead of rejecting them", () => {
+  const commits = commitMap([
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ]);
+
+  assert.deepEqual(resolveVisibleSelection(commits, "side", "main"), {
+    mode: "selection",
+    activeHash: "main",
+    anchorHash: "side",
+    commitHashes: ["main", "side"],
+  });
+});
+
+test("resolveVisibleSelection keeps the original anchor while the active end moves", () => {
+  const commits = commitMap([
+    commit("third", ["second"]),
+    commit("unrelated", ["unrelated-root"]),
+    commit("second", ["root"]),
+    commit("root", []),
+    commit("unrelated-root", []),
+  ]);
+
+  const initial = resolveVisibleSelection(commits, "second", "third");
+  assert.equal(initial.mode, "selection");
+  if (initial.mode === "selection") {
+    assert.equal(initial.anchorHash, "second");
+  }
+
+  assert.deepEqual(resolveVisibleSelection(commits, "second", "root"), {
+    mode: "range",
+    anchorHash: "second",
+    activeHash: "root",
+    oldestHash: "root",
+    newestHash: "second",
+    baseHash: undefined,
+    commitHashes: ["root", "second"],
+  });
+});
+
+test("toggleExplicitCommit updates a Shift-created visible Selection", () => {
+  const commits = commitMap([
+    commit("third", ["second"]),
+    commit("unrelated", ["unrelated-root"]),
+    commit("second", ["root"]),
+    commit("root", []),
+    commit("unrelated-root", []),
+  ]);
+  const visible = resolveVisibleSelection(commits, "second", "third");
+
+  assert.deepEqual(toggleExplicitCommit(commits, visible, "unrelated"), {
+    mode: "selection",
+    activeHash: "third",
+    commitHashes: ["third", "second"],
   });
 });
 

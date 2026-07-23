@@ -23,7 +23,7 @@ import type {
 import type { HostToWebviewMessage } from "./protocol";
 import {
   explicitCommitSelection,
-  resolveRange,
+  resolveVisibleSelection,
   selectionIdentity,
   singleCommitSelection,
   toggleExplicitCommit,
@@ -204,11 +204,9 @@ export class HistoryViewProvider
             this.workingTreeVersion,
           )
         : this.restoreSelection(selectedHash);
-      const rangeAnchorHash =
-        this.selection?.mode === "range"
-          ? this.selection.anchorHash
-          : undefined;
+      const selectionAnchorHash = selectionAnchor(this.selection);
       const selectionHashes =
+        this.selection?.mode === "range" ||
         this.selection?.mode === "selection"
           ? this.selection.commitHashes
           : undefined;
@@ -220,7 +218,7 @@ export class HistoryViewProvider
           this.selection.mode !== "workingTree"
             ? this.selection.activeHash
             : undefined,
-        rangeAnchorHash,
+        selectionAnchorHash,
         selectionHashes,
         selectedFilePath:
           selectedHash === this.navigationState.selectedHash
@@ -409,23 +407,16 @@ export class HistoryViewProvider
       }
       if (value.extend) {
         const anchorHash =
-          this.navigationState.rangeAnchorHash ??
+          this.navigationState.selectionAnchorHash ??
           this.navigationState.selectedHash;
         if (anchorHash !== undefined && anchorHash !== value.hash) {
-          const result = resolveRange(
-            this.commits,
-            anchorHash,
-            value.hash,
+          await this.selectAndLoad(
+            resolveVisibleSelection(
+              this.commits,
+              anchorHash,
+              value.hash,
+            ),
           );
-          if (!result.ok) {
-            await this.post({
-              type: "selectionError",
-              selection: this.selection,
-              message: result.message,
-            });
-            return;
-          }
-          await this.selectAndLoad(result.selection);
           return;
         }
       }
@@ -473,10 +464,11 @@ export class HistoryViewProvider
         selection.mode === "workingTree" ? true : undefined,
       selectedHash:
         selection.mode === "workingTree" ? undefined : selection.activeHash,
-      rangeAnchorHash:
-        selection.mode === "range" ? selection.anchorHash : undefined,
+      selectionAnchorHash: selectionAnchor(selection),
       selectionHashes:
-        selection.mode === "selection" ? selection.commitHashes : undefined,
+        selection.mode === "range" || selection.mode === "selection"
+          ? selection.commitHashes
+          : undefined,
       selectedFilePath: undefined,
     };
     await this.persistNavigationState();
@@ -783,30 +775,40 @@ export class HistoryViewProvider
     if (selectedHash === undefined) {
       return undefined;
     }
-    if (
-      this.navigationState.selectionHashes !== undefined &&
-      this.navigationState.selectionHashes.length > 1
-    ) {
+    const selectedHashes = this.navigationState.selectionHashes;
+    const anchorHash = this.navigationState.selectionAnchorHash;
+    if (selectedHashes !== undefined && selectedHashes.length > 1) {
+      if (
+        anchorHash !== undefined &&
+        anchorHash !== selectedHash &&
+        this.commits.has(anchorHash)
+      ) {
+        const resolved = resolveVisibleSelection(
+          this.commits,
+          anchorHash,
+          selectedHash,
+        );
+        if (selectionHasHashes(resolved, selectedHashes)) {
+          return resolved;
+        }
+      }
       return explicitCommitSelection(
         this.commits,
-        this.navigationState.selectionHashes,
+        selectedHashes,
         selectedHash,
+        anchorHash,
       );
     }
-    const anchorHash = this.navigationState.rangeAnchorHash;
     if (
       anchorHash !== undefined &&
       anchorHash !== selectedHash &&
       this.commits.has(anchorHash)
     ) {
-      const result = resolveRange(
+      return resolveVisibleSelection(
         this.commits,
         anchorHash,
         selectedHash,
       );
-      if (result.ok) {
-        return result.selection;
-      }
     }
     return singleCommitSelection(selectedHash);
   }
@@ -993,11 +995,34 @@ export class HistoryViewProvider
       </section>
     </section>
   </main>
-  <footer id="status" role="status">Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.</footer>
+  <footer id="status" role="status">Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.</footer>
   <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;
   }
+}
+
+function selectionAnchor(
+  selection: RepositorySelection | undefined,
+): string | undefined {
+  if (selection?.mode === "range" || selection?.mode === "selection") {
+    return selection.anchorHash;
+  }
+  return undefined;
+}
+
+function selectionHasHashes(
+  selection: RepositorySelection,
+  hashes: readonly string[],
+): boolean {
+  if (selection.mode !== "range" && selection.mode !== "selection") {
+    return false;
+  }
+  if (selection.commitHashes.length !== hashes.length) {
+    return false;
+  }
+  const expected = new Set(hashes);
+  return selection.commitHashes.every((hash) => expected.has(hash));
 }
 
 function isBinary(content: Buffer): boolean {

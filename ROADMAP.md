@@ -24,20 +24,7 @@ This checkpoint is complete when the installed extension retains its state in no
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
-## 3. Visual multi-commit selection
-
-- Make Shift selection include every visible commit row between the anchor and active row so the highlighted result matches ordinary contiguous-list selection
-- Keep the original Shift anchor while repeated Shift+click or Shift+keyboard navigation expands or contracts the visible interval, including after it is classified as explicit Selection
-- Keep Range when the visible selection exactly represents one ancestor-related before/after comparison
-- Automatically use explicit Selection when the visible interval contains divergent, unrelated, or date-interleaved commits instead of silently excluding them
-- Present a common selected-commit count as the primary state and explain the resolved Range or Selection comparison basis in details rather than making users choose or understand the mode before selecting
-- Keep Changed files, details, and native diffs consistent with the automatically chosen Range or Selection semantics without requiring users to understand the distinction before selecting
-- Preserve Cmd/Ctrl+click and Space as individual inclusion toggles after the initial Shift selection
-- Test linear history, merged side branches, unrelated branches, and date-ordered interleaving where visual order differs from ancestry
-
-This checkpoint is complete when users can select what they see without learning Git ancestry rules, while every aggregate remains explainable as either a real Range or an explicit Selection.
-
-## 4. Daily-use refresh and file-tree controls
+## 3. Daily-use refresh and file-tree controls
 
 - Reproduce external `commit`, `switch`, `fetch`, `pull`, and `push` operations performed through terminals, Git GUIs, other editors, or AI tools while GitAmida is visible, hidden, and newly focused
 - Detect resulting repository-state changes rather than monitoring a particular terminal or command source
@@ -50,7 +37,7 @@ This checkpoint is complete when users can select what they see without learning
 
 This checkpoint is complete when normal external Git operations refresh without intervention, failed refreshes offer a clear retry without resembling remote synchronization, and Tree controls read as file-navigation actions rather than text-editing buttons.
 
-## 5. File History investigations
+## 4. File History investigations
 
 - Keep one pinned Repository History tab
 - Open and close several independent File History tabs
@@ -67,7 +54,7 @@ This checkpoint is complete when normal external Git operations refresh without 
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 6. Repository and history hardening
+## 5. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
@@ -78,7 +65,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Preserve lane and color continuity while history pages append
 - Test behavior in both Cursor and VS Code
 
-## 7. Diff controls and external tools
+## 6. Diff controls and external tools
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
@@ -86,7 +73,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
 - Explain unavailable tools and retain the native diff as the fallback
 
-## 8. Performance and public distribution
+## 7. Performance and public distribution
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs

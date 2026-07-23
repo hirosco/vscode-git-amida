@@ -107,7 +107,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       }
       renderSelectionDetails();
       setStatus(
-        "Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.",
+        "Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.",
       );
       break;
     case "workingTreeError":
@@ -142,12 +142,6 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
         setEmpty(elements.files, message.message, true);
         setStatus(message.message, true);
       }
-      break;
-    case "selectionError":
-      selection = message.selection;
-      updateCommitSelection();
-      renderSelectionDetails();
-      setStatus(message.message, true);
       break;
     case "error":
       commits.clear();
@@ -257,7 +251,7 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     nextSelectedRow?.focus({ preventScroll: true });
   }
   setStatus(
-    "Click: commit · Shift+click: Range · Cmd/Ctrl+click or Space: Selection.",
+    "Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.",
   );
 }
 
@@ -592,10 +586,9 @@ function createHeadIndicator(
 function renderFiles(): void {
   elements.files.replaceChildren();
   if (currentFiles.length === 0) {
-    const noun = selectionNoun();
-    const qualifier = selection?.mode === "range" ? " final" : "";
-    setEmpty(elements.files, `This ${noun} has no${qualifier} file changes.`);
-    setStatus(`No${qualifier} file changes in the selected ${noun}.`);
+    const scope = selectionScope();
+    setEmpty(elements.files, `No changed files in ${scope}.`);
+    setStatus(`No changed files in ${scope}.`);
     return;
   }
 
@@ -609,8 +602,12 @@ function renderFiles(): void {
     renderTreeNodes(currentTree, elements.files);
   }
   updateFileSelection();
+  const scope =
+    selection?.mode === "single"
+      ? ""
+      : ` across ${selectionScope()}`;
   setStatus(
-    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${selection?.mode === "single" ? "" : ` in this ${selectionNoun()}`}. ` +
+    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${scope}. ` +
       "Double-click or press Enter to open a diff.",
   );
 }
@@ -797,11 +794,11 @@ function renderExplicitSelectionDetails(
   elements.detailsHeading.textContent = "Commit details";
   const heading = document.createElement("h3");
   heading.className = "details-subheading";
-  heading.textContent = "Selection details";
+  heading.textContent = "Selected commits";
 
   const summary = document.createElement("p");
   summary.className = "details-subject";
-  summary.textContent = "Explicit commits; no virtual merged tree";
+  summary.textContent = "Selected changes; no virtual merged tree";
 
   const details = document.createElement("dl");
   details.className = "details-list";
@@ -809,13 +806,18 @@ function renderExplicitSelectionDetails(
   appendDetail(
     details,
     "Comparison",
+    "Per-file selected endpoints",
+  );
+  appendDetail(
+    details,
+    "Endpoints",
     "Oldest selected before-state → newest selected after-state per file",
   );
 
   const commitsHeading = document.createElement("h3");
   commitsHeading.className = "details-subheading";
   commitsHeading.textContent =
-    `Selected commits (${explicit.commitHashes.length})`;
+    `Included commits (${explicit.commitHashes.length})`;
   const commitList = createCommitList(explicit.commitHashes);
   elements.details.append(heading, summary, details, commitsHeading, commitList);
 
@@ -866,7 +868,7 @@ function renderRangeDetails(
 
   const rangeHeading = document.createElement("h3");
   rangeHeading.className = "details-subheading";
-  rangeHeading.textContent = "Range details";
+  rangeHeading.textContent = "Selected commits";
 
   const subject = document.createElement("p");
   subject.className = "details-subject";
@@ -875,6 +877,7 @@ function renderRangeDetails(
   const list = document.createElement("dl");
   list.className = "details-list";
   appendDetail(list, "Commits", String(range.commitHashes.length));
+  appendDetail(list, "Comparison", "Continuous range");
   appendDetail(
     list,
     "Newest",
@@ -895,14 +898,14 @@ function renderRangeDetails(
   }
   appendDetail(
     list,
-    "Comparison",
+    "Endpoints",
     `${range.baseHash ?? "Empty tree"} → ${range.newestHash}`,
   );
 
   const commitsHeading = document.createElement("h3");
   commitsHeading.className = "details-subheading";
   commitsHeading.textContent =
-    `Selected commits (${range.commitHashes.length})`;
+    `Included commits (${range.commitHashes.length})`;
 
   const commitList = document.createElement("ol");
   commitList.className = "range-commit-list";
@@ -1403,24 +1406,17 @@ function selectionLabel(value: RepositorySelection): string {
       commits.get(value.activeHash)?.shortHash ?? shortHash(value.activeHash)
     );
   }
-  if (value.mode === "selection") {
-    return `Selection · ${value.commitHashes.length} commits`;
-  }
-  const oldest =
-    commits.get(value.oldestHash)?.shortHash ?? shortHash(value.oldestHash);
-  const newest =
-    commits.get(value.newestHash)?.shortHash ?? shortHash(value.newestHash);
-  return `Range ${oldest}…${newest}`;
+  return `${value.commitHashes.length} commits selected`;
 }
 
-function selectionNoun(): "commit" | "Range" | "Selection" | "working tree" {
+function selectionScope(): string {
   if (selection?.mode === "workingTree") {
-    return "working tree";
+    return "the working tree";
   }
-  if (selection?.mode === "range") {
-    return "Range";
+  if (selection?.mode === "range" || selection?.mode === "selection") {
+    return `${selection.commitHashes.length} selected commits`;
   }
-  return selection?.mode === "selection" ? "Selection" : "commit";
+  return "the selected commit";
 }
 
 function commitDescription(hash: string): string {

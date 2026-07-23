@@ -39,7 +39,7 @@ test("view preferences and navigation state sanitize independently", () => {
     {
       selectedWorkingTree: true,
       selectedHash: "abc",
-      rangeAnchorHash: "def",
+      selectionAnchorHash: "def",
       selectionHashes: ["abc", "ghi"],
       selectedFilePath: "src/file.ts",
     },
@@ -51,6 +51,21 @@ test("view preferences and navigation state sanitize independently", () => {
       selectedFilePath: "",
     }),
     {},
+  );
+});
+
+test("navigation state migrates the legacy Range anchor field", () => {
+  assert.deepEqual(
+    sanitizeNavigationState({
+      selectedHash: "active",
+      rangeAnchorHash: "legacy-anchor",
+      selectionHashes: ["active", "legacy-anchor"],
+    }),
+    {
+      selectedHash: "active",
+      selectionAnchorHash: "legacy-anchor",
+      selectionHashes: ["active", "legacy-anchor"],
+    },
   );
 });
 

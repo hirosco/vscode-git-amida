@@ -20,7 +20,10 @@ import {
   parseRawDiff,
   parseRefs,
 } from "../src/git";
-import { resolveRange } from "../src/selection";
+import {
+  resolveRange,
+  resolveVisibleSelection,
+} from "../src/selection";
 import { buildSelectionFiles } from "../src/selectionFiles";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -722,6 +725,21 @@ test("GitClient orders independent lanes by commit date", async (context) => {
   assert.deepEqual(
     history.rows.map((row) => row.commit.subject),
     ["main tip", "side tip", "side middle", "main early", "root"],
+  );
+  assert.deepEqual(
+    resolveVisibleSelection(
+      new Map(
+        history.rows.map((row) => [row.commit.hash, row.commit]),
+      ),
+      mainEarly,
+      mainTip,
+    ),
+    {
+      mode: "selection",
+      activeHash: mainTip,
+      anchorHash: mainEarly,
+      commitHashes: [mainTip, sideTip, sideMiddle, mainEarly],
+    },
   );
 });
 

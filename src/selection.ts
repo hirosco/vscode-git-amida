@@ -28,6 +28,7 @@ export function explicitCommitSelection(
   commits: ReadonlyMap<string, Commit>,
   hashes: Iterable<string>,
   activeHash: string,
+  anchorHash?: string,
 ): RepositorySelection {
   const selected = new Set(
     [...hashes].filter((hash) => commits.has(hash)),
@@ -44,6 +45,9 @@ export function explicitCommitSelection(
     activeHash:
       selected.has(activeHash) ? activeHash : commitHashes[0] ?? activeHash,
     commitHashes,
+    ...(anchorHash !== undefined && selected.has(anchorHash)
+      ? { anchorHash }
+      : {}),
   };
 }
 
@@ -70,6 +74,37 @@ export function toggleExplicitCommit(
     selected.add(hash);
   }
   return explicitCommitSelection(commits, selected, hash);
+}
+
+export function resolveVisibleSelection(
+  commits: ReadonlyMap<string, Commit>,
+  anchorHash: string,
+  activeHash: string,
+): RepositorySelection {
+  const visibleHashes = [...commits.keys()];
+  const anchorIndex = visibleHashes.indexOf(anchorHash);
+  const activeIndex = visibleHashes.indexOf(activeHash);
+  if (anchorIndex < 0 || activeIndex < 0 || anchorHash === activeHash) {
+    return singleCommitSelection(activeHash);
+  }
+
+  const interval = visibleHashes.slice(
+    Math.min(anchorIndex, activeIndex),
+    Math.max(anchorIndex, activeIndex) + 1,
+  );
+  const range = resolveRange(commits, anchorHash, activeHash);
+  if (
+    range.ok &&
+    sameHashSet(interval, range.selection.commitHashes)
+  ) {
+    return range.selection;
+  }
+  return explicitCommitSelection(
+    commits,
+    interval,
+    activeHash,
+    anchorHash,
+  );
 }
 
 export function resolveRange(
@@ -194,4 +229,15 @@ function collectReachable(
   }
 
   return { hashes, missing };
+}
+
+function sameHashSet(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightHashes = new Set(right);
+  return left.every((hash) => rightHashes.has(hash));
 }
