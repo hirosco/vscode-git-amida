@@ -162,7 +162,8 @@ GitAmida uses **selection-scoped, endpoint-based comparison**. A selection deter
 This rule, rather than compatibility with another product, is the authority for GitAmida's result semantics. IntelliJ IDEA remains an interaction reference, and comparison against its observed behavior is useful supporting evidence when the result also satisfies GitAmida's explainability and safety requirements.
 
 - Store selection by commit hash so unrelated rows between selected commits do not silently become selected
-- Distinguish a **Range**, which compares two real repository states, from a **Selection**, which investigates an explicit set of commit changes
+- Distinguish internally between a **Range**, which compares two real repository states, and a **Selection**, which investigates an explicit set of commit changes
+- Present the primary interaction as a common selected-commit count; explain the resolved Range or Selection comparison basis in details instead of requiring users to choose or understand the mode before selecting
 - Show the comparison basis or contributing commits instead of presenting an unexplained combined diff
 - Never create a virtual tree by cherry-picking selected commits
 - Exclude paths changed only by unselected commits
@@ -179,11 +180,13 @@ Range meaning comes from its displayed base and tip, not from every row physical
 
 The current multiple-commit implementation supports single commits, Range, and explicit Selection. It completes the whole path from choosing commits, through aggregated changed files, to native file diffs without manufacturing a repository state that Git does not contain.
 
-Range endpoints must have an ancestor relationship. Use the first parent of the older endpoint as the comparison base, or the empty tree when that endpoint is a root commit. The contributing commit set is every commit reachable from the tip but not from the base, equivalent to `git rev-list base..tip`. This includes side-branch commits merged between the declared base and tip while excluding unrelated date-interleaved rows. When the older endpoint is a merge, show that first-parent choice explicitly. A Shift selection between unrelated endpoints leaves the current selection unchanged because that investigation belongs to explicit Selection rather than one before/after Range.
+Range endpoints must have an ancestor relationship. Use the first parent of the older endpoint as the comparison base, or the empty tree when that endpoint is a root commit. The contributing commit set is every commit reachable from the tip but not from the base, equivalent to `git rev-list base..tip`. This includes side-branch commits merged between the declared base and tip while excluding unrelated date-interleaved rows. When the older endpoint is a merge, show that first-parent choice explicitly. Classify a Shift-selected visible interval with unrelated endpoints as Selection rather than rejecting it or misrepresenting it as Range.
 
 ### Selection
 
-A Selection is an explicit set of commits, including a set formed by adding or removing individual commits from an initial visual range. It is a review focus, not a rewritten history. Cmd/Ctrl+click toggles the pointed commit, while Space toggles the focused history row as the keyboard equivalent. A plain click returns to one commit, and Shift+click creates a Range from the active anchor.
+A Selection is an explicit set of commits, including a visible interval that cannot be represented exactly as one Range and a set formed by adding or removing individual commits from an initial visual interval. It is a review focus, not a rewritten history. Cmd/Ctrl+click toggles the pointed commit, while Space toggles the focused history row as the keyboard equivalent. A plain click returns to one commit. Shift selects every visible commit row between the anchor and active row without asking the user to choose a mode: use Range only when that visible interval exactly represents one ancestor-related before/after comparison, and otherwise use Selection.
+
+Keep the original Shift anchor while the active end moves so repeated Shift+click or Shift+keyboard navigation expands or contracts the same visible interval. Preserve that anchor even when the interval is classified as Selection rather than Range. Treat Range and Selection as secondary explanations of how the selected commits are compared, not as different selection gestures the user must learn first.
 
 A Selection may include commits from different branches even when neither is an ancestor of the other. Aggregate only paths changed by the selected commits and keep each contributing commit visible, but do not imply that the selection is one real final repository state.
 
@@ -191,12 +194,13 @@ For each aggregated path, compare the state before its oldest selected change wi
 
 Changed files show how many selected commits contributed to each path. Selecting a file shows its actual before and after endpoint hashes and explains the inclusion of intervening same-path changes. Double-click or Enter opens that endpoint comparison directly in the reusable native preview diff; it does not ask users to choose among contributing commit diffs. The Extension Host derives both endpoints from parsed commit changes, so the Webview never supplies revision IDs for a diff.
 
-The familiar interaction target is Shift selection for an initial range and Cmd/Ctrl toggling for individual inclusion. The interaction may follow IntelliJ conventions, but the displayed result remains governed by the rules above.
+The familiar interaction target is Shift selection for an initial visible interval and Cmd/Ctrl toggling for individual inclusion. The interaction may follow IntelliJ conventions, but the displayed result remains governed by the rules above.
 
 ### Acceptance invariants
 
 - Ancestor-related Range results match the diff between the declared base and tip
-- An unrelated branch row appearing between endpoints does not change a hash-based selection
+- Shift selection includes unrelated or date-interleaved rows in the visible interval and classifies the result as Selection instead of silently omitting them
+- Repeated Shift selection keeps its original anchor while the active end expands or contracts the visible interval
 - A file changed only by an omitted commit is absent from Selection results
 - An omitted same-file revision is included in the visible endpoint diff and the comparison basis is shown
 - Unrelated branch changes to the same path use visible endpoints and are never described as merged

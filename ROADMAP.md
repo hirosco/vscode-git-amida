@@ -27,8 +27,10 @@ This checkpoint is complete when branch ancestry can be followed quickly during 
 ## 3. Visual multi-commit selection
 
 - Make Shift selection include every visible commit row between the anchor and active row so the highlighted result matches ordinary contiguous-list selection
+- Keep the original Shift anchor while repeated Shift+click or Shift+keyboard navigation expands or contracts the visible interval, including after it is classified as explicit Selection
 - Keep Range when the visible selection exactly represents one ancestor-related before/after comparison
 - Automatically use explicit Selection when the visible interval contains divergent, unrelated, or date-interleaved commits instead of silently excluding them
+- Present a common selected-commit count as the primary state and explain the resolved Range or Selection comparison basis in details rather than making users choose or understand the mode before selecting
 - Keep Changed files, details, and native diffs consistent with the automatically chosen Range or Selection semantics without requiring users to understand the distinction before selecting
 - Preserve Cmd/Ctrl+click and Space as individual inclusion toggles after the initial Shift selection
 - Test linear history, merged side branches, unrelated branches, and date-ordered interleaving where visual order differs from ancestry
