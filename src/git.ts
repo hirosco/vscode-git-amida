@@ -25,6 +25,9 @@ const execFileAsync = promisify(execFile);
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const RECORD_MARKER = "\x1e";
 const MAX_BUFFER = 16 * 1024 * 1024;
+const HISTORY_REFS_FORMAT =
+  `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
+  "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00";
 export const MAX_TEXT_BLOB_BYTES = 5 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([
   ".avif",
@@ -73,7 +76,9 @@ export class GitClient {
     return output.toString("utf8").trim();
   }
 
-  public async loadHistory(candidate: string): Promise<HistoryResult> {
+  public async loadHistory(
+    candidate: string,
+  ): Promise<HistoryResult & { historyFingerprint: string }> {
     const root = await this.resolveRepository(candidate);
     const [headOutput, branchResult, logOutput, refsOutput] = await Promise.all([
       this.run(root, ["rev-parse", "HEAD"]),
@@ -90,7 +95,7 @@ export class GitClient {
       ]),
       this.run(root, [
         "for-each-ref",
-        `--format=${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00`,
+        `--format=${HISTORY_REFS_FORMAT}`,
         "refs/heads",
         "refs/remotes",
         "refs/tags",
@@ -115,7 +120,42 @@ export class GitClient {
         parseRefs(refsOutput.toString("utf8")),
       ),
     );
-    return { repository, rows: graph.rows, graphLaneCount: graph.laneCount };
+    return {
+      repository,
+      rows: graph.rows,
+      graphLaneCount: graph.laneCount,
+      historyFingerprint: createHistoryFingerprint(
+        head,
+        branchResult.ok ? branch : undefined,
+        refsOutput,
+      ),
+    };
+  }
+
+  public async historyFingerprint(repository: string): Promise<string> {
+    const [headOutput, branchResult, refsOutput] = await Promise.all([
+      this.run(repository, ["rev-parse", "HEAD"]),
+      this.tryRun(repository, [
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "HEAD",
+      ]),
+      this.run(repository, [
+        "for-each-ref",
+        `--format=${HISTORY_REFS_FORMAT}`,
+        "refs/heads",
+        "refs/remotes",
+        "refs/tags",
+      ]),
+    ]);
+    return createHistoryFingerprint(
+      headOutput.toString("utf8").trim(),
+      branchResult.ok
+        ? branchResult.output.toString("utf8").trim()
+        : undefined,
+      refsOutput,
+    );
   }
 
   public async changedFiles(
@@ -421,6 +461,14 @@ function commandEnvironment(): NodeJS.ProcessEnv {
     GIT_PAGER: "cat",
     GIT_EXTERNAL_DIFF: "",
   };
+}
+
+function createHistoryFingerprint(
+  headHash: string,
+  branch: string | undefined,
+  refsOutput: Buffer,
+): string {
+  return [headHash, branch ?? "", refsOutput.toString("utf8")].join("\x00");
 }
 
 export function parseHistory(

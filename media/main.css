@@ -215,7 +215,6 @@ footer {
   align-items: center;
 }
 
-.file-toolbar,
 .tree-actions {
   display: flex;
   align-items: center;
@@ -223,14 +222,27 @@ footer {
 }
 
 .file-toolbar {
+  display: flex;
+  align-items: center;
   height: 24px;
 }
 
 .tree-actions .icon-button {
-  width: 20px;
-  height: 20px;
-  font-size: 12px;
-  line-height: 20px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+}
+
+.tree-actions svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 
 .tree-actions[hidden] {
@@ -285,6 +297,13 @@ h2 {
 .file-columns,
 .file-row {
   grid-template-columns: minmax(120px, 1fr) 82px;
+}
+
+.path-column-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 .list {
@@ -625,10 +644,16 @@ code {
 }
 
 .tree-chevron {
+  display: block;
   width: 12px;
+  height: 12px;
   flex: 0 0 12px;
   color: var(--vscode-descriptionForeground);
-  text-align: center;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.4;
 }
 
 .tree-folder {

@@ -60,6 +60,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
 - Keep both the Repository History/inspection split and the changed-files/details split resizable.
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
+- Put theme-safe Tree expand-all and collapse-all icons beside the Path column heading, with accessible labels and tooltips.
 - Color changed-file paths with the same Git decoration token as their displayed status; keep content-kind labels separate from Git status.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
@@ -128,6 +129,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Use `TextDocumentContentProvider` for read-only historical text and `vscode.diff` for comparison.
 - Treat binary content, unsupported encodings, and oversized blobs explicitly rather than coercing them into a text diff.
 - Debounce built-in Git repository events. Refresh only working-tree state when HEAD and refs are stable, and reload history when their fingerprint changes.
+- Recheck the repository history fingerprint when the retained View becomes visible so missed background events cannot leave stale history.
 - Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.
 - Keep manual refresh available from the Command Palette and inline retry after errors, without a routine visible refresh button.
 

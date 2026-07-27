@@ -22,6 +22,7 @@ export type HostToWebviewMessage =
       selection?: RepositorySelection;
     }
   | { type: "workingTreeError"; message: string }
+  | { type: "refreshError"; message: string }
   | { type: "filesLoading"; selection: RepositorySelection }
   | {
       type: "files";

@@ -238,6 +238,41 @@ test("GitClient loads saved tracked and untracked working tree changes", async (
   );
 });
 
+test("GitClient fingerprints only history-affecting repository state", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-refresh-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "tracked.txt"), "base\n");
+  git(repository, "add", "--", "tracked.txt");
+  git(repository, "commit", "-q", "-m", "base");
+  git(repository, "branch", "other");
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const initial = await client.historyFingerprint(repository);
+  assert.equal(history.historyFingerprint, initial);
+
+  writeFileSync(join(repository, "tracked.txt"), "working tree only\n");
+  assert.equal(await client.historyFingerprint(repository), initial);
+  git(repository, "restore", "--", "tracked.txt");
+
+  git(repository, "switch", "-q", "other");
+  const switched = await client.historyFingerprint(repository);
+  assert.notEqual(switched, initial);
+
+  git(repository, "update-ref", "refs/remotes/origin/other", "HEAD");
+  const fetched = await client.historyFingerprint(repository);
+  assert.notEqual(fetched, switched);
+
+  writeFileSync(join(repository, "tracked.txt"), "committed\n");
+  git(repository, "add", "--", "tracked.txt");
+  git(repository, "commit", "-q", "-m", "next");
+  assert.notEqual(await client.historyFingerprint(repository), fetched);
+});
+
 test("GitClient loads all branch, remote, and tag history in one evaluation pass", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-history-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));

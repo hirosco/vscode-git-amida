@@ -24,20 +24,7 @@ This checkpoint is complete when the installed extension retains its state in no
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
-## 3. Daily-use refresh and file-tree controls
-
-- Reproduce external `commit`, `switch`, `fetch`, `pull`, and `push` operations performed through terminals, Git GUIs, other editors, or AI tools while GitAmida is visible, hidden, and newly focused
-- Detect resulting repository-state changes rather than monitoring a particular terminal or command source
-- Distinguish working-tree-only changes from HEAD, local-ref, and remote-tracking-ref changes so the smallest correct state refresh runs automatically
-- Fix missed built-in Git events or visibility transitions without resetting commit selection, file selection, or scroll position
-- Do not add a routine visible **Refresh** button because users may reasonably interpret it as Fetch or remote synchronization; keep local view reload available from the Command Palette and show inline Retry only after an actual refresh failure
-- Replace Tree expand-all and collapse-all `+` / `−` labels with compact, theme-safe icons that have accessible labels and tooltips
-- Place Tree expansion actions beside the **Path** column heading and keep header height and alignment stable when switching between Flat and Tree
-- Verify the controls in narrow, light, dark, and high-contrast Panel layouts
-
-This checkpoint is complete when normal external Git operations refresh without intervention, failed refreshes offer a clear retry without resembling remote synchronization, and Tree controls read as file-navigation actions rather than text-editing buttons.
-
-## 4. File History investigations
+## 3. File History investigations
 
 - Keep one pinned Repository History tab
 - Open and close several independent File History tabs
@@ -54,7 +41,7 @@ This checkpoint is complete when normal external Git operations refresh without 
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 5. Repository and history hardening
+## 4. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
@@ -65,7 +52,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Preserve lane and color continuity while history pages append
 - Test behavior in both Cursor and VS Code
 
-## 6. Diff controls and external tools
+## 5. Diff controls and external tools
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
@@ -73,7 +60,7 @@ This checkpoint is complete when users can investigate several files and always 
 - Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
 - Explain unavailable tools and retain the native diff as the fallback
 
-## 7. Performance and public distribution
+## 6. Performance and public distribution
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs

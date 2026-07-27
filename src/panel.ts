@@ -42,6 +42,7 @@ import {
 const LEGACY_VIEW_STATE_KEY = "gitAmida.repositoryViewState";
 const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
 const VIEW_PREFERENCES_KEY = "gitAmida.repositoryViewPreferences";
+type RefreshScope = "workingTree" | "history" | "detect";
 
 export class HistoryViewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
@@ -65,11 +66,13 @@ export class HistoryViewProvider
   private viewPreferences: RepositoryViewPreferences;
   private readonly stateReady: Promise<void>;
   private historyRequest = 0;
+  private repositoryStateRequest = 0;
   private workingTreeRequest = 0;
   private filesRequest = 0;
   private selectionRequest = 0;
   private refreshTimer?: ReturnType<typeof setTimeout>;
-  private pendingRefresh?: "workingTree" | "history";
+  private pendingRefresh?: RefreshScope;
+  private historyFingerprint?: string;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -104,7 +107,7 @@ export class HistoryViewProvider
     });
     view.onDidChangeVisibility(() => {
       if (view.visible) {
-        this.scheduleRefresh(this.pendingRefresh ?? "workingTree");
+        this.scheduleRefresh(this.pendingRefresh ?? "detect");
       }
     });
   }
@@ -117,7 +120,7 @@ export class HistoryViewProvider
   }
 
   public scheduleRefresh(
-    scope: "workingTree" | "history",
+    scope: RefreshScope,
     repository?: string,
   ): void {
     if (
@@ -128,9 +131,7 @@ export class HistoryViewProvider
     ) {
       return;
     }
-    if (scope === "history" || this.pendingRefresh === undefined) {
-      this.pendingRefresh = scope;
-    }
+    this.pendingRefresh = mergeRefreshScope(this.pendingRefresh, scope);
     if (this.view === undefined) {
       return;
     }
@@ -143,6 +144,8 @@ export class HistoryViewProvider
       this.pendingRefresh = undefined;
       if (pending === "history") {
         void this.refresh(false);
+      } else if (pending === "detect") {
+        void this.detectRepositoryChanges();
       } else if (pending === "workingTree") {
         void this.refreshWorkingTree();
       }
@@ -152,6 +155,7 @@ export class HistoryViewProvider
   public async refresh(showLoading = true): Promise<void> {
     this.pendingRefresh = undefined;
     const request = ++this.historyRequest;
+    ++this.repositoryStateRequest;
     ++this.workingTreeRequest;
     ++this.filesRequest;
     ++this.selectionRequest;
@@ -166,7 +170,8 @@ export class HistoryViewProvider
         throw new GitError("Open a folder containing a Git repository first.");
       }
 
-      const history = await this.git.loadHistory(folder.uri.fsPath);
+      const loadedHistory = await this.git.loadHistory(folder.uri.fsPath);
+      const { historyFingerprint, ...history } = loadedHistory;
       const workingTree = await this.git.workingTreeChanges(
         history.repository.root,
         history.repository.head,
@@ -176,6 +181,7 @@ export class HistoryViewProvider
       }
 
       this.repository = history.repository.root;
+      this.historyFingerprint = historyFingerprint;
       this.headHash = history.repository.head;
       this.workingTree =
         workingTree.files.length === 0 ? undefined : workingTree;
@@ -243,7 +249,38 @@ export class HistoryViewProvider
       if (request !== this.historyRequest) {
         return;
       }
-      await this.post({ type: "error", message: userMessage(error) });
+      await this.post({
+        type: showLoading ? "error" : "refreshError",
+        message: userMessage(error),
+      });
+    }
+  }
+
+  private async detectRepositoryChanges(): Promise<void> {
+    const repository = this.repository;
+    const previousFingerprint = this.historyFingerprint;
+    if (repository === undefined || previousFingerprint === undefined) {
+      return;
+    }
+    const request = ++this.repositoryStateRequest;
+    try {
+      const nextFingerprint = await this.git.historyFingerprint(repository);
+      if (request !== this.repositoryStateRequest) {
+        return;
+      }
+      if (nextFingerprint !== previousFingerprint) {
+        await this.refresh(false);
+      } else {
+        await this.refreshWorkingTree();
+      }
+    } catch (error) {
+      if (request !== this.repositoryStateRequest) {
+        return;
+      }
+      await this.post({
+        type: "refreshError",
+        message: userMessage(error),
+      });
     }
   }
 
@@ -372,8 +409,12 @@ export class HistoryViewProvider
     }
     const value = message as Record<string, unknown>;
 
-    if (value.type === "ready" || value.type === "refresh") {
+    if (value.type === "ready") {
       await this.refresh();
+      return;
+    }
+    if (value.type === "refresh") {
+      await this.refresh(false);
       return;
     }
 
@@ -966,18 +1007,25 @@ export class HistoryViewProvider
             <span id="selected-commit" class="secondary"></span>
           </div>
           <div class="file-toolbar">
-            <div id="tree-actions" class="tree-actions" role="group" aria-label="Tree expansion" hidden>
-              <button id="expand-all" class="icon-button" type="button" title="Expand all folders" aria-label="Expand all folders">+</button>
-              <button id="collapse-all" class="icon-button" type="button" title="Collapse all folders" aria-label="Collapse all folders">−</button>
-            </div>
             <div class="mode-switch" role="group" aria-label="Changed file display">
               <button id="flat-mode" type="button" aria-pressed="true">Flat</button>
               <button id="tree-mode" type="button" aria-pressed="false">Tree</button>
             </div>
           </div>
         </div>
-        <div class="column-head file-columns" aria-hidden="true">
-          <span>Path</span><span>Status</span>
+        <div class="column-head file-columns">
+          <span class="path-column-heading">
+            <span>Path</span>
+            <span id="tree-actions" class="tree-actions" role="group" aria-label="Tree expansion" hidden>
+              <button id="expand-all" class="icon-button" type="button" title="Expand all folders" aria-label="Expand all folders">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5.5 5 2.5-2.5L10.5 5m-5 6L8 13.5l2.5-2.5"/></svg>
+              </button>
+              <button id="collapse-all" class="icon-button" type="button" title="Collapse all folders" aria-label="Collapse all folders">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2.5 8 5.5l2.5-3m-5 11L8 10.5l2.5 3"/></svg>
+              </button>
+            </span>
+          </span>
+          <span aria-hidden="true">Status</span>
         </div>
         <div id="files" class="list file-list" role="listbox" aria-label="Changed files">
           <p class="empty-state">Select a commit.</p>
@@ -1009,6 +1057,20 @@ function selectionAnchor(
     return selection.anchorHash;
   }
   return undefined;
+}
+
+function mergeRefreshScope(
+  pending: RefreshScope | undefined,
+  next: RefreshScope,
+): RefreshScope {
+  const priority: Record<RefreshScope, number> = {
+    workingTree: 0,
+    detect: 1,
+    history: 2,
+  };
+  return pending === undefined || priority[next] > priority[pending]
+    ? next
+    : pending;
 }
 
 function selectionHasHashes(

@@ -56,6 +56,7 @@ let historyRatio = 55;
 let filesRatio = 65;
 let detailsCollapsed = false;
 let expandedTreePaths = new Set<string>();
+let retainedFilesScrollTop: number | undefined;
 
 elements.flatMode.addEventListener("click", () => setFileViewMode("flat"));
 elements.treeMode.addEventListener("click", () => setFileViewMode("tree"));
@@ -113,8 +114,14 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
     case "workingTreeError":
       setStatusWithRetry(message.message);
       break;
+    case "refreshError":
+      setStatusWithRetry(message.message);
+      break;
     case "filesLoading":
-      if (!sameSelection(message.selection, selection)) {
+      if (sameSelection(message.selection, selection)) {
+        retainedFilesScrollTop = elements.files.scrollTop;
+      } else {
+        retainedFilesScrollTop = undefined;
         selectedFilePath = undefined;
       }
       selection = message.selection;
@@ -134,12 +141,14 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
         currentTree = message.tree;
         expandedTreePaths = collectDirectoryPaths(currentTree);
         renderFiles();
+        restoreFilesScroll();
         renderSelectionDetails();
       }
       break;
     case "filesError":
       if (sameSelection(message.selection, selection)) {
-        setEmpty(elements.files, message.message, true);
+        retainedFilesScrollTop = undefined;
+        setEmptyWithRetry(elements.files, message.message);
         setStatus(message.message, true);
       }
       break;
@@ -612,6 +621,13 @@ function renderFiles(): void {
   );
 }
 
+function restoreFilesScroll(): void {
+  if (retainedFilesScrollTop !== undefined) {
+    elements.files.scrollTop = retainedFilesScrollTop;
+    retainedFilesScrollTop = undefined;
+  }
+}
+
 function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
   for (const node of nodes) {
     if (node.kind === "file") {
@@ -630,7 +646,7 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
     button.className = "tree-directory-row";
     button.title = node.path;
     button.append(
-      span("tree-chevron", expanded ? "⌄" : "›"),
+      createTreeChevron(expanded),
       span("tree-folder", node.name),
     );
 
@@ -665,6 +681,20 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
     wrapper.append(button, children);
     container.append(wrapper);
   }
+}
+
+function createTreeChevron(expanded: boolean): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.classList.add("tree-chevron");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute(
+    "d",
+    expanded ? "M3.5 6 8 10.5 12.5 6" : "M6 3.5 10.5 8 6 12.5",
+  );
+  svg.append(path);
+  return svg;
 }
 
 function createFileRow(
