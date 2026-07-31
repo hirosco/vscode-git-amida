@@ -6,15 +6,7 @@ GitAmida's current product target is:
 
 The remaining checkpoints build on selection-scoped, endpoint-based comparison and contain only work still needed to validate and extend that baseline.
 
-## 1. Installed-extension validation
-
-- Verify that the GitAmida Panel restores after a full Cursor restart
-- Verify single-commit, Range, and Selection native diffs from the installed extension
-- Install the same VSIX in VS Code when its CLI or application is available and compare activation, Panel layout, and native diff behavior with Cursor
-
-This checkpoint is complete when the installed extension retains its state in normal Cursor use and the same VSIX has no editor-specific regression in VS Code. Marketplace publication and automatic updates remain outside this checkpoint.
-
-## 2. Daily-use commit graph validation
+## 1. Daily-use commit graph validation
 
 - Observe dense branch and merge histories during normal repository work
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
@@ -23,6 +15,17 @@ This checkpoint is complete when the installed extension retains its state in no
 - Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
+
+## 2. Image comparison
+
+- Investigate whether Cursor's native editor can present a useful before-and-after comparison for two historical image states
+- Reuse the existing single-commit, Range, and Selection endpoint resolution instead of introducing image-specific comparison semantics
+- Prefer the native editor when it can show both endpoints clearly; otherwise add only a lightweight GitAmida before-and-after view through a small dedicated image-opening boundary
+- Label the actual before and after revisions and paths, including additions, deletions, and renames
+- Preserve the current binary and oversized-content safeguards and avoid image editing, pixel analysis, overlay, or swipe controls
+- Confirm basic compatibility in VS Code without making it the primary optimization target
+
+This checkpoint is complete when an image selected from Changed files opens a useful comparison for single commits, Ranges, and Selections in Cursor without changing text-diff behavior. If a safe implementation requires a substantially larger custom viewer or storage design, defer it and continue with File History instead.
 
 ## 3. File History investigations
 
@@ -56,7 +59,6 @@ This checkpoint is complete when users can investigate several files and always 
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
-- Add a lightweight image before-and-after view only if the native editor cannot provide a useful comparison
 - Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
 - Explain unavailable tools and retain the native diff as the fallback
 
