@@ -62,7 +62,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
 - Put theme-safe Tree expand-all and collapse-all icons beside the Path column heading, with accessible labels and tooltips.
 - Use bundled, theme-colored content-kind icons for files and folders in the Webview; do not parse or copy external File Icon Themes.
-- Color changed-file paths with the same Git decoration token as their displayed status; keep content-kind labels separate from Git status.
+- Color changed-file paths with the same Git decoration token as their displayed status. Use the bundled icon to distinguish supported images without adding a redundant visible content label; keep labels for unsupported binary, oversized, and submodule content separate from Git status.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
 - Preserve selection and scroll state while File History tabs or native diffs are active.

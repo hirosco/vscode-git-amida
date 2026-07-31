@@ -504,37 +504,39 @@ test("GitClient reads image bytes beyond the normal Git output buffer", async (c
   git(repository, "config", "user.name", "GitAmida Test");
   git(repository, "config", "user.email", "test@example.invalid");
 
-  const image = Buffer.alloc(16 * 1024 * 1024 + 1, 1);
-  writeFileSync(join(repository, "large.png"), image);
-  git(repository, "add", "--", "large.png");
+  const image = createBmp(4096, 1366, 0x33);
+  assert.ok(image.byteLength > 16 * 1024 * 1024);
+  writeFileSync(join(repository, "large.bmp"), image);
+  git(repository, "add", "--", "large.bmp");
   git(repository, "commit", "-q", "-m", "large image");
   const commit = git(repository, "rev-parse", "HEAD").trim();
 
   const client = new GitClient();
-  const size = await client.blobSize(repository, commit, "large.png");
+  const size = await client.blobSize(repository, commit, "large.bmp");
   assert.equal(size, image.byteLength);
   assert.equal(
-    (await client.readBlob(repository, commit, "large.png", size)).byteLength,
+    (await client.readBlob(repository, commit, "large.bmp", size)).byteLength,
     image.byteLength,
   );
 
-  writeFileSync(join(repository, "large.png"), Buffer.alloc(image.length + 1, 2));
+  const changedImage = createBmp(4096, 1367, 0x66);
+  writeFileSync(join(repository, "large.bmp"), changedImage);
   assert.equal(
-    (await client.readWorkingImage(repository, "large.png")).byteLength,
-    image.byteLength + 1,
+    (await client.readWorkingImage(repository, "large.bmp")).byteLength,
+    changedImage.byteLength,
   );
   assert.equal(
     (
       await client.readWorkingFile(
         repository,
-        "large.png",
-        image.byteLength + 1,
+        "large.bmp",
+        changedImage.byteLength,
       )
     ).byteLength,
-    image.byteLength + 1,
+    changedImage.byteLength,
   );
   await assert.rejects(
-    client.readWorkingFile(repository, "large.png", image.byteLength),
+    client.readWorkingFile(repository, "large.bmp", image.byteLength),
     /current text-diff limit/,
   );
 });
@@ -882,6 +884,24 @@ function commitTree(
       },
     },
   ).trim();
+}
+
+function createBmp(width: number, height: number, shade: number): Buffer {
+  const headerSize = 54;
+  const rowSize = Math.ceil((width * 3) / 4) * 4;
+  const pixelSize = rowSize * height;
+  const image = Buffer.alloc(headerSize + pixelSize);
+  image.write("BM", 0, "ascii");
+  image.writeUInt32LE(image.byteLength, 2);
+  image.writeUInt32LE(headerSize, 10);
+  image.writeUInt32LE(40, 14);
+  image.writeInt32LE(width, 18);
+  image.writeInt32LE(height, 22);
+  image.writeUInt16LE(1, 26);
+  image.writeUInt16LE(24, 28);
+  image.writeUInt32LE(pixelSize, 34);
+  image.fill(shade, headerSize);
+  return image;
 }
 
 function git(repository: string, ...args: string[]): string {

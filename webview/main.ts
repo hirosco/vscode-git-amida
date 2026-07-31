@@ -1603,11 +1603,11 @@ function fileStatusShortLabel(file: ChangedFile): string {
       return `${count} changes`;
     }
     const changeStatus = file.selection.changes[0]?.status ?? file.status;
-    return file.content === undefined
+    return file.content === undefined || file.content.kind === "image"
       ? statusLabel(changeStatus)
       : `${changeStatus[0] ?? "X"} · ${contentLabel(file, true)}`;
   }
-  if (file.content === undefined) {
+  if (file.content === undefined || file.content.kind === "image") {
     return statusLabel(file.status);
   }
   return `${file.status[0] ?? "X"} · ${contentLabel(file, true)}`;
