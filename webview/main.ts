@@ -20,6 +20,22 @@ interface VsCodeApi {
   postMessage(message: WebviewToHostMessage): void;
 }
 
+type FileIconKind =
+  | "file"
+  | NonNullable<ChangedFile["content"]>["kind"];
+
+const FILE_ICON_PATHS: Record<FileIconKind, string> = {
+  file: "M4 2.5h5l3 3v8H4zM9 2.5v3h3M6 8.5h4M6 11h3",
+  image:
+    "M2.5 3.5h11v9h-11zM4 11l3-3 2 2 1.5-1.5 2 2M10.5 6h.01",
+  binary:
+    "M4 2.5h5l3 3v8H4zM9 2.5v3h3M5.5 8h2v2h-2zM9 10.5h1.5V12H9z",
+  oversized:
+    "M4 2.5h5l3 3v8H4zM9 2.5v3h3M8 8v2.5M8 12h.01",
+  submodule:
+    "M3 3h4.5v4.5H3zM8.5 8.5H13V13H8.5zM7.5 5.25h2v5.5h-2",
+};
+
 declare function acquireVsCodeApi(): VsCodeApi;
 
 const vscode = acquireVsCodeApi();
@@ -647,6 +663,7 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
     button.title = node.path;
     button.append(
       createTreeChevron(expanded),
+      createFolderIcon(expanded),
       span("tree-folder", node.name),
     );
 
@@ -684,15 +701,47 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
 }
 
 function createTreeChevron(expanded: boolean): SVGSVGElement {
+  return createStrokeIcon(
+    "tree-chevron",
+    expanded ? "M3.5 6 8 10.5 12.5 6" : "M6 3.5 10.5 8 6 12.5",
+  );
+}
+
+function createFolderIcon(expanded: boolean): SVGSVGElement {
+  return createStrokeIcon(
+    "content-kind-icon kind-folder",
+    expanded
+      ? "M2.5 5V4h4l1.5 1.5h5.5l-1.25 7h-9L2.5 6.5h11"
+      : "M2.5 4h4L8 5.5h5.5v7h-11z",
+  );
+}
+
+function createFileIcon(file: ChangedFile): SVGSVGElement {
+  const kind: FileIconKind =
+    file.content?.kind ??
+    (isSvgPath(file.path) || isSvgPath(file.oldPath)
+      ? "image"
+      : "file");
+  return createStrokeIcon(
+    `content-kind-icon kind-${kind}`,
+    FILE_ICON_PATHS[kind],
+  );
+}
+
+function isSvgPath(path: string | undefined): boolean {
+  return path?.toLowerCase().endsWith(".svg") === true;
+}
+
+function createStrokeIcon(
+  className: string,
+  pathData: string,
+): SVGSVGElement {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.classList.add("tree-chevron");
+  svg.classList.add(...className.split(" "));
   svg.setAttribute("viewBox", "0 0 16 16");
   svg.setAttribute("aria-hidden", "true");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute(
-    "d",
-    expanded ? "M3.5 6 8 10.5 12.5 6" : "M6 3.5 10.5 8 6 12.5",
-  );
+  path.setAttribute("d", pathData);
   svg.append(path);
   return svg;
 }
@@ -721,8 +770,13 @@ function createFileRow(
   const statusClass = `status-${file.status[0] ?? "X"}`;
   button.title = description;
   button.setAttribute("aria-label", description);
-  button.append(
+  const pathCell = span("file-path-cell", "");
+  pathCell.append(
+    createFileIcon(file),
     span(`path ${statusClass}`, label),
+  );
+  button.append(
+    pathCell,
     span(`status ${statusClass}`, fileStatusShortLabel(file)),
   );
   button.addEventListener("click", () => selectFile(file.path));

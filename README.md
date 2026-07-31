@@ -20,7 +20,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Marks local HEAD with a ring-and-center-dot graph node, labels it with the checked-out branch or short commit hash when detached, retains the remote `HEAD` indicator, labels local and remote `main` or `master` positions independently, and keeps other refs compact through fill and shape
 - Shows saved staged, unstaged, and untracked paths in a distinct **Uncommitted changes** row without treating it as a commit or including it in Range and Selection
 - Refreshes working-tree changes after editor saves and from debounced Git events, including while the retained Panel view is hidden, reloads complete history only when HEAD or refs change, and rechecks that distinction when the Panel becomes visible
-- Shows status-colored changed-file paths in Flat or initially expanded Tree mode, with compact expand-all and collapse-all icons beside the Path heading
+- Shows status-colored changed-file paths with theme-aware file, image, binary, submodule, oversized-file, and folder icons in Flat or initially expanded Tree mode, with compact expand-all and collapse-all actions beside the Path heading
 - Shows full commit metadata in a resizable, collapsible details pane
 - Selects every visible commit row between the Shift anchor and active row, keeps that anchor while the interval expands or contracts, and automatically uses Range only when the selected rows exactly represent one ancestor-related comparison
 - Uses explicit Selection automatically for divergent, unrelated, or date-interleaved visible intervals, while presenting one common selected-commit count and explaining the resolved comparison basis in details

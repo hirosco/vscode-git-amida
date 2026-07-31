@@ -72,6 +72,8 @@ The divider is resizable. Commit details can be collapsed, but changed files mus
 
 Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree mode starts fully expanded whenever files are loaded and provides theme-safe expand-all and collapse-all icons beside the Path column heading. Their accessible labels and tooltips carry the complete action names, and the header keeps the same height when switching presentation modes. Expansion state is intentionally not persisted across commit changes, refreshes, or editor restarts.
 
+Changed-file rows use compact bundled SVGs to distinguish ordinary files, images, binary or oversized content, submodules, and open or closed folders. Existing trusted content metadata selects unsupported-content icons, while a presentation-only path check lets text-diffable SVG files retain an image identity. VS Code color-theme tokens supply each icon's color. These icons intentionally do not reproduce the active File Icon Theme because a Webview has no public API for resolving that theme's filename and language associations; parsing other extensions' theme assets would add unsupported coupling and licensing risk.
+
 Color file paths with the same VS Code Git decoration token as their displayed status. Keep unsupported content such as images labeled separately because change status and content type answer different questions.
 
 The vertical split between Repository History and inspection is resizable and shared across workspaces in the same editor profile. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
