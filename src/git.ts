@@ -28,18 +28,16 @@ const MAX_BUFFER = 16 * 1024 * 1024;
 const HISTORY_REFS_FORMAT =
   `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
   "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00";
-export const MAX_TEXT_BLOB_BYTES = 5 * 1024 * 1024;
 const IMAGE_EXTENSIONS = new Set([
   ".avif",
   ".bmp",
   ".gif",
-  ".heic",
   ".ico",
+  ".jpe",
   ".jpeg",
   ".jpg",
   ".png",
-  ".tif",
-  ".tiff",
+  ".svg",
   ".webp",
 ]);
 
@@ -161,17 +159,20 @@ export class GitClient {
   public async changedFiles(
     repository: string,
     commit: Commit,
+    maxTextBlobBytes = Number.POSITIVE_INFINITY,
   ): Promise<ChangedFile[]> {
     return this.changedFilesBetween(
       repository,
       commit.parents[0],
       commit.hash,
+      maxTextBlobBytes,
     );
   }
 
   public async workingTreeChanges(
     repository: string,
     headHash: string,
+    maxTextBlobBytes = Number.POSITIVE_INFINITY,
   ): Promise<WorkingTreeState> {
     const [rawOutput, numStatOutput, untrackedOutput] = await Promise.all([
       this.run(repository, [
@@ -230,6 +231,7 @@ export class GitClient {
         binaryPaths,
         objectInfo,
         workingFileInfo,
+        maxTextBlobBytes,
       );
       return {
         ...changedFileFromEntry(entry),
@@ -247,20 +249,28 @@ export class GitClient {
     repository: string,
     base: string | undefined,
     tip: string,
+    maxTextBlobBytes = Number.POSITIVE_INFINITY,
   ): Promise<ChangedFile[]> {
-    const entries = await this.changedEntriesBetween(repository, base, tip);
+    const entries = await this.changedEntriesBetween(
+      repository,
+      base,
+      tip,
+      maxTextBlobBytes,
+    );
     return entries.map(changedFileFromEntry);
   }
 
   public async commitFileChanges(
     repository: string,
     commit: Commit,
+    maxTextBlobBytes = Number.POSITIVE_INFINITY,
   ): Promise<CommitFileChange[]> {
     const parentHash = commit.parents[0];
     const entries = await this.changedEntriesBetween(
       repository,
       parentHash,
       commit.hash,
+      maxTextBlobBytes,
     );
     return entries.map((entry) => ({
       ...changedFileFromEntry(entry),
@@ -275,6 +285,7 @@ export class GitClient {
     repository: string,
     base: string | undefined,
     tip: string,
+    maxTextBlobBytes: number,
   ): Promise<RawDiffEntry[]> {
     const baseRef = base ?? EMPTY_TREE;
     const [rawOutput, numStatOutput] = await Promise.all([
@@ -311,7 +322,12 @@ export class GitClient {
 
     return entries.map((entry) => ({
       ...entry,
-      content: classifyChangedFile(entry, binaryPaths, objectInfo),
+      content: classifyChangedFile(
+        entry,
+        binaryPaths,
+        objectInfo,
+        maxTextBlobBytes,
+      ),
     }));
   }
 
@@ -319,16 +335,43 @@ export class GitClient {
     repository: string,
     ref: string | undefined,
     path: string,
+    knownSize?: number,
   ): Promise<Buffer> {
     if (ref === undefined) {
       return Buffer.alloc(0);
     }
-    return this.run(repository, ["cat-file", "blob", `${ref}:${path}`]);
+    const size = knownSize ?? (await this.blobSize(repository, ref, path));
+    return this.run(
+      repository,
+      ["cat-file", "blob", `${ref}:${path}`],
+      Math.max(MAX_BUFFER, size),
+    );
+  }
+
+  public async blobSize(
+    repository: string,
+    ref: string | undefined,
+    path: string,
+  ): Promise<number> {
+    if (ref === undefined) {
+      return 0;
+    }
+    const output = await this.run(repository, [
+      "cat-file",
+      "-s",
+      `${ref}:${path}`,
+    ]);
+    const size = Number(output.toString("utf8").trim());
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new GitError(`Git returned an invalid blob size for ${path}.`);
+    }
+    return size;
   }
 
   public async readWorkingFile(
     repository: string,
     path: string,
+    maxBytes = Number.POSITIVE_INFINITY,
   ): Promise<Buffer> {
     const absolutePath = resolveWorkingPath(repository, path);
     const stats = await lstat(absolutePath);
@@ -338,8 +381,22 @@ export class GitClient {
     if (!stats.isFile()) {
       throw new GitError(`Working tree path is not a regular file: ${path}`);
     }
-    if (stats.size > MAX_TEXT_BLOB_BYTES) {
-      throw new GitError(`Working tree file is larger than 5 MiB: ${path}`);
+    if (stats.size > maxBytes) {
+      throw new GitError(
+        `Working tree file exceeds the current text-diff limit: ${path}`,
+      );
+    }
+    return readFile(absolutePath);
+  }
+
+  public async readWorkingImage(
+    repository: string,
+    path: string,
+  ): Promise<Buffer> {
+    const absolutePath = resolveWorkingPath(repository, path);
+    const stats = await lstat(absolutePath);
+    if (!stats.isFile()) {
+      throw new GitError(`Working tree path is not a regular file: ${path}`);
     }
     return readFile(absolutePath);
   }
@@ -374,13 +431,17 @@ export class GitClient {
     }
   }
 
-  private async run(directory: string, args: string[]): Promise<Buffer> {
+  private async run(
+    directory: string,
+    args: string[],
+    maxBuffer = MAX_BUFFER,
+  ): Promise<Buffer> {
     const gitArgs = commandArgs(directory, args);
 
     try {
       const { stdout } = await execFileAsync("git", gitArgs, {
         encoding: "buffer",
-        maxBuffer: MAX_BUFFER,
+        maxBuffer,
         timeout: 15_000,
         env: commandEnvironment(),
       });
@@ -762,6 +823,7 @@ function classifyChangedFile(
   entry: RawDiffEntry,
   binaryPaths: ReadonlySet<string>,
   objectInfo: ReadonlyMap<string, ObjectInfo>,
+  maxTextBlobBytes: number,
 ): ChangedFile["content"] {
   if (entry.oldMode === "160000" || entry.newMode === "160000") {
     return { kind: "submodule" };
@@ -774,7 +836,7 @@ function classifyChangedFile(
   if (isImagePath(entry.path) || isImagePath(entry.oldPath ?? "")) {
     return { kind: "image", ...(size === undefined ? {} : { size }) };
   }
-  if (size !== undefined && size > MAX_TEXT_BLOB_BYTES) {
+  if (size !== undefined && size > maxTextBlobBytes) {
     return { kind: "oversized", size };
   }
   if (binaryPaths.has(entry.path)) {
@@ -788,6 +850,7 @@ function classifyWorkingTreeFile(
   binaryPaths: ReadonlySet<string>,
   objectInfo: ReadonlyMap<string, ObjectInfo>,
   workingFileInfo: ReadonlyMap<string, WorkingFileInfo>,
+  maxTextBlobBytes: number,
 ): ChangedFile["content"] {
   if (entry.oldMode === "160000" || entry.newMode === "160000") {
     return { kind: "submodule" };
@@ -805,7 +868,7 @@ function classifyWorkingTreeFile(
   if (isImagePath(entry.path) || isImagePath(entry.oldPath ?? "")) {
     return { kind: "image", ...(size === undefined ? {} : { size }) };
   }
-  if (size !== undefined && size > MAX_TEXT_BLOB_BYTES) {
+  if (size !== undefined && size > maxTextBlobBytes) {
     return { kind: "oversized", size };
   }
   if (binaryPaths.has(entry.path) || workingInfo?.binary === true) {

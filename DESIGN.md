@@ -21,7 +21,7 @@ The GitAmida view owns two kinds of internal tabs:
 
 Opening the same file history twice focuses its existing tab. File-history tabs preserve their selected revision and scroll position while another tab is active. Repository History preserves its selected commit and file state when a file-history tab is opened.
 
-Detailed text comparisons open in the editor's native diff view instead of consuming the limited height of the bottom Panel.
+Detailed text and supported image comparisons open in the editor's native diff view instead of consuming the limited height of the bottom Panel.
 
 Do not spend permanent Webview height on repository metadata that is already implied by a single-root workspace and repeated at HEAD. Use the editor-native View title for commands. When multi-root selection is implemented, add a compact repository chooser only when more than one repository is available.
 
@@ -72,9 +72,9 @@ The divider is resizable. Commit details can be collapsed, but changed files mus
 
 Changed files support a flat full-path list and a user-controlled Tree mode for large changes. Flat is the default for fast scanning. Tree mode starts fully expanded whenever files are loaded and provides theme-safe expand-all and collapse-all icons beside the Path column heading. Their accessible labels and tooltips carry the complete action names, and the header keeps the same height when switching presentation modes. Expansion state is intentionally not persisted across commit changes, refreshes, or editor restarts.
 
-Changed-file rows use compact bundled SVGs to distinguish ordinary files, images, binary or oversized content, submodules, and open or closed folders. Existing trusted content metadata selects unsupported-content icons, while a presentation-only path check lets text-diffable SVG files retain an image identity. VS Code color-theme tokens supply each icon's color. These icons intentionally do not reproduce the active File Icon Theme because a Webview has no public API for resolving that theme's filename and language associations; parsing other extensions' theme assets would add unsupported coupling and licensing risk.
+Changed-file rows use compact bundled SVGs to distinguish ordinary files, supported images, binary or oversized content, submodules, and open or closed folders. Trusted content metadata selects the icon, including SVG files now handled by native image comparison. VS Code color-theme tokens supply each icon's color. These icons intentionally do not reproduce the active File Icon Theme because a Webview has no public API for resolving that theme's filename and language associations; parsing other extensions' theme assets would add unsupported coupling and licensing risk.
 
-Color file paths with the same VS Code Git decoration token as their displayed status. Keep unsupported content such as images labeled separately because change status and content type answer different questions.
+Color file paths with the same VS Code Git decoration token as their displayed status. Keep content-kind labels such as image, binary, or oversized text separate because change status and content type answer different questions.
 
 The vertical split between Repository History and inspection is resizable and shared across workspaces in the same editor profile. Its default gives inspection enough width for full commit metadata without sacrificing a usable history list; narrow containers may still reflow vertically.
 
@@ -143,7 +143,9 @@ Branch switching changes the working tree but not Git history. Keep it behind a 
 
 ## Native diff editor
 
-Load before and after Git blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command.
+Load before and after text blobs into read-only virtual documents through `TextDocumentContentProvider`, then invoke the built-in `vscode.diff` command. Route supported image bytes through a dedicated read-only `git-amida-image` `FileSystemProvider`; preserving the original filename extension lets the built-in image preview provide the native before-and-after editor without a GitAmida Webview or temporary files.
+
+Match the built-in image preview selector exactly: JPG (`.jpg`, `.jpe`, and `.jpeg`), PNG, BMP, GIF, ICO, WebP, AVIF, and SVG. SVG uses visual comparison by default; a separate source-diff switch is outside the initial image checkpoint. HEIC and TIFF remain ordinary unsupported binary files because the built-in preview does not select them.
 
 Double-click and Enter are explicit open actions. Open Repository History comparisons in the editor's preview tab so inspecting another changed file replaces the current comparison instead of accumulating one tab per file. Users may pin a comparison with the editor's normal tab interaction when they need to retain it.
 
@@ -153,9 +155,9 @@ For a single commit:
 - Compare a root commit with Git's empty tree
 - Show the active parent for merge commits and later allow explicit parent selection
 
-For the working tree, read the saved filesystem state through a repository-scoped path boundary and compare it with the corresponding HEAD blob. Do not use the editor buffer as the comparison endpoint because an unsaved document is not yet part of Git's working tree.
+For the working tree, read the saved filesystem state through a repository-scoped path boundary and compare it with the corresponding HEAD blob. Capture the working-tree image bytes when opening the comparison so later saves do not silently change that endpoint. Do not use the editor buffer as the comparison endpoint because an unsaved document is not yet part of Git's working tree.
 
-The virtual-document path accepts text blobs up to 5 MiB. Classify raster images, binary blobs, submodules, and oversized text before opening a diff, keep them visible in Changed files, and explain why the text comparison is unavailable. Do not decode unsupported content as UTF-8. Image preview and external-tool routing remain separate later checkpoints.
+The virtual-document path follows the current VS Code or Cursor `diffEditor.maxFileSize` setting, whose editor default is 50 MB, instead of imposing a narrower GitAmida-specific text limit. Reclassify changed content when that setting changes, and check the actual endpoint sizes again before reading or decoding them. Image reads likewise obtain the actual Git object size and use that size for the one blob command instead of inheriting the normal 16 MiB Git-output buffer; GitAmida adds no lower product limit than the native preview. The editor runtime and available memory remain practical limits because its file-system API returns each image as a complete byte array. Keep other binary blobs, submodules, and oversized text visible in Changed files, explain why comparison is unavailable, and do not decode unsupported content as UTF-8. Git LFS object retrieval and external-tool routing remain later concerns.
 
 ## Multiple-commit semantics
 

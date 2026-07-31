@@ -7,9 +7,12 @@ import {
   BranchMutationService,
   BranchSwitchError,
 } from "./branchSwitcher";
-import { GitContentProvider } from "./contentProvider";
+import {
+  GitContentProvider,
+  GitImageFileSystemProvider,
+} from "./contentProvider";
 import { buildFileTree } from "./fileTree";
-import { GitClient, GitError, MAX_TEXT_BLOB_BYTES } from "./git";
+import { GitClient, GitError } from "./git";
 import type {
   ChangedFile,
   Commit,
@@ -42,6 +45,7 @@ import {
 const LEGACY_VIEW_STATE_KEY = "gitAmida.repositoryViewState";
 const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
 const VIEW_PREFERENCES_KEY = "gitAmida.repositoryViewPreferences";
+const DEFAULT_DIFF_MAX_FILE_SIZE_MB = 50;
 type RefreshScope = "workingTree" | "history" | "detect";
 
 export class HistoryViewProvider
@@ -79,6 +83,7 @@ export class HistoryViewProvider
     private readonly git: GitClient,
     private readonly branchMutations: BranchMutationService,
     private readonly contentProvider: GitContentProvider,
+    private readonly imageProvider: GitImageFileSystemProvider,
     private readonly workspaceState: vscode.Memento,
     private readonly globalState: vscode.Memento,
   ) {
@@ -175,6 +180,7 @@ export class HistoryViewProvider
       const workingTree = await this.git.workingTreeChanges(
         history.repository.root,
         history.repository.head,
+        this.textDiffMaxBytes(),
       );
       if (request !== this.historyRequest) {
         return;
@@ -349,7 +355,11 @@ export class HistoryViewProvider
     }
     const request = ++this.workingTreeRequest;
     try {
-      const state = await this.git.workingTreeChanges(repository, headHash);
+      const state = await this.git.workingTreeChanges(
+        repository,
+        headHash,
+        this.textDiffMaxBytes(),
+      );
       if (request !== this.workingTreeRequest) {
         return;
       }
@@ -526,6 +536,7 @@ export class HistoryViewProvider
     }
 
     const request = ++this.filesRequest;
+    const textDiffMaxBytes = this.textDiffMaxBytes();
     await this.post({ type: "filesLoading", selection });
     try {
       let states: SelectionFileState[] | undefined;
@@ -539,6 +550,7 @@ export class HistoryViewProvider
         states = await this.loadSelectionFiles(
           repository,
           selection.commitHashes,
+          textDiffMaxBytes,
         );
         files = states.map((state) => state.file);
       } else if (selection.mode === "single") {
@@ -546,12 +558,17 @@ export class HistoryViewProvider
         if (commit === undefined) {
           return;
         }
-        files = await this.git.changedFiles(repository, commit);
+        files = await this.git.changedFiles(
+          repository,
+          commit,
+          textDiffMaxBytes,
+        );
       } else {
         files = await this.git.changedFilesBetween(
           repository,
           selection.baseHash,
           selection.newestHash,
+          textDiffMaxBytes,
         );
       }
       if (request !== this.filesRequest) {
@@ -658,7 +675,15 @@ export class HistoryViewProvider
     file: ChangedFile,
     repository: string,
   ): Promise<void> {
-    const unsupportedMessage = fileContentMessage(file.content);
+    if (file.content?.kind === "image") {
+      await this.openWorkingTreeImageDiff(selection, file, repository);
+      return;
+    }
+    const textDiffMaxBytes = this.textDiffMaxBytes();
+    const unsupportedMessage = fileContentMessage(
+      file.content,
+      textDiffMaxBytes,
+    );
     if (unsupportedMessage !== undefined) {
       await vscode.window.showInformationMessage(unsupportedMessage);
       return;
@@ -667,14 +692,39 @@ export class HistoryViewProvider
     const request = this.selectionRequest;
     const beforePath = file.oldPath ?? file.path;
     try {
-      const [before, after] = await Promise.all([
-        file.status.startsWith("A")
-          ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readBlob(repository, selection.headHash, beforePath),
+      const [beforeSize, after] = await Promise.all([
+        this.git.blobSize(
+          repository,
+          file.status.startsWith("A") ? undefined : selection.headHash,
+          beforePath,
+        ),
         file.status.startsWith("D")
           ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readWorkingFile(repository, file.path),
+          : this.git.readWorkingFile(
+              repository,
+              file.path,
+              textDiffMaxBytes,
+            ),
       ]);
+      if (
+        request !== this.selectionRequest ||
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== identity
+      ) {
+        return;
+      }
+      if (beforeSize > textDiffMaxBytes) {
+        await vscode.window.showInformationMessage(
+          textDiffLimitMessage(beforeSize, textDiffMaxBytes),
+        );
+        return;
+      }
+      const before = await this.git.readBlob(
+        repository,
+        file.status.startsWith("A") ? undefined : selection.headHash,
+        beforePath,
+        beforeSize,
+      );
       if (
         request !== this.selectionRequest ||
         this.selection === undefined ||
@@ -697,6 +747,62 @@ export class HistoryViewProvider
         file.path,
         "Working-Tree",
         after.toString("utf8"),
+      );
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        left,
+        right,
+        `${basename(file.path)} (Working Tree)`,
+        { preview: true },
+      );
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  private async openWorkingTreeImageDiff(
+    selection: Extract<RepositorySelection, { mode: "workingTree" }>,
+    file: ChangedFile,
+    repository: string,
+  ): Promise<void> {
+    const identity = selectionIdentity(selection);
+    const request = this.selectionRequest;
+    const beforePath = file.oldPath ?? file.path;
+    try {
+      const [beforeSize, after] = await Promise.all([
+        this.git.blobSize(
+          repository,
+          file.status.startsWith("A") ? undefined : selection.headHash,
+          beforePath,
+        ),
+        file.status.startsWith("D")
+          ? Promise.resolve(Buffer.alloc(0))
+          : this.git.readWorkingImage(repository, file.path),
+      ]);
+      if (
+        request !== this.selectionRequest ||
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== identity
+      ) {
+        return;
+      }
+      const left = this.imageProvider.add(
+        beforePath,
+        "Working-Tree-base",
+        beforeSize,
+        () =>
+          this.git.readBlob(
+            repository,
+            file.status.startsWith("A") ? undefined : selection.headHash,
+            beforePath,
+            beforeSize,
+          ),
+      );
+      const right = this.imageProvider.add(
+        file.path,
+        "Working-Tree",
+        after.byteLength,
+        () => Promise.resolve(after),
       );
       await vscode.commands.executeCommand(
         "vscode.diff",
@@ -740,23 +846,65 @@ export class HistoryViewProvider
     selectionId: string,
     request: number,
   ): Promise<void> {
-    const unsupportedMessage = fileContentMessage(comparison.content);
+    if (comparison.content?.kind === "image") {
+      await this.openImageComparison(
+        repository,
+        comparison,
+        label,
+        selectionId,
+        request,
+      );
+      return;
+    }
+    const textDiffMaxBytes = this.textDiffMaxBytes();
+    const unsupportedMessage = fileContentMessage(
+      comparison.content,
+      textDiffMaxBytes,
+    );
     if (unsupportedMessage !== undefined) {
       await vscode.window.showInformationMessage(unsupportedMessage);
       return;
     }
 
     try {
+      const [beforeSize, afterSize] = await Promise.all([
+        this.git.blobSize(
+          repository,
+          comparison.beforeRef,
+          comparison.beforePath,
+        ),
+        this.git.blobSize(
+          repository,
+          comparison.afterRef,
+          comparison.afterPath,
+        ),
+      ]);
+      if (
+        request !== this.selectionRequest ||
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== selectionId
+      ) {
+        return;
+      }
+      const largestSize = Math.max(beforeSize, afterSize);
+      if (largestSize > textDiffMaxBytes) {
+        await vscode.window.showInformationMessage(
+          textDiffLimitMessage(largestSize, textDiffMaxBytes),
+        );
+        return;
+      }
       const [before, after] = await Promise.all([
         this.git.readBlob(
           repository,
           comparison.beforeRef,
           comparison.beforePath,
+          beforeSize,
         ),
         this.git.readBlob(
           repository,
           comparison.afterRef,
           comparison.afterPath,
+          afterSize,
         ),
       ]);
       if (
@@ -782,6 +930,69 @@ export class HistoryViewProvider
         comparison.afterPath,
         label,
         after.toString("utf8"),
+      );
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        left,
+        right,
+        `${basename(comparison.afterPath)} (${label})`,
+        { preview: true },
+      );
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  private async openImageComparison(
+    repository: string,
+    comparison: FileComparison,
+    label: string,
+    selectionId: string,
+    request: number,
+  ): Promise<void> {
+    try {
+      const [beforeSize, afterSize] = await Promise.all([
+        this.git.blobSize(
+          repository,
+          comparison.beforeRef,
+          comparison.beforePath,
+        ),
+        this.git.blobSize(
+          repository,
+          comparison.afterRef,
+          comparison.afterPath,
+        ),
+      ]);
+      if (
+        request !== this.selectionRequest ||
+        this.selection === undefined ||
+        selectionIdentity(this.selection) !== selectionId
+      ) {
+        return;
+      }
+      const left = this.imageProvider.add(
+        comparison.beforePath,
+        `${label}-base`,
+        beforeSize,
+        () =>
+          this.git.readBlob(
+            repository,
+            comparison.beforeRef,
+            comparison.beforePath,
+            beforeSize,
+          ),
+      );
+      const right = this.imageProvider.add(
+        comparison.afterPath,
+        label,
+        afterSize,
+        () =>
+          this.git.readBlob(
+            repository,
+            comparison.afterRef,
+            comparison.afterPath,
+            afterSize,
+          ),
       );
       await vscode.commands.executeCommand(
         "vscode.diff",
@@ -880,9 +1091,24 @@ export class HistoryViewProvider
     return this.headHash;
   }
 
+  private textDiffMaxBytes(): number {
+    const configured = vscode.workspace
+      .getConfiguration("diffEditor")
+      .get<number>("maxFileSize", DEFAULT_DIFF_MAX_FILE_SIZE_MB);
+    const maxFileSizeMb =
+      Number.isFinite(configured) && configured >= 0
+        ? configured
+        : DEFAULT_DIFF_MAX_FILE_SIZE_MB;
+    return Math.min(
+      Number.MAX_SAFE_INTEGER,
+      Math.floor(maxFileSizeMb * 1024 * 1024),
+    );
+  }
+
   private async loadSelectionFiles(
     repository: string,
     commitHashes: string[],
+    maxTextBlobBytes: number,
   ): Promise<SelectionFileState[]> {
     const allChanges: CommitFileChange[] = [];
     for (let index = 0; index < commitHashes.length; index += 4) {
@@ -892,7 +1118,11 @@ export class HistoryViewProvider
           const commit = this.commits.get(hash);
           return commit === undefined
             ? []
-            : await this.changesForCommit(repository, commit);
+            : await this.changesForCommit(
+                repository,
+                commit,
+                maxTextBlobBytes,
+              );
         }),
       );
       allChanges.push(...changes.flat());
@@ -903,16 +1133,22 @@ export class HistoryViewProvider
   private changesForCommit(
     repository: string,
     commit: Commit,
+    maxTextBlobBytes: number,
   ): Promise<CommitFileChange[]> {
-    const cached = this.commitChanges.get(commit.hash);
+    const cacheKey = `${commit.hash}:${maxTextBlobBytes}`;
+    const cached = this.commitChanges.get(cacheKey);
     if (cached !== undefined) {
       return cached;
     }
-    const request = this.git.commitFileChanges(repository, commit);
-    this.commitChanges.set(commit.hash, request);
+    const request = this.git.commitFileChanges(
+      repository,
+      commit,
+      maxTextBlobBytes,
+    );
+    this.commitChanges.set(cacheKey, request);
     void request.catch(() => {
-      if (this.commitChanges.get(commit.hash) === request) {
-        this.commitChanges.delete(commit.hash);
+      if (this.commitChanges.get(cacheKey) === request) {
+        this.commitChanges.delete(cacheKey);
       }
     });
     return request;
@@ -1094,23 +1330,31 @@ function isBinary(content: Buffer): boolean {
 
 function fileContentMessage(
   content: ChangedFile["content"],
+  textDiffMaxBytes: number,
 ): string | undefined {
   if (content === undefined) {
     return undefined;
   }
   switch (content.kind) {
     case "image":
-      return "GitAmida: Image comparison is not available yet. The image remains listed in the selected changes.";
+      return undefined;
     case "binary":
       return "GitAmida: This is a binary file, so a text diff cannot be opened.";
     case "submodule":
       return "GitAmida: This path is a Git submodule. Its commit change is listed, but submodule comparison is not available yet.";
     case "oversized": {
+      if (content.size !== undefined && content.size <= textDiffMaxBytes) {
+        return undefined;
+      }
       const actual =
         content.size === undefined ? "This file" : formatBytes(content.size);
-      return `GitAmida: ${actual} exceeds the current ${formatBytes(MAX_TEXT_BLOB_BYTES)} text-diff limit.`;
+      return `GitAmida: ${actual} exceeds the current ${formatBytes(textDiffMaxBytes)} VS Code/Cursor text-diff limit.`;
     }
   }
+}
+
+function textDiffLimitMessage(size: number, limit: number): string {
+  return `GitAmida: ${formatBytes(size)} exceeds the current ${formatBytes(limit)} VS Code/Cursor text-diff limit.`;
 }
 
 function formatBytes(bytes: number): string {

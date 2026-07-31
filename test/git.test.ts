@@ -13,7 +13,6 @@ import test from "node:test";
 
 import {
   GitClient,
-  MAX_TEXT_BLOB_BYTES,
   parseBinaryPaths,
   parseHistory,
   parseNulPaths,
@@ -399,7 +398,8 @@ test("GitClient preserves additions, deletions, and renames in a Range", async (
   );
 });
 
-test("GitClient classifies unsupported changed content before opening a diff", async (context) => {
+test("GitClient classifies changed content before opening a diff", async (context) => {
+  const textDiffLimit = 5 * 1024 * 1024;
   const repository = mkdtempSync(join(tmpdir(), "git-amida-content-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));
   git(repository, "init", "-q");
@@ -416,11 +416,26 @@ test("GitClient classifies unsupported changed content before opening a diff", a
     join(repository, "photo.png"),
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1]),
   );
+  writeFileSync(join(repository, "drawing.svg"), "<svg></svg>\n");
+  writeFileSync(join(repository, "alternate.jpe"), Buffer.from([0xff, 0xd8]));
+  writeFileSync(join(repository, "legacy.heic"), Buffer.from([1, 0, 2]));
+  writeFileSync(join(repository, "legacy.tiff"), Buffer.from([1, 0, 2]));
   writeFileSync(
     join(repository, "large.txt"),
-    Buffer.alloc(MAX_TEXT_BLOB_BYTES + 1, "a"),
+    Buffer.alloc(textDiffLimit + 1, "a"),
   );
-  git(repository, "add", "--", "archive.bin", "photo.png", "large.txt");
+  git(
+    repository,
+    "add",
+    "--",
+    "archive.bin",
+    "photo.png",
+    "drawing.svg",
+    "alternate.jpe",
+    "legacy.heic",
+    "legacy.tiff",
+    "large.txt",
+  );
   git(
     repository,
     "update-index",
@@ -437,6 +452,7 @@ test("GitClient classifies unsupported changed content before opening a diff", a
     repository,
     root,
     tip,
+    textDiffLimit,
   );
   const byPath = new Map(files.map((file) => [file.path, file]));
   assert.deepEqual(byPath.get("archive.bin"), {
@@ -449,16 +465,78 @@ test("GitClient classifies unsupported changed content before opening a diff", a
     path: "photo.png",
     content: { kind: "image", size: 6 },
   });
+  assert.deepEqual(byPath.get("drawing.svg"), {
+    status: "A",
+    path: "drawing.svg",
+    content: { kind: "image", size: 12 },
+  });
+  assert.deepEqual(byPath.get("alternate.jpe"), {
+    status: "A",
+    path: "alternate.jpe",
+    content: { kind: "image", size: 2 },
+  });
+  assert.deepEqual(byPath.get("legacy.heic"), {
+    status: "A",
+    path: "legacy.heic",
+    content: { kind: "binary", size: 3 },
+  });
+  assert.deepEqual(byPath.get("legacy.tiff"), {
+    status: "A",
+    path: "legacy.tiff",
+    content: { kind: "binary", size: 3 },
+  });
   assert.deepEqual(byPath.get("large.txt"), {
     status: "A",
     path: "large.txt",
-    content: { kind: "oversized", size: MAX_TEXT_BLOB_BYTES + 1 },
+    content: { kind: "oversized", size: textDiffLimit + 1 },
   });
   assert.deepEqual(byPath.get("vendor/module"), {
     status: "A",
     path: "vendor/module",
     content: { kind: "submodule" },
   });
+});
+
+test("GitClient reads image bytes beyond the normal Git output buffer", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-large-image-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  const image = Buffer.alloc(16 * 1024 * 1024 + 1, 1);
+  writeFileSync(join(repository, "large.png"), image);
+  git(repository, "add", "--", "large.png");
+  git(repository, "commit", "-q", "-m", "large image");
+  const commit = git(repository, "rev-parse", "HEAD").trim();
+
+  const client = new GitClient();
+  const size = await client.blobSize(repository, commit, "large.png");
+  assert.equal(size, image.byteLength);
+  assert.equal(
+    (await client.readBlob(repository, commit, "large.png", size)).byteLength,
+    image.byteLength,
+  );
+
+  writeFileSync(join(repository, "large.png"), Buffer.alloc(image.length + 1, 2));
+  assert.equal(
+    (await client.readWorkingImage(repository, "large.png")).byteLength,
+    image.byteLength + 1,
+  );
+  assert.equal(
+    (
+      await client.readWorkingFile(
+        repository,
+        "large.png",
+        image.byteLength + 1,
+      )
+    ).byteLength,
+    image.byteLength + 1,
+  );
+  await assert.rejects(
+    client.readWorkingFile(repository, "large.png", image.byteLength),
+    /current text-diff limit/,
+  );
 });
 
 test("GitClient compares a merge range from its declared base to tip", async (context) => {

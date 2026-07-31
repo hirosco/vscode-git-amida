@@ -63,9 +63,9 @@ export function buildSelectionFiles(
       ...(group.length === 1 && newest.oldPath !== undefined
         ? { oldPath: newest.oldPath }
         : {}),
-      ...(group.length === 1 && newest.content !== undefined
-        ? { content: newest.content }
-        : {}),
+      ...(comparison.content === undefined
+        ? {}
+        : { content: comparison.content }),
       selection: {
         changes: group.map((change) => ({
           commitHash: change.commitHash,

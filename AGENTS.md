@@ -127,8 +127,10 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Insert repository data with `textContent` or explicit DOM nodes; do not interpolate it into HTML or assign it to `innerHTML`.
 - Validate Webview messages and ignore unknown fields and actions.
 - Use VS Code theme tokens and accessibility semantics.
-- Use `TextDocumentContentProvider` for read-only historical text and `vscode.diff` for comparison.
-- Treat binary content, unsupported encodings, and oversized blobs explicitly rather than coercing them into a text diff.
+- Use `TextDocumentContentProvider` for read-only historical text, a dedicated read-only `FileSystemProvider` for supported image bytes, and `vscode.diff` for both comparison types.
+- Match the built-in image preview formats (`jpg`, `jpe`, `jpeg`, `png`, `bmp`, `gif`, `ico`, `webp`, `avif`, and `svg`) and keep other binary content and unsupported encodings explicit rather than coercing them into a diff.
+- Use the current `diffEditor.maxFileSize` value for text comparison instead of imposing a narrower GitAmida-specific limit, and refresh content classification when that setting changes.
+- Do not impose a GitAmida-specific image-size limit narrower than the native preview. Size the Git blob read for the actual object while retaining bounded output for other Git operations.
 - Debounce built-in Git repository events. Refresh only working-tree state when HEAD and refs are stable, and reload history when their fingerprint changes.
 - Recheck the repository history fingerprint when the retained View becomes visible so missed background events cannot leave stale history.
 - Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.

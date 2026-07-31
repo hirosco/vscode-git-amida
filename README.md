@@ -27,14 +27,15 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Adds or removes individual commits with Cmd/Ctrl+click or Space, including unrelated branches, without presenting the result as a hypothetical merged tree
 - Deduplicates paths changed by selected commits and opens each file directly from its oldest selected before-state to its newest selected after-state, including intervening revisions of that path without pretending to merge branches
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
-- Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; pinning remains available through the editor
+- Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; supported images use the editor's native image comparison and pinning remains available through the editor
 - Switches to another local branch from a commit's context menu or the Command Palette only after rejecting unsaved editors, dirty worktrees, in-progress Git operations, and targets occupied by another worktree
 - Compares normal commits with their first parent and root commits with Git's empty tree
-- Keeps raster images, binary files, submodules, and text blobs over 5 MiB visible and labeled without decoding them as text
+- Compares saved working-tree and historical `.jpg`, `.jpe`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.ico`, `.webp`, `.avif`, and `.svg` states through the editor's native image comparison, including empty endpoints for additions and deletions
+- Keeps other binary files, submodules, and text blobs beyond the current VS Code/Cursor `diffEditor.maxFileSize` setting visible and labeled without decoding them as text
 - Runs read-only Git commands without a shell
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
-Paged automatic history loading, file-history tabs, remote-tracking branch creation, image diffs, whitespace options, and multi-root repository selection are planned but not implemented yet.
+Paged automatic history loading, file-history tabs, remote-tracking branch creation, whitespace options, and multi-root repository selection are planned but not implemented yet.
 
 ## Try it in Cursor
 

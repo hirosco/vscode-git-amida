@@ -16,16 +16,15 @@ The remaining checkpoints build on selection-scoped, endpoint-based comparison a
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
-## 2. Image comparison
+## 2. Image comparison validation
 
-- Investigate whether Cursor's native editor can present a useful before-and-after comparison for two historical image states
-- Reuse the existing single-commit, Range, and Selection endpoint resolution instead of introducing image-specific comparison semantics
-- Prefer the native editor when it can show both endpoints clearly; otherwise add only a lightweight GitAmida before-and-after view through a small dedicated image-opening boundary
-- Label the actual before and after revisions and paths, including additions, deletions, and renames
-- Preserve the current binary and oversized-content safeguards and avoid image editing, pixel analysis, overlay, or swipe controls
+- Validate native image comparisons for single commits, continuous ranges, explicit selections, and saved working-tree changes
+- Confirm that additions, deletions, and renames communicate their actual empty or renamed endpoints clearly enough
+- Confirm SVG visual comparison and the built-in JPG, JPE, JPEG, PNG, BMP, GIF, ICO, WebP, and AVIF formats in Cursor
 - Confirm basic compatibility in VS Code without making it the primary optimization target
+- Keep Git LFS object retrieval, image editing, pixel analysis, overlays, swipe controls, and an SVG source-diff switch outside this checkpoint unless validation demonstrates a concrete need
 
-This checkpoint is complete when an image selected from Changed files opens a useful comparison for single commits, Ranges, and Selections in Cursor without changing text-diff behavior. If a safe implementation requires a substantially larger custom viewer or storage design, defer it and continue with File History instead.
+This checkpoint is complete when an image selected from Changed files opens a useful comparison for single commits, Ranges, Selections, and saved working-tree changes in Cursor without changing text-diff behavior.
 
 ## 3. File History investigations
 

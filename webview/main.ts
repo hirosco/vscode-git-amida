@@ -717,19 +717,11 @@ function createFolderIcon(expanded: boolean): SVGSVGElement {
 }
 
 function createFileIcon(file: ChangedFile): SVGSVGElement {
-  const kind: FileIconKind =
-    file.content?.kind ??
-    (isSvgPath(file.path) || isSvgPath(file.oldPath)
-      ? "image"
-      : "file");
+  const kind: FileIconKind = file.content?.kind ?? "file";
   return createStrokeIcon(
     `content-kind-icon kind-${kind}`,
     FILE_ICON_PATHS[kind],
   );
-}
-
-function isSvgPath(path: string | undefined): boolean {
-  return path?.toLowerCase().endsWith(".svg") === true;
 }
 
 function createStrokeIcon(

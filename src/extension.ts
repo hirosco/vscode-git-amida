@@ -1,7 +1,10 @@
 import * as vscode from "vscode";
 
 import { BranchMutationService } from "./branchSwitcher";
-import { GitContentProvider } from "./contentProvider";
+import {
+  GitContentProvider,
+  GitImageFileSystemProvider,
+} from "./contentProvider";
 import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
 import { HistoryViewProvider } from "./panel";
@@ -10,11 +13,13 @@ export function activate(context: vscode.ExtensionContext): void {
   const git = new GitClient();
   const branchMutations = new BranchMutationService();
   const contentProvider = new GitContentProvider();
+  const imageProvider = new GitImageFileSystemProvider();
   const historyProvider = new HistoryViewProvider(
     context.extensionUri,
     git,
     branchMutations,
     contentProvider,
+    imageProvider,
     context.workspaceState,
     context.globalState,
   );
@@ -23,6 +28,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.registerTextDocumentContentProvider(
       "git-amida",
       contentProvider,
+    ),
+    vscode.workspace.registerFileSystemProvider(
+      "git-amida-image",
+      imageProvider,
+      { isReadonly: true, isCaseSensitive: true },
     ),
     vscode.window.registerWebviewViewProvider(
       HistoryViewProvider.viewType,
@@ -48,6 +58,12 @@ export function activate(context: vscode.ExtensionContext): void {
         historyProvider.scheduleRefresh("workingTree");
       }
     }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("diffEditor.maxFileSize")) {
+        historyProvider.scheduleRefresh("history");
+      }
+    }),
+    imageProvider,
     historyProvider,
   );
   void observeGitRepositories(

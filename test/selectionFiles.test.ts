@@ -72,6 +72,38 @@ test("buildSelectionFiles spans a hidden same-file gap", () => {
   });
 });
 
+test("buildSelectionFiles preserves image content for multiple selected changes", () => {
+  const files = buildSelectionFiles(
+    [
+      {
+        commitHash: "new",
+        parentHash: "middle",
+        status: "M",
+        path: "image.svg",
+        oldObject: "old-image",
+        newObject: "new-image",
+        content: { kind: "image", size: 200 },
+      },
+      {
+        commitHash: "old",
+        parentHash: "root",
+        status: "M",
+        path: "image.svg",
+        oldObject: "root-image",
+        newObject: "old-image",
+        content: { kind: "image", size: 100 },
+      },
+    ],
+    ["new", "old"],
+  );
+
+  assert.deepEqual(files[0]?.file.content, { kind: "image", size: 200 });
+  assert.deepEqual(files[0]?.comparison.content, {
+    kind: "image",
+    size: 200,
+  });
+});
+
 test("buildSelectionFiles follows endpoint paths through selected renames", () => {
   const rename = change("rename", "base", "R100", "new.txt", "old", "same");
   rename.oldPath = "old.txt";
