@@ -13,6 +13,10 @@ import {
 } from "./contentProvider";
 import { NativeDiffSessionRegistry } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
+import {
+  FileRestoreError,
+  FileRestoreService,
+} from "./fileRestorer";
 import { buildFileTree } from "./fileTree";
 import { GitClient, GitError } from "./git";
 import type {
@@ -89,6 +93,7 @@ export class HistoryViewProvider
     private readonly imageProvider: GitImageFileSystemProvider,
     private readonly diffSessions: NativeDiffSessionRegistry,
     private readonly externalDifftool: ExternalDifftoolService,
+    private readonly fileRestorer: FileRestoreService,
     private readonly workspaceState: vscode.Memento,
     private readonly globalState: vscode.Memento,
   ) {
@@ -229,6 +234,90 @@ export class HistoryViewProvider
       });
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  public async restoreFile(
+    path: string | undefined,
+    side: "before" | "after",
+  ): Promise<void> {
+    await this.stateReady;
+    const selection = this.selection;
+    const file = this.findFile(
+      path ?? this.navigationState.selectedFilePath ?? "",
+    );
+    const repository = this.repository;
+    if (
+      selection === undefined ||
+      selection.mode === "workingTree" ||
+      file === undefined ||
+      repository === undefined
+    ) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a file from a historical comparison first.",
+      );
+      return;
+    }
+    if (file.content?.kind === "submodule") {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Submodule revisions cannot be restored as files.",
+      );
+      return;
+    }
+
+    const comparison = this.fileComparison(selection, file);
+    if (comparison === undefined) {
+      return;
+    }
+    const sourceRef =
+      side === "before" ? comparison.beforeRef : comparison.afterRef;
+    const sourcePath =
+      side === "before" ? comparison.beforePath : comparison.afterPath;
+    if (sourceRef === undefined) {
+      await vscode.window.showInformationMessage(
+        `GitAmida: This comparison has no ${side} file version to restore.`,
+      );
+      return;
+    }
+
+    const request = {
+      repository,
+      sourceRef,
+      sourcePath,
+      destinationPath: file.path,
+    };
+    try {
+      const plan = await this.fileRestorer.preflight(request);
+      this.rejectUnsavedDestination(repository, plan.destination, file.path);
+      const verb = plan.destinationExists ? "Replace" : "Create";
+      const confirmation = await vscode.window.showWarningMessage(
+        `${verb} "${file.path}" from the ${side} version?`,
+        {
+          modal: true,
+          detail:
+            `Source: ${sourceRef.slice(0, 8)}:${sourcePath}\n` +
+            `Destination: ${file.path}\n` +
+            "The Git index will remain unchanged.",
+        },
+        "Restore",
+      );
+      if (confirmation !== "Restore") {
+        return;
+      }
+
+      this.rejectUnsavedDestination(repository, plan.destination, file.path);
+      await this.fileRestorer.restore(request);
+      await this.refreshWorkingTree();
+      await vscode.window.showInformationMessage(
+        `GitAmida: Restored "${file.path}" from the ${side} version.`,
+      );
+    } catch (error) {
+      const message = userMessage(error);
+      if (error instanceof FileRestoreError) {
+        await vscode.window.showWarningMessage(`GitAmida: ${message}`);
+      } else {
+        await vscode.window.showErrorMessage(`GitAmida: ${message}`);
+      }
     }
   }
 
@@ -1089,6 +1178,22 @@ export class HistoryViewProvider
           isPathInside(repository, document.uri.fsPath),
       )
       .map((document) => document.uri.fsPath);
+  }
+
+  private rejectUnsavedDestination(
+    repository: string,
+    destination: string,
+    displayPath: string,
+  ): void {
+    if (
+      this.unsavedEditorPaths(repository).some(
+        (path) => relative(destination, path) === "",
+      )
+    ) {
+      throw new FileRestoreError(
+        `"${displayPath}" has unsaved editor changes. Save or close it before restoring.`,
+      );
+    }
   }
 
   private restoreSelection(

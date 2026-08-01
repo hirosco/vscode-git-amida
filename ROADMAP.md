@@ -26,18 +26,7 @@ This checkpoint is complete when branch ancestry can be followed quickly during 
 
 This checkpoint is complete when an image selected from Changed files opens a useful comparison for single commits, Ranges, Selections, and saved working-tree changes in Cursor without changing text-diff behavior.
 
-## 3. File revision restoration
-
-- Add a context action to each historical Changed-files row that can restore either available before or after endpoint directly to that row's current working-tree path
-- Name the operation as restoration rather than export, show the source endpoint and destination path in an explicit confirmation, and do not open a save dialog
-- Hide a side whose endpoint does not contain a file; restoring a deleted file's available before-state may recreate the row path, but an absent endpoint must never imply deletion
-- Resolve refs and paths only from current Extension Host state, reject submodules, symlinks, and any destination outside the repository, and write exact bytes without text decoding
-- Refuse targets with unsaved editor contents or existing staged, unstaged, or untracked changes; never stash, discard, force, or overwrite uncertain state
-- Leave the index unchanged, refresh the saved working-tree view after success, and structure the endpoint writer so File History can later expose **Restore This Revision**
-
-This checkpoint is complete when a clean tracked file can be replaced, or a missing path recreated, from either real comparison endpoint while unsafe targets remain unchanged with a concise explanation.
-
-## 4. File History investigations
+## 3. File History investigations
 
 - Keep one pinned Repository History tab
 - Open and close several independent File History tabs
@@ -54,7 +43,7 @@ This checkpoint is complete when a clean tracked file can be replaced, or a miss
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 5. Repository and history hardening
+## 4. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
@@ -65,14 +54,14 @@ This checkpoint is complete when users can investigate several files and always 
 - Preserve lane and color continuity while history pages append
 - Test behavior in both Cursor and VS Code
 
-## 6. Diff controls and external tools
+## 5. Diff controls and external tools
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
 - Validate that the editor-title action where available and the Changed-files row context action open the same single-file text and image endpoints in the configured Git difftool for single commits, Ranges, Selections, and saved working-tree changes
 - Confirm additions, deletions, renames, missing tool configuration, and launch failures retain an understandable native-diff fallback
 
-## 7. Performance and public distribution
+## 6. Performance and public distribution
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs

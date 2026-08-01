@@ -50,6 +50,22 @@
         "title": "Switch Branch…",
         "category": "GitAmida",
         "icon": "$(git-branch)"
+      },
+      {
+        "command": "gitAmida.restoreAfterFile",
+        "title": "Restore Selected File from After Version…",
+        "category": "GitAmida"
+      },
+      {
+        "command": "gitAmida.restoreBeforeFile",
+        "title": "Restore Selected File from Before Version…",
+        "category": "GitAmida"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "gitAmida.restoreFile",
+        "label": "Restore Working Tree File"
       }
     ],
     "viewsContainers": {
@@ -87,9 +103,26 @@
           "group": "navigation"
         },
         {
+          "submenu": "gitAmida.restoreFile",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile' && gitAmidaCanRestoreFile",
+          "group": "navigation@2"
+        },
+        {
           "command": "gitAmida.switchBranch",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'commit' && gitAmidaHasSwitchableBranch",
           "group": "navigation"
+        }
+      ],
+      "gitAmida.restoreFile": [
+        {
+          "command": "gitAmida.restoreAfterFile",
+          "when": "gitAmidaCanRestoreAfterFile",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitAmida.restoreBeforeFile",
+          "when": "gitAmidaCanRestoreBeforeFile",
+          "group": "navigation@2"
         }
       ]
     }

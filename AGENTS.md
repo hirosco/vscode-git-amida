@@ -120,6 +120,16 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Keep refusal handling inside a concise notification; do not redirect to Source Control unless product requirements change.
 - Refresh all repository and history state after a successful switch.
 
+## File revision restoration safety
+
+- Keep single-file restoration behind a separate mutation boundary from history queries, native diffs, external difftools, and branch switching.
+- Resolve the source ref, source path, and current row destination only from current Extension Host state; the Webview may identify only a currently loaded file row and endpoint side.
+- Restore only an endpoint that contains a regular blob. Never interpret an absent endpoint as a deletion.
+- Restore a renamed source into the current row path, write exact blob bytes, and leave the index unchanged.
+- Before confirmation and again before replacement, reject unsaved editor content, staged or unstaged target changes, existing untracked or ignored targets, special or unresolved index entries, submodules, symbolic links, non-files, and paths outside the canonical repository root.
+- Never stash, stage, discard, force, save editor contents, or overwrite uncertain state automatically.
+- Refresh working-tree state after a successful restoration and keep the endpoint writer reusable by File History.
+
 ## Webview and editor integration
 
 - Apply a restrictive Content Security Policy and use a new nonce for each HTML document.
@@ -155,6 +165,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Test root commits, merges, renames, deletions, binary files, and paths with spaces or non-ASCII characters as those behaviors are added.
 - Test navigation state independently: Repository History singleton, File History tab deduplication, selection retention, and reveal-in-log.
 - Test branch switching only in temporary repositories and cover every refusal state before success paths.
+- Test file restoration only in temporary repositories. Cover exact binary bytes, rename destinations, missing-file recreation, index preservation, and every refusal state before success paths.
 - Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on HTML snapshots.
 - Run `npm ci`, `npm run check`, `npm test`, and `npm run package:inspect` at each checkpoint.
 - Manually verify mouse, keyboard, resizing, focus, Panel persistence, and native diff opening in Cursor and VS Code.

@@ -743,6 +743,20 @@ function createFileRow(
   label: string,
   tree = false,
 ): HTMLButtonElement {
+  const canRestore =
+    selection !== undefined &&
+    selection.mode !== "workingTree" &&
+    file.content?.kind !== "submodule";
+  const canRestoreBefore =
+    canRestore &&
+    (selection?.mode === "selection"
+      ? file.selection?.beforeRef !== undefined
+      : !file.status.startsWith("A"));
+  const canRestoreAfter =
+    canRestore &&
+    (selection?.mode === "selection"
+      ? file.selection?.afterRef !== undefined
+      : !file.status.startsWith("D"));
   const button = document.createElement("button");
   button.type = "button";
   button.className = tree ? "file-row tree-file-row" : "file-row";
@@ -751,6 +765,9 @@ function createFileRow(
     webviewSection: "changedFile",
     preventDefaultContextMenuItems: true,
     gitAmidaFilePath: file.path,
+    gitAmidaCanRestoreFile: canRestoreBefore || canRestoreAfter,
+    gitAmidaCanRestoreBeforeFile: canRestoreBefore,
+    gitAmidaCanRestoreAfterFile: canRestoreAfter,
   });
   button.setAttribute("role", tree ? "treeitem" : "option");
   const status = fileStatusLabel(file);

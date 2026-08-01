@@ -10,7 +10,7 @@ Repository History is the center of the product. It provides a compact commit gr
 
 File histories are supporting investigations. Users can open several file-history tabs from Repository History, the Explorer, or an editor, keep them open independently, and return from any file revision to its commit in Repository History.
 
-GitAmida focuses on understanding history rather than becoming a general-purpose Git client. It will support safe branch switching, but it will not switch directly to arbitrary commits. The commit ID remains easy to copy for users who intentionally want to enter detached HEAD from a terminal.
+GitAmida focuses on understanding history rather than becoming a general-purpose Git client. It supports safe named-branch switching and explicit restoration of one historical file into the working tree, but it will not switch directly to arbitrary commits. The commit ID remains easy to copy for users who intentionally want to enter detached HEAD from a terminal.
 
 ## Current MVP
 
@@ -29,11 +29,12 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
 - Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on double-click or Enter; supported images use the editor's native image comparison and pinning remains available through the editor
 - Opens one current Changed-files row in the user-configured Git difftool from its context menu, and also exposes the same action from an active GitAmida native diff when the editor API identifies that tab reliably
+- Restores either available before or after endpoint of one historical Changed-files row directly to that row's current working-tree path after an explicit confirmation, while refusing unsaved, staged, unstaged, untracked, symlink, and submodule targets and leaving the index unchanged
 - Switches to another local branch from a commit's context menu or the Command Palette only after rejecting unsaved editors, dirty worktrees, in-progress Git operations, and targets occupied by another worktree
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Compares saved working-tree and historical `.jpg`, `.jpe`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.ico`, `.webp`, `.avif`, and `.svg` states through the editor's native image comparison, including empty endpoints for additions and deletions
 - Keeps other binary files, submodules, and text blobs beyond the current VS Code/Cursor `diffEditor.maxFileSize` setting visible and labeled without decoding them as text
-- Runs read-only Git commands without a shell
+- Runs Git queries and blob reads without a shell; the explicit restore action writes only its confirmed working-tree destination
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
 Paged automatic history loading, file-history tabs, remote-tracking branch creation, whitespace options, and multi-root repository selection are planned but not implemented yet.
@@ -48,7 +49,7 @@ npm ci
 npm run build
 ```
 
-Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Save a file to inspect the automatically updated **Uncommitted changes** row. Click a commit, then Shift+click another visible commit to select every row in between; GitAmida automatically chooses the safe Range or Selection comparison. Use Cmd/Ctrl+click to toggle individual commits. With a history row focused, Shift+Arrow extends the visible interval and Space toggles the focused commit. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor. When Git's `diff.tool` is configured, use the external-link action in that diff's editor title to reopen the same endpoints in the configured tool. To switch safely, right-click a commit that has another local branch or focus it and run **GitAmida: Switch Branch…**. GitAmida leaves the repository unchanged and explains the reason whenever the current worktree is not clean or the target is unsafe.
+Open this repository in Cursor, press `F5`, and choose **Run GitAmida Extension** if prompted. In the Extension Development Host, run **GitAmida: Open** from the command palette. Save a file to inspect the automatically updated **Uncommitted changes** row. Click a commit, then Shift+click another visible commit to select every row in between; GitAmida automatically chooses the safe Range or Selection comparison. Use Cmd/Ctrl+click to toggle individual commits. With a history row focused, Shift+Arrow extends the visible interval and Space toggles the focused commit. Double-click a changed file to open its endpoint diff without replacing the history panel; the next file reuses that preview tab unless you pin it through the editor. When Git's `diff.tool` is configured, use the external-link action in that diff's editor title to reopen the same endpoints in the configured tool. To restore one displayed endpoint, right-click a historical Changed-files row, open **Restore Working Tree File**, and choose the available after or before version. Confirm the source and destination; GitAmida writes the working-tree file without staging it and refuses to overwrite existing local changes. To switch safely, right-click a commit that has another local branch or focus it and run **GitAmida: Switch Branch…**. GitAmida leaves the repository unchanged and explains the reason whenever a requested mutation is unsafe.
 
 ## Install locally
 
@@ -76,7 +77,7 @@ This command deliberately skips a license-file requirement only for local evalua
 - **Natural traversal**: Move between repository history, several file histories, and diffs without discarding state
 - **Dense but readable**: Keep every commit on one row and move secondary information into details
 - **Explainable aggregation**: Let selected commits define the file scope, compare actual Git states at visible endpoints, and never imply a synthesized tree or branch merge
-- **Safe workspace changes**: Add branch switching only with explicit preflight checks and no automatic stash or force
+- **Safe workspace changes**: Keep named-branch switching and single-file restoration behind explicit preflight checks and confirmation, with no automatic stash, staging, discard, or force
 - **Focused**: Exclude history editing and unrelated Git-client operations
 - **Evidence-driven minimalism**: Keep only features that prove useful in daily use
 

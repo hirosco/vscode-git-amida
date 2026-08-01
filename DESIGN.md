@@ -161,6 +161,12 @@ The virtual-document path follows the current VS Code or Cursor `diffEditor.maxF
 
 Each native diff is registered with its repository, before and after paths, and both opaque editor URIs when it opens. The editor-title external-tool action reads those exact displayed endpoints instead of consulting the current Repository History selection again, so later navigation cannot change the meaning of an already open Range or Selection diff. Cursor's stable Tab API can report no active tab for a native image diff, so each Changed-files row also provides a context-menu fallback. That action validates the path against the Extension Host's currently loaded files and resolves only that file's current single-commit, Range, Selection, or saved working-tree endpoints; it never launches an aggregate or trusts endpoint refs from the Webview. GitAmida writes the two endpoint copies into a private temporary directory and invokes `git difftool --no-index` with an argument array only after the user explicitly requests it. This preserves additions, deletions, renames, working-tree snapshots, image bytes, and unrelated Selection endpoints without asking the external tool to reproduce GitAmida's selection semantics. The configured tool may outlive the launching process, so endpoint copies remain until the Extension Host session ends. Missing or failed tool configuration leaves the native diff open as the fallback.
 
+## File revision restoration
+
+Restoration is a separate working-tree mutation boundary, not an export or an extension of the native diff editor. A historical Changed-files row exposes each endpoint that actually contains a file. The Extension Host resolves that endpoint from its current trusted comparison state, shows its commit and path together with the row's current destination path, and requires a modal confirmation. An absent endpoint is not an instruction to delete anything.
+
+The destination is always the current row path, including when the selected source came from the old side of a rename. Before showing confirmation and again immediately before replacement, reject unsaved editor content, staged or unstaged target changes, existing untracked or ignored targets, unresolved or specially flagged index entries, symbolic-link sources or destination components, submodules, non-files, and paths outside the canonical repository root. Read the selected Git blob as bytes, create a same-directory temporary file, and replace the destination only after a final state check. A missing untracked destination may be created so a file deleted in the current revision can be recovered. Leave the index unchanged so every successful restoration remains an ordinary visible working-tree change. Keep this endpoint writer independent of Repository History UI state so File History can reuse it later.
+
 ## Multiple-commit semantics
 
 GitAmida uses **selection-scoped, endpoint-based comparison**. A selection determines which changed paths belong to the investigation; each file diff compares actual Git states at visible endpoints. GitAmida never invents an intermediate tree or presents unrelated branch changes as a merged result.
@@ -271,6 +277,6 @@ Do not introduce a second frontend or shared cross-language core unless a curren
 
 ## Safety and independence
 
-All history, file, and diff operations are read-only. Branch switching is the only planned working-tree mutation and follows the separate safety boundary above.
+History queries, file inspection, and diff operations are read-only. Named-branch switching and explicit single-file restoration are the only working-tree mutations; each follows its own preflighted application boundary and neither stages, stashes, discards, forces, or edits Git history.
 
 GitAmida may learn from general history-viewer workflows, but it must derive its hierarchy and interactions from its own requirements. Do not reproduce JetBrains wording, icons, colors, assets, screenshots, or source code, and do not imply affiliation.

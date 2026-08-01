@@ -7,6 +7,7 @@ import {
 } from "./contentProvider";
 import { NativeDiffSessionRegistry } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
+import { FileRestoreService } from "./fileRestorer";
 import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
 import { HistoryViewProvider } from "./panel";
@@ -18,6 +19,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const imageProvider = new GitImageFileSystemProvider();
   const diffSessions = new NativeDiffSessionRegistry();
   const externalDifftool = new ExternalDifftoolService();
+  const fileRestorer = new FileRestoreService();
   const updateActiveDiffContext = (): void => {
     void vscode.commands.executeCommand(
       "setContext",
@@ -35,6 +37,7 @@ export function activate(context: vscode.ExtensionContext): void {
     imageProvider,
     diffSessions,
     externalDifftool,
+    fileRestorer,
     context.workspaceState,
     context.globalState,
   );
@@ -98,6 +101,24 @@ export function activate(context: vscode.ExtensionContext): void {
       async (contextValue?: unknown) => {
         await historyProvider.switchBranchAtCommit(
           contextCommitHash(contextValue),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.restoreAfterFile",
+      async (contextValue?: unknown) => {
+        await historyProvider.restoreFile(
+          contextFilePath(contextValue),
+          "after",
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.restoreBeforeFile",
+      async (contextValue?: unknown) => {
+        await historyProvider.restoreFile(
+          contextFilePath(contextValue),
+          "before",
         );
       },
     ),
