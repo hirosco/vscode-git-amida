@@ -5,11 +5,10 @@ import {
   DEFAULT_VIEW_PREFERENCES,
   mergeViewPreferences,
   restoreViewState,
-  sanitizeNavigationState,
   sanitizeViewPreferences,
 } from "../src/viewState";
 
-test("view preferences and navigation state sanitize independently", () => {
+test("view preferences ignore navigation fields", () => {
   assert.deepEqual(sanitizeViewPreferences(null), DEFAULT_VIEW_PREFERENCES);
   assert.deepEqual(
     sanitizeViewPreferences({
@@ -25,46 +24,6 @@ test("view preferences and navigation state sanitize independently", () => {
       historyRatio: 45,
       filesRatio: 80,
       detailsCollapsed: false,
-    },
-  );
-  assert.deepEqual(
-    sanitizeNavigationState({
-      selectedWorkingTree: true,
-      selectedHash: "abc",
-      rangeAnchorHash: "def",
-      selectionHashes: ["abc", "ghi", "abc", 42],
-      selectedFilePath: "src/file.ts",
-      fileViewMode: "tree",
-    }),
-    {
-      selectedWorkingTree: true,
-      selectedHash: "abc",
-      selectionAnchorHash: "def",
-      selectionHashes: ["abc", "ghi"],
-      selectedFilePath: "src/file.ts",
-    },
-  );
-  assert.deepEqual(
-    sanitizeNavigationState({
-      selectedWorkingTree: false,
-      selectedHash: 12,
-      selectedFilePath: "",
-    }),
-    {},
-  );
-});
-
-test("navigation state migrates the legacy Range anchor field", () => {
-  assert.deepEqual(
-    sanitizeNavigationState({
-      selectedHash: "active",
-      rangeAnchorHash: "legacy-anchor",
-      selectionHashes: ["active", "legacy-anchor"],
-    }),
-    {
-      selectedHash: "active",
-      selectionAnchorHash: "legacy-anchor",
-      selectionHashes: ["active", "legacy-anchor"],
     },
   );
 });
@@ -106,7 +65,7 @@ test("mergeViewPreferences can expand details after they were collapsed", () => 
   assert.equal(expanded.detailsCollapsed, false);
 });
 
-test("restoreViewState migrates the legacy workspace value into split state", () => {
+test("restoreViewState migrates only legacy preferences", () => {
   assert.deepEqual(
     restoreViewState(undefined, undefined, {
       selectedHash: "legacy",
@@ -117,24 +76,20 @@ test("restoreViewState migrates the legacy workspace value into split state", ()
       detailsCollapsed: true,
     }),
     {
-      navigation: {
-        selectedHash: "legacy",
-        selectedFilePath: "legacy.txt",
-      },
       preferences: {
         fileViewMode: "tree",
         historyRatio: 65,
         filesRatio: 60,
         detailsCollapsed: true,
       },
-      migrateNavigation: true,
       migratePreferences: true,
+      removeNavigation: false,
       removeLegacy: true,
     },
   );
 });
 
-test("restoreViewState prefers established global and workspace values", () => {
+test("restoreViewState prefers global preferences and removes saved navigation", () => {
   assert.deepEqual(
     restoreViewState(
       { ...DEFAULT_VIEW_PREFERENCES, historyRatio: 70 },
@@ -146,11 +101,22 @@ test("restoreViewState prefers established global and workspace values", () => {
       },
     ),
     {
-      navigation: { selectedHash: "current" },
       preferences: { ...DEFAULT_VIEW_PREFERENCES, historyRatio: 70 },
-      migrateNavigation: false,
       migratePreferences: false,
+      removeNavigation: true,
       removeLegacy: true,
+    },
+  );
+});
+
+test("restoreViewState starts transient navigation clean", () => {
+  assert.deepEqual(
+    restoreViewState(DEFAULT_VIEW_PREFERENCES, undefined, undefined),
+    {
+      preferences: DEFAULT_VIEW_PREFERENCES,
+      migratePreferences: false,
+      removeNavigation: false,
+      removeLegacy: false,
     },
   );
 });

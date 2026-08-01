@@ -63,6 +63,44 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("gitAmida.refresh", async () => {
       await historyProvider.refresh();
     }),
+    vscode.commands.registerCommand(
+      "gitAmida.openFileHistory",
+      async (contextValue?: unknown) => {
+        const filePath = contextFilePath(contextValue);
+        if (filePath !== undefined) {
+          await historyProvider.openFileHistory(filePath);
+          return;
+        }
+
+        const resource =
+          contextResourceUri(contextValue) ??
+          vscode.window.activeTextEditor?.document.uri;
+        if (resource?.scheme === "file") {
+          await vscode.commands.executeCommand("gitAmida.history.focus");
+          await historyProvider.openFileHistoryForResource(resource);
+          return;
+        }
+
+        await historyProvider.openFileHistory();
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.openFileHistoryFromChangedFile",
+      async (contextValue?: unknown) => {
+        await vscode.commands.executeCommand(
+          "gitAmida.openFileHistory",
+          contextValue,
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.openChanges",
+      async (contextValue?: unknown) => {
+        await historyProvider.openChangedFileDiff(
+          contextFilePath(contextValue),
+        );
+      },
+    ),
     vscode.commands.registerCommand("gitAmida.openInDifftool", async (
       contextValue?: unknown,
     ) => {
@@ -166,6 +204,10 @@ function contextFilePath(value: unknown): string | undefined {
   }
   const path = (value as Record<string, unknown>).gitAmidaFilePath;
   return typeof path === "string" ? path : undefined;
+}
+
+function contextResourceUri(value: unknown): vscode.Uri | undefined {
+  return value instanceof vscode.Uri ? value : undefined;
 }
 
 function activeDiffSession(

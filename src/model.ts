@@ -79,6 +79,22 @@ export interface CommitFileChange extends ChangedFile {
   newObject: string;
 }
 
+export interface FileRevision extends ChangedFile {
+  commit: Commit;
+}
+
+export interface FileHistoryTab {
+  id: string;
+  label: string;
+  path: string;
+  revisions: FileRevision[];
+  selectedHash?: string;
+  scrollTop: number;
+  revealSelected: boolean;
+  loading: boolean;
+  error?: string;
+}
+
 export interface HistoryResult {
   repository: RepositoryInfo;
   rows: HistoryRow[];

@@ -1,5 +1,6 @@
 import type {
   ChangedFile,
+  FileHistoryTab,
   FileTreeNode,
   HistoryResult,
   RepositorySelection,
@@ -35,6 +36,11 @@ export type HostToWebviewMessage =
       selection: RepositorySelection;
       message: string;
     }
+  | {
+      type: "fileHistoryState";
+      tabs: FileHistoryTab[];
+      activeTabId?: string;
+    }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =
@@ -48,5 +54,16 @@ export type WebviewToHostMessage =
       toggle: boolean;
     }
   | { type: "selectFile"; path: string }
-  | { type: "openDiff"; path: string }
+  | { type: "openDiff"; path: string; preview: boolean }
+  | { type: "activateRepositoryHistory" }
+  | { type: "activateFileHistory"; tabId: string }
+  | { type: "closeFileHistory"; tabId: string }
+  | { type: "retryFileHistory"; tabId: string }
+  | {
+      type: "selectFileRevision";
+      tabId: string;
+      hash: string;
+      preview: boolean;
+    }
+  | { type: "updateFileHistoryScroll"; tabId: string; scrollTop: number }
   | { type: "updateViewState"; patch: RepositoryViewStatePatch };

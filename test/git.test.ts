@@ -5,6 +5,7 @@ import {
   realpathSync,
   renameSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,6 +15,7 @@ import test from "node:test";
 import {
   GitClient,
   parseBinaryPaths,
+  parseFileHistory,
   parseHistory,
   parseNulPaths,
   parseRawDiff,
@@ -125,6 +127,114 @@ test("parseRawDiff and parseBinaryPaths preserve rename metadata", () => {
       ),
     ),
     new Set(["binary\tname.bin", "new.bin"]),
+  );
+});
+
+test("parseFileHistory preserves revision paths and rename metadata", () => {
+  const output = Buffer.from(
+    "\x1enew\x00new1234\x00old\x00Author\x00author@example.invalid\x00" +
+      "2026-08-02T10:00:00+09:00\x002026-08-02T11:00:00+09:00\x00rename\x00\x00\n" +
+      "R100\x00old name.png\x00new name.png\x00" +
+      "\x1eold\x00old1234\x00\x00Author\x00author@example.invalid\x00" +
+      "2026-08-01T10:00:00+09:00\x002026-08-01T10:00:00+09:00\x00add\x00\x00\n" +
+      "A\x00old name.png\x00",
+  );
+
+  assert.deepEqual(parseFileHistory(output), [
+    {
+      commit: {
+        hash: "new",
+        shortHash: "new1234",
+        parents: ["old"],
+        authorName: "Author",
+        authorEmail: "author@example.invalid",
+        authoredAt: "2026-08-02T10:00:00+09:00",
+        committedAt: "2026-08-02T11:00:00+09:00",
+        subject: "rename",
+        refs: [],
+      },
+      status: "R100",
+      oldPath: "old name.png",
+      path: "new name.png",
+    },
+    {
+      commit: {
+        hash: "old",
+        shortHash: "old1234",
+        parents: [],
+        authorName: "Author",
+        authorEmail: "author@example.invalid",
+        authoredAt: "2026-08-01T10:00:00+09:00",
+        committedAt: "2026-08-01T10:00:00+09:00",
+        subject: "add",
+        refs: [],
+      },
+      status: "A",
+      path: "old name.png",
+    },
+  ]);
+});
+
+test("GitClient follows renamed file history", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-file-history-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "old name.txt"), "one\n");
+  git(repository, "add", "--", "old name.txt");
+  git(repository, "commit", "-q", "-m", "add file");
+  renameSync(
+    join(repository, "old name.txt"),
+    join(repository, "new name.txt"),
+  );
+  git(repository, "add", "-A", "--", "old name.txt", "new name.txt");
+  git(repository, "commit", "-q", "-m", "rename file");
+  writeFileSync(join(repository, "new name.txt"), "two\n");
+  git(repository, "add", "--", "new name.txt");
+  git(repository, "commit", "-q", "-m", "modify file");
+  unlinkSync(join(repository, "new name.txt"));
+  git(repository, "add", "-A", "--", "new name.txt");
+  git(repository, "commit", "-q", "-m", "delete file");
+
+  const revisions = await new GitClient().fileHistory(
+    repository,
+    "new name.txt",
+  );
+  assert.deepEqual(
+    revisions.map((revision) => ({
+      subject: revision.commit.subject,
+      status: revision.status[0],
+      oldPath: revision.oldPath,
+      path: revision.path,
+    })),
+    [
+      {
+        subject: "delete file",
+        status: "D",
+        oldPath: undefined,
+        path: "new name.txt",
+      },
+      {
+        subject: "modify file",
+        status: "M",
+        oldPath: undefined,
+        path: "new name.txt",
+      },
+      {
+        subject: "rename file",
+        status: "R",
+        oldPath: "old name.txt",
+        path: "new name.txt",
+      },
+      {
+        subject: "add file",
+        status: "A",
+        oldPath: undefined,
+        path: "old name.txt",
+      },
+    ],
   );
 });
 

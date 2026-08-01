@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { basename, isAbsolute, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, sep } from "node:path";
 
 import * as vscode from "vscode";
 
@@ -17,12 +17,18 @@ import {
   FileRestoreError,
   FileRestoreService,
 } from "./fileRestorer";
+import {
+  fileHistoriesOverlap,
+  fileHistoryMatchesPath,
+  selectedFileRevisionHash,
+} from "./fileHistory";
 import { buildFileTree } from "./fileTree";
 import { GitClient, GitError } from "./git";
 import type {
   ChangedFile,
   Commit,
   CommitFileChange,
+  FileHistoryTab,
   RepositoryNavigationState,
   RepositorySelection,
   RepositoryViewPreferences,
@@ -68,6 +74,9 @@ export class HistoryViewProvider
   private workingTreeVersion = 0;
   private selection?: RepositorySelection;
   private currentFiles: ChangedFile[] = [];
+  private readonly fileHistoryTabs: FileHistoryTab[] = [];
+  private activeFileHistoryTabId?: string;
+  private nextFileHistoryTabId = 1;
   private readonly selectionFiles = new Map<string, SelectionFileState>();
   private readonly commitChanges = new Map<
     string,
@@ -102,7 +111,7 @@ export class HistoryViewProvider
       this.workspaceState.get<unknown>(NAVIGATION_STATE_KEY),
       this.workspaceState.get<unknown>(LEGACY_VIEW_STATE_KEY),
     );
-    this.navigationState = restored.navigation;
+    this.navigationState = {};
     this.viewPreferences = restored.preferences;
     this.stateReady = this.migrateLegacyState(restored);
   }
@@ -235,6 +244,105 @@ export class HistoryViewProvider
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
+  }
+
+  public async openFileHistory(path?: string): Promise<void> {
+    await this.stateReady;
+    const requestedPath = path ?? this.navigationState.selectedFilePath;
+    const repository = this.repository;
+    const file =
+      requestedPath === undefined ? undefined : this.findFile(requestedPath);
+    if (repository === undefined || file === undefined) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a changed file before opening File History.",
+      );
+      return;
+    }
+
+    await this.openFileHistoryPath(
+      file.path,
+      this.fileHistoryInitialHash(file),
+    );
+  }
+
+  public async openFileHistoryForResource(
+    resource: vscode.Uri,
+  ): Promise<void> {
+    await this.stateReady;
+    try {
+      const repository = await this.git.resolveRepository(
+        dirname(resource.fsPath),
+      );
+      if (this.repository !== repository) {
+        await this.refresh(false);
+      }
+      if (this.repository !== repository || !isPathInside(repository, resource.fsPath)) {
+        await vscode.window.showInformationMessage(
+          "GitAmida: Open Repository History for this file's repository first.",
+        );
+        return;
+      }
+      const path = toGitPath(relative(repository, resource.fsPath));
+      if (path === "") {
+        await vscode.window.showInformationMessage(
+          "GitAmida: Select a file before opening File History.",
+        );
+        return;
+      }
+      await this.openFileHistoryPath(path, undefined);
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  public async openChangedFileDiff(path?: string): Promise<void> {
+    await this.stateReady;
+    const requestedPath = path ?? this.navigationState.selectedFilePath;
+    if (
+      requestedPath === undefined ||
+      this.findFile(requestedPath) === undefined
+    ) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a changed file before opening its changes.",
+      );
+      return;
+    }
+    await this.openDiff(requestedPath, false);
+  }
+
+  private async openFileHistoryPath(
+    path: string,
+    requestedHash: string | undefined,
+  ): Promise<void> {
+    const existing = this.findFileHistoryTab(path);
+    if (existing !== undefined) {
+      if (
+        requestedHash !== undefined &&
+        existing.revisions.some(
+          (revision) => revision.commit.hash === requestedHash,
+        )
+      ) {
+        existing.selectedHash = requestedHash;
+        existing.revealSelected = true;
+      }
+      this.activeFileHistoryTabId = existing.id;
+      await this.postFileHistoryState();
+      return;
+    }
+
+    const tab: FileHistoryTab = {
+      id: `file-${this.nextFileHistoryTabId++}`,
+      label: basename(path),
+      path,
+      revisions: [],
+      scrollTop: 0,
+      revealSelected: false,
+      loading: true,
+    };
+    this.fileHistoryTabs.push(tab);
+    this.activeFileHistoryTabId = tab.id;
+    await this.postFileHistoryState();
+    await this.loadFileHistoryTab(tab, requestedHash);
   }
 
   public async restoreFile(
@@ -401,8 +509,6 @@ export class HistoryViewProvider
             ? this.navigationState.selectedFilePath
             : undefined,
       };
-      await this.persistNavigationState();
-
       await this.post({
         type: "history",
         ...history,
@@ -550,7 +656,6 @@ export class HistoryViewProvider
           selectedWorkingTree: true,
           selectedFilePath: this.navigationState.selectedFilePath,
         };
-        await this.persistNavigationState();
         await this.post({
           type: "workingTree",
           workingTree: this.workingTree,
@@ -585,6 +690,7 @@ export class HistoryViewProvider
 
     if (value.type === "ready") {
       await this.refresh();
+      await this.postFileHistoryState();
       return;
     }
     if (value.type === "refresh") {
@@ -648,15 +754,78 @@ export class HistoryViewProvider
         ...this.navigationState,
         selectedFilePath: value.path,
       };
-      await this.persistNavigationState();
       return;
     }
 
     if (
       value.type === "openDiff" &&
-      typeof value.path === "string"
+      typeof value.path === "string" &&
+      typeof value.preview === "boolean"
     ) {
-      await this.openDiff(value.path);
+      await this.openDiff(value.path, value.preview);
+      return;
+    }
+
+    if (value.type === "activateRepositoryHistory") {
+      this.activeFileHistoryTabId = undefined;
+      await this.postFileHistoryState();
+      return;
+    }
+
+    if (
+      value.type === "activateFileHistory" &&
+      typeof value.tabId === "string" &&
+      this.findFileHistoryTabById(value.tabId) !== undefined
+    ) {
+      this.activeFileHistoryTabId = value.tabId;
+      await this.postFileHistoryState();
+      return;
+    }
+
+    if (
+      value.type === "closeFileHistory" &&
+      typeof value.tabId === "string"
+    ) {
+      await this.closeFileHistory(value.tabId);
+      return;
+    }
+
+    if (
+      value.type === "retryFileHistory" &&
+      typeof value.tabId === "string"
+    ) {
+      const tab = this.findFileHistoryTabById(value.tabId);
+      if (tab !== undefined) {
+        tab.loading = true;
+        tab.error = undefined;
+        await this.postFileHistoryState();
+        await this.loadFileHistoryTab(tab, tab.selectedHash);
+      }
+      return;
+    }
+
+    if (
+      value.type === "selectFileRevision" &&
+      typeof value.tabId === "string" &&
+      typeof value.hash === "string" &&
+      typeof value.preview === "boolean"
+    ) {
+      await this.selectFileRevision(value.tabId, value.hash, value.preview);
+      return;
+    }
+
+    if (
+      value.type === "updateFileHistoryScroll" &&
+      typeof value.tabId === "string" &&
+      typeof value.scrollTop === "number" &&
+      Number.isFinite(value.scrollTop) &&
+      value.scrollTop >= 0
+    ) {
+      const tab = this.findFileHistoryTabById(value.tabId);
+      if (tab !== undefined) {
+        tab.scrollTop = value.scrollTop;
+        tab.revealSelected = false;
+      }
       return;
     }
 
@@ -686,7 +855,6 @@ export class HistoryViewProvider
           : undefined,
       selectedFilePath: undefined,
     };
-    await this.persistNavigationState();
     if (request !== this.selectionRequest) {
       return;
     }
@@ -755,7 +923,6 @@ export class HistoryViewProvider
           ...this.navigationState,
           selectedFilePath: undefined,
         };
-        await this.persistNavigationState();
       }
       await this.post({
         type: "files",
@@ -775,7 +942,7 @@ export class HistoryViewProvider
     }
   }
 
-  private async openDiff(path: string): Promise<void> {
+  private async openDiff(path: string, preview: boolean): Promise<void> {
     const selection = this.selection;
     const file = this.findFile(path);
     const repository = this.repository;
@@ -788,7 +955,12 @@ export class HistoryViewProvider
     }
 
     if (selection.mode === "workingTree") {
-      await this.openWorkingTreeDiff(selection, file, repository);
+      await this.openWorkingTreeDiff(
+        selection,
+        file,
+        repository,
+        preview,
+      );
       return;
     }
 
@@ -803,18 +975,167 @@ export class HistoryViewProvider
       repository,
       comparison,
       this.selectionLabel(selection),
-      diffIdentity,
-      request,
+      {
+        preview,
+        isCurrent: () =>
+          request === this.selectionRequest &&
+          this.selection !== undefined &&
+          selectionIdentity(this.selection) === diffIdentity,
+      },
     );
+  }
+
+  private async closeFileHistory(tabId: string): Promise<void> {
+    const index = this.fileHistoryTabs.findIndex((tab) => tab.id === tabId);
+    if (index === -1) {
+      return;
+    }
+    const wasActive = this.activeFileHistoryTabId === tabId;
+    this.fileHistoryTabs.splice(index, 1);
+    if (wasActive) {
+      this.activeFileHistoryTabId =
+        this.fileHistoryTabs[index]?.id ??
+        this.fileHistoryTabs[index - 1]?.id;
+    }
+    await this.postFileHistoryState();
+  }
+
+  private async loadFileHistoryTab(
+    tab: FileHistoryTab,
+    requestedHash: string | undefined,
+  ): Promise<void> {
+    const repository = this.repository;
+    if (repository === undefined) {
+      return;
+    }
+    try {
+      const revisions = (await this.git.fileHistory(repository, tab.path)).map(
+        (revision) => ({
+          ...revision,
+          commit: this.commits.get(revision.commit.hash) ?? revision.commit,
+        }),
+      );
+      if (!this.fileHistoryTabs.includes(tab)) {
+        return;
+      }
+      const duplicate = this.fileHistoryTabs.find(
+        (candidate) =>
+          candidate !== tab && fileHistoriesOverlap(candidate.revisions, revisions),
+      );
+      if (duplicate !== undefined) {
+        this.fileHistoryTabs.splice(this.fileHistoryTabs.indexOf(tab), 1);
+        if (
+          requestedHash !== undefined &&
+          duplicate.revisions.some(
+            (revision) => revision.commit.hash === requestedHash,
+          )
+        ) {
+          duplicate.selectedHash = requestedHash;
+          duplicate.revealSelected = true;
+        }
+        this.activeFileHistoryTabId = duplicate.id;
+        await this.postFileHistoryState();
+        return;
+      }
+
+      tab.revisions = revisions;
+      tab.path = revisions[0]?.path ?? tab.path;
+      tab.label = basename(tab.path);
+      tab.selectedHash = selectedFileRevisionHash(revisions, requestedHash);
+      tab.revealSelected =
+        requestedHash !== undefined && tab.selectedHash === requestedHash;
+      tab.loading = false;
+      tab.error = undefined;
+      await this.postFileHistoryState();
+    } catch (error) {
+      if (!this.fileHistoryTabs.includes(tab)) {
+        return;
+      }
+      tab.loading = false;
+      tab.error = userMessage(error);
+      await this.postFileHistoryState();
+    }
+  }
+
+  private async selectFileRevision(
+    tabId: string,
+    hash: string,
+    preview: boolean,
+  ): Promise<void> {
+    const tab = this.findFileHistoryTabById(tabId);
+    const revision = tab?.revisions.find(
+      (candidate) => candidate.commit.hash === hash,
+    );
+    const repository = this.repository;
+    if (tab === undefined || revision === undefined || repository === undefined) {
+      return;
+    }
+    tab.selectedHash = hash;
+    this.activeFileHistoryTabId = tab.id;
+    await this.postFileHistoryState();
+
+    try {
+      const changes = await this.changesForCommit(
+        repository,
+        revision.commit,
+        this.textDiffMaxBytes(),
+      );
+      if (
+        this.activeFileHistoryTabId !== tab.id ||
+        tab.selectedHash !== hash ||
+        !this.fileHistoryTabs.includes(tab)
+      ) {
+        return;
+      }
+      const change = changes.find(
+        (candidate) =>
+          candidate.path === revision.path &&
+          candidate.oldPath === revision.oldPath,
+      );
+      if (change === undefined) {
+        await vscode.window.showInformationMessage(
+          "GitAmida: This file revision could not be compared with its first parent.",
+        );
+        return;
+      }
+      const comparison = resolveFileComparison(
+        singleCommitSelection(hash),
+        change,
+        revision.commit,
+      );
+      if (comparison === undefined) {
+        return;
+      }
+      await this.openComparison(
+        repository,
+        comparison,
+        revision.commit.shortHash || hash.slice(0, 8),
+        {
+          preview,
+          isCurrent: () =>
+            this.activeFileHistoryTabId === tab.id &&
+            tab.selectedHash === hash &&
+            this.fileHistoryTabs.includes(tab),
+        },
+      );
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
   }
 
   private async openWorkingTreeDiff(
     selection: Extract<RepositorySelection, { mode: "workingTree" }>,
     file: ChangedFile,
     repository: string,
+    preview: boolean,
   ): Promise<void> {
     if (file.content?.kind === "image") {
-      await this.openWorkingTreeImageDiff(selection, file, repository);
+      await this.openWorkingTreeImageDiff(
+        selection,
+        file,
+        repository,
+        preview,
+      );
       return;
     }
     const textDiffMaxBytes = this.textDiffMaxBytes();
@@ -891,7 +1212,7 @@ export class HistoryViewProvider
         left,
         right,
         `${basename(file.path)} (Working Tree)`,
-        { preview: true },
+        { preview },
       );
       this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
@@ -903,6 +1224,7 @@ export class HistoryViewProvider
     selection: Extract<RepositorySelection, { mode: "workingTree" }>,
     file: ChangedFile,
     repository: string,
+    preview: boolean,
   ): Promise<void> {
     const identity = selectionIdentity(selection);
     const request = this.selectionRequest;
@@ -948,7 +1270,7 @@ export class HistoryViewProvider
         left,
         right,
         `${basename(file.path)} (Working Tree)`,
-        { preview: true },
+        { preview },
       );
       this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
@@ -960,16 +1282,14 @@ export class HistoryViewProvider
     repository: string,
     comparison: FileComparison,
     label: string,
-    selectionId: string,
-    request: number,
+    context: { preview: boolean; isCurrent: () => boolean },
   ): Promise<void> {
     if (comparison.content?.kind === "image") {
       await this.openImageComparison(
         repository,
         comparison,
         label,
-        selectionId,
-        request,
+        context,
       );
       return;
     }
@@ -996,11 +1316,7 @@ export class HistoryViewProvider
           comparison.afterPath,
         ),
       ]);
-      if (
-        request !== this.selectionRequest ||
-        this.selection === undefined ||
-        selectionIdentity(this.selection) !== selectionId
-      ) {
+      if (!context.isCurrent()) {
         return;
       }
       const largestSize = Math.max(beforeSize, afterSize);
@@ -1024,11 +1340,7 @@ export class HistoryViewProvider
           afterSize,
         ),
       ]);
-      if (
-        request !== this.selectionRequest ||
-        this.selection === undefined ||
-        selectionIdentity(this.selection) !== selectionId
-      ) {
+      if (!context.isCurrent()) {
         return;
       }
       if (isBinary(before) || isBinary(after)) {
@@ -1053,7 +1365,7 @@ export class HistoryViewProvider
         left,
         right,
         `${basename(comparison.afterPath)} (${label})`,
-        { preview: true },
+        { preview: context.preview },
       );
       this.registerDiffSession(
         repository,
@@ -1071,8 +1383,7 @@ export class HistoryViewProvider
     repository: string,
     comparison: FileComparison,
     label: string,
-    selectionId: string,
-    request: number,
+    context: { preview: boolean; isCurrent: () => boolean },
   ): Promise<void> {
     try {
       const [beforeSize, afterSize] = await Promise.all([
@@ -1087,11 +1398,7 @@ export class HistoryViewProvider
           comparison.afterPath,
         ),
       ]);
-      if (
-        request !== this.selectionRequest ||
-        this.selection === undefined ||
-        selectionIdentity(this.selection) !== selectionId
-      ) {
+      if (!context.isCurrent()) {
         return;
       }
       const left = this.imageProvider.add(
@@ -1123,7 +1430,7 @@ export class HistoryViewProvider
         left,
         right,
         `${basename(comparison.afterPath)} (${label})`,
-        { preview: true },
+        { preview: context.preview },
       );
       this.registerDiffSession(
         repository,
@@ -1139,6 +1446,33 @@ export class HistoryViewProvider
 
   private findFile(path: string): ChangedFile | undefined {
     return this.currentFiles.find((file) => file.path === path);
+  }
+
+  private findFileHistoryTab(path: string): FileHistoryTab | undefined {
+    return this.fileHistoryTabs.find((tab) =>
+      fileHistoryMatchesPath(tab, path),
+    );
+  }
+
+  private findFileHistoryTabById(id: string): FileHistoryTab | undefined {
+    return this.fileHistoryTabs.find((tab) => tab.id === id);
+  }
+
+  private fileHistoryInitialHash(file: ChangedFile): string | undefined {
+    const selection = this.selection;
+    if (selection === undefined) {
+      return undefined;
+    }
+    if (selection.mode === "workingTree") {
+      return selection.headHash;
+    }
+    if (selection.mode === "range") {
+      return selection.newestHash;
+    }
+    if (selection.mode === "selection") {
+      return file.selection?.changes[0]?.commitHash ?? selection.activeHash;
+    }
+    return selection.activeHash;
   }
 
   private fileComparison(
@@ -1333,13 +1667,6 @@ export class HistoryViewProvider
     return { ...this.viewPreferences, ...this.navigationState };
   }
 
-  private async persistNavigationState(): Promise<void> {
-    await this.workspaceState.update(
-      NAVIGATION_STATE_KEY,
-      this.navigationState,
-    );
-  }
-
   private async persistViewPreferences(): Promise<void> {
     await this.globalState.update(VIEW_PREFERENCES_KEY, this.viewPreferences);
   }
@@ -1350,8 +1677,8 @@ export class HistoryViewProvider
     if (restored.migratePreferences) {
       await this.persistViewPreferences();
     }
-    if (restored.migrateNavigation) {
-      await this.persistNavigationState();
+    if (restored.removeNavigation) {
+      await this.workspaceState.update(NAVIGATION_STATE_KEY, undefined);
     }
     if (restored.removeLegacy) {
       await this.workspaceState.update(LEGACY_VIEW_STATE_KEY, undefined);
@@ -1360,6 +1687,16 @@ export class HistoryViewProvider
 
   private async post(message: HostToWebviewMessage): Promise<void> {
     await this.view?.webview.postMessage(message);
+  }
+
+  private async postFileHistoryState(): Promise<void> {
+    await this.post({
+      type: "fileHistoryState",
+      tabs: this.fileHistoryTabs,
+      ...(this.activeFileHistoryTabId === undefined
+        ? {}
+        : { activeTabId: this.activeFileHistoryTabId }),
+    });
   }
 
   private workspaceFolder(): vscode.WorkspaceFolder | undefined {
@@ -1398,6 +1735,14 @@ export class HistoryViewProvider
 <title>GitAmida</title>
 </head>
 <body>
+  <nav id="tab-strip" class="tab-strip" aria-label="GitAmida histories" hidden>
+    <div id="tab-list" class="tab-list" role="tablist" aria-label="History tabs">
+      <button id="repository-tab" class="history-tab repository-home-tab" type="button" role="tab" aria-controls="workspace" aria-selected="true" aria-label="Repository History" title="Repository History">
+        <svg class="repository-home-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7.2 8 2.8l5.5 4.4v5.9H9.7V9.4H6.3v3.7H2.5z"/></svg>
+      </button>
+      <div id="file-tabs" class="file-tabs"></div>
+    </div>
+  </nav>
   <main id="workspace" class="workspace" data-history-ratio="55">
     <section class="pane history-pane" aria-labelledby="history-heading">
       <div class="pane-heading">
@@ -1452,6 +1797,30 @@ export class HistoryViewProvider
           <p class="empty-state">Select a commit.</p>
         </div>
       </section>
+    </section>
+  </main>
+  <main id="file-history-workspace" class="file-history-workspace" hidden>
+    <section class="pane file-history-pane" aria-labelledby="file-history-heading">
+      <div class="pane-heading">
+        <div class="heading-label">
+          <h2 id="file-history-heading">File History</h2>
+          <span id="file-history-path" class="secondary"></span>
+        </div>
+        <span id="file-history-count" class="secondary"></span>
+      </div>
+      <div class="column-head file-history-columns" aria-hidden="true">
+        <span>Commit</span><span>Path</span><span>Date</span><span>Status</span>
+      </div>
+      <div id="file-revisions" class="list file-revision-list" role="listbox" aria-label="File revisions"></div>
+    </section>
+    <div id="file-history-resizer" class="workspace-resizer" role="separator" aria-label="Resize File History and commit details" aria-orientation="vertical" aria-valuemin="45" aria-valuemax="70" aria-valuenow="55" tabindex="0"></div>
+    <section class="details-section file-history-details-section" aria-labelledby="file-history-details-heading">
+      <div class="pane-heading">
+        <h2 id="file-history-details-heading">Commit details</h2>
+      </div>
+      <div id="file-history-details" class="details-content">
+        <p class="empty-state">Select a revision.</p>
+      </div>
     </section>
   </main>
   <footer id="status" role="status">Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.</footer>
@@ -1554,4 +1923,8 @@ function isPathInside(repository: string, path: string): boolean {
       !relativePath.startsWith(`..${sep}`) &&
       !isAbsolute(relativePath))
   );
+}
+
+function toGitPath(path: string): string {
+  return path.split(sep).join("/");
 }

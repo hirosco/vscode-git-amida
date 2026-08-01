@@ -47,7 +47,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 ## Repository History UI
 
-- Keep exactly one pinned, non-closable Repository History tab.
+- Keep exactly one pinned, non-closable Repository History destination. Once a File History exists, represent Repository History with a compact home tab rather than a long text tab; hide the entire tab strip when no File History is open.
 - Render each commit as one logical row with a non-wrapping subject line.
 - Derive graph lanes from commit hashes and parents; do not send terminal graph text or ANSI color sequences to the Webview.
 - Use the editor's `scmGraph.foreground1` through `scmGraph.foreground5` theme colors with safe workbench fallbacks.
@@ -66,24 +66,30 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Color changed-file paths with the same Git decoration token as their displayed status. Use the bundled icon to distinguish supported images without adding a redundant visible content label; keep labels for unsupported binary, oversized, and submodule content separate from Git status.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
-- Preserve selection and scroll state while File History tabs or native diffs are active.
+- Preserve selection and scroll state while File History tabs or native diffs are active in the current Extension Host session. After an editor restart or window reload, select the newest visible commit as one commit instead of restoring a prior commit, working-tree row, Range, or Selection.
 - Let Shift select every visible commit row between a stable anchor and active row. Resolve the interval as Range only when it exactly matches one ancestor-related comparison; otherwise use Selection, while presenting a common selected-commit count as the primary state.
 - Prefetch history automatically near the loaded end; do not use a routine **Load more** button. Offer retry only after a loading failure.
-- Keep visual preferences global to the current editor profile. Reserve workspace state for repository-specific navigation such as the selected commit and file, and do not persist transient tree expansion.
+- Keep visual preferences global to the current editor profile. Keep Repository History navigation such as the selected commit and file transient to the current Extension Host session, and do not persist tree expansion.
 - Keep commit ordering and other future behavioral options global rather than allowing workspace-specific overrides.
 - Do not reserve Webview height for repository metadata in a single-root workspace. Add a compact repository chooser only when multi-root selection is implemented and multiple repositories are available.
 - Show saved working-tree changes as one transient row above commits only while dirty. Keep it visually distinct, compare it with HEAD, and never include it in Range or Selection.
 - Exclude unsaved editor buffers from the working-tree row until they are saved.
 - Preserve commit selection and scroll while working-tree updates appear or disappear; return a selected working-tree row to HEAD when the repository becomes clean.
+- Expose one theme-safe manual Refresh action in the native View title as recovery for missed external repository changes; do not add a second Refresh control inside the Webview.
 
 ## File History UI
 
 - Permit several closable File History tabs while Repository History remains a singleton.
 - Deduplicate tabs by repository identity and file identity.
 - Preserve selected revision and scroll state per tab.
+- Color each revision path and status with the matching Git decoration token, while keeping commit subjects and dates neutral.
+- Show the selected revision's commit metadata in a resizable details column without duplicating Changed files.
+- Keep File History tabs on one row, size them to their filename up to a readable maximum, scroll them horizontally when needed, and integrate each close action into its tab surface. Do not duplicate horizontal navigation with a separate tab-list selector.
+- Keep open File History tabs and their navigation transient to the current Extension Host session; do not restore them after an editor restart or window reload.
 - Open File History from changed files, Explorer resources, and editor resources.
+- Keep branch labels out of File History until a concrete navigation problem demonstrates that they add value beyond Repository History.
 - Let a revision reveal and select its commit in Repository History without closing the file tab.
-- Single-click may update a preview diff; Enter and double-click must provide the explicit open or pin action.
+- Single-click and keyboard navigation update a preview diff; Enter and double-click pin it.
 - Handle renamed and deleted paths as identity transitions, not display-only labels.
 
 ## Node.js and dependency safety
@@ -139,6 +145,8 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Validate Webview messages and ignore unknown fields and actions.
 - Use VS Code theme tokens and accessibility semantics.
 - Use `TextDocumentContentProvider` for read-only historical text, a dedicated read-only `FileSystemProvider` for supported image bytes, and `vscode.diff` for both comparison types.
+- Use the same native preview model for Changed files and File History revisions: single-click and keyboard navigation reuse a preview diff; double-click and Enter pin it. Treat the explicit Changed-files **Open Changes** context action as a pinned open.
+- Put the active-file File History action in the editor title and the manual Refresh action in the native GitAmida View title, using standard theme icons and keyboard-accessible commands.
 - Expose an external Git difftool only through an explicit action on an active GitAmida native diff or one current Changed-files row. Use the native diff's registered endpoints when available; otherwise resolve only the context-clicked file against the currently loaded selection. Pass private endpoint copies through `git difftool --no-index` and do not add an aggregate Changed-files launch.
 - Match the built-in image preview formats (`jpg`, `jpe`, `jpeg`, `png`, `bmp`, `gif`, `ico`, `webp`, `avif`, and `svg`) and keep other binary content and unsupported encodings explicit rather than coercing them into a diff.
 - Use the current `diffEditor.maxFileSize` value for text comparison instead of imposing a narrower GitAmida-specific limit, and refresh content classification when that setting changes.
@@ -146,7 +154,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Debounce built-in Git repository events. Refresh only working-tree state when HEAD and refs are stable, and reload history when their fingerprint changes.
 - Recheck the repository history fingerprint when the retained View becomes visible so missed background events cannot leave stale history.
 - Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.
-- Keep manual refresh available from the Command Palette and inline retry after errors, without a routine visible refresh button.
+- Keep manual refresh available from both the native View title and Command Palette, and keep inline retry limited to errors.
 
 ## Diff conventions
 

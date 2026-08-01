@@ -16,6 +16,7 @@ import type {
   Commit,
   CommitFileChange,
   CommitRef,
+  FileRevision,
   HistoryResult,
   RepositoryInfo,
   WorkingTreeState,
@@ -279,6 +280,28 @@ export class GitClient {
       oldObject: entry.oldObject,
       newObject: entry.newObject,
     }));
+  }
+
+  public async fileHistory(
+    repository: string,
+    path: string,
+  ): Promise<FileRevision[]> {
+    const output = await this.run(repository, [
+      "log",
+      "--all",
+      "--follow",
+      "--find-renames",
+      "--date-order",
+      "--color=never",
+      "--no-decorate",
+      "--diff-merges=first-parent",
+      `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+      "--name-status",
+      "-z",
+      "--",
+      path,
+    ]);
+    return parseFileHistory(output);
   }
 
   private async changedEntriesBetween(
@@ -578,6 +601,63 @@ export function parseHistory(
   }
 
   return commits;
+}
+
+export function parseFileHistory(output: Buffer): FileRevision[] {
+  const revisions: FileRevision[] = [];
+  for (const rawRecord of output.toString("utf8").split(RECORD_MARKER)) {
+    if (rawRecord.length === 0) {
+      continue;
+    }
+    const fields = rawRecord.split("\x00");
+    const [
+      hash,
+      shortHash = "",
+      parents = "",
+      authorName = "",
+      authorEmail = "",
+      authoredAt = "",
+      committedAt = "",
+      subject = "",
+    ] = fields;
+    if (!hash) {
+      continue;
+    }
+    const commit: Commit = {
+      hash,
+      shortHash,
+      parents: parents.length > 0 ? parents.split(" ") : [],
+      authorName,
+      authorEmail,
+      authoredAt,
+      committedAt,
+      subject,
+      refs: [],
+    };
+    for (let index = 8; index < fields.length; ) {
+      const status = (fields[index++] ?? "").replace(/^\r?\n+/, "");
+      if (!/^[A-Z][0-9]*$/.test(status)) {
+        continue;
+      }
+      const firstPath = fields[index++];
+      if (firstPath === undefined || firstPath.length === 0) {
+        break;
+      }
+      const renamed = status.startsWith("R") || status.startsWith("C");
+      const path = renamed ? fields[index++] : firstPath;
+      if (path === undefined || path.length === 0) {
+        break;
+      }
+      revisions.push({
+        commit,
+        status,
+        path,
+        ...(renamed ? { oldPath: firstPath } : {}),
+      });
+      break;
+    }
+  }
+  return revisions;
 }
 
 export function parseRefs(output: string): Map<string, CommitRef[]> {

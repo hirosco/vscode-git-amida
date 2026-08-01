@@ -2,6 +2,7 @@ import type {
   Commit,
   CommitRangeSelection,
   RepositorySelection,
+  SingleCommitSelection,
 } from "./model";
 
 export type RangeResolution =
@@ -13,7 +14,7 @@ interface Reachability {
   missing: boolean;
 }
 
-export function singleCommitSelection(hash: string): RepositorySelection {
+export function singleCommitSelection(hash: string): SingleCommitSelection {
   return { mode: "single", activeHash: hash };
 }
 

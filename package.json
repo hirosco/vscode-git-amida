@@ -46,6 +46,22 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "gitAmida.openFileHistory",
+        "title": "GitAmida: Show File History",
+        "icon": "$(history)"
+      },
+      {
+        "command": "gitAmida.openFileHistoryFromChangedFile",
+        "title": "Show File History",
+        "category": "GitAmida"
+      },
+      {
+        "command": "gitAmida.openChanges",
+        "title": "Open Changes",
+        "category": "GitAmida",
+        "icon": "$(diff)"
+      },
+      {
         "command": "gitAmida.switchBranch",
         "title": "Switch Branch…",
         "category": "GitAmida",
@@ -91,26 +107,54 @@
     "menus": {
       "editor/title": [
         {
+          "command": "gitAmida.openFileHistory",
+          "when": "resourceScheme == file",
+          "group": "navigation"
+        },
+        {
           "command": "gitAmida.openInDifftool",
           "when": "gitAmida.activeDiff",
           "group": "navigation@10"
         }
       ],
+      "view/title": [
+        {
+          "command": "gitAmida.refresh",
+          "when": "view == gitAmida.history",
+          "group": "navigation@1"
+        }
+      ],
       "webview/context": [
+        {
+          "command": "gitAmida.openChanges",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitAmida.openFileHistoryFromChangedFile",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "group": "navigation@2"
+        },
         {
           "command": "gitAmida.openInDifftool",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
-          "group": "navigation"
+          "group": "navigation@3"
         },
         {
           "submenu": "gitAmida.restoreFile",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile' && gitAmidaCanRestoreFile",
-          "group": "navigation@2"
+          "group": "navigation@4"
         },
         {
           "command": "gitAmida.switchBranch",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'commit' && gitAmidaHasSwitchableBranch",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gitAmida.openFileHistoryFromChangedFile",
+          "when": "false"
         }
       ],
       "gitAmida.restoreFile": [

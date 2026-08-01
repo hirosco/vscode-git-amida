@@ -1,7 +1,4 @@
-import type {
-  RepositoryNavigationState,
-  RepositoryViewPreferences,
-} from "./model";
+import type { RepositoryViewPreferences } from "./model";
 
 export const DEFAULT_VIEW_PREFERENCES: RepositoryViewPreferences = {
   fileViewMode: "flat",
@@ -11,10 +8,9 @@ export const DEFAULT_VIEW_PREFERENCES: RepositoryViewPreferences = {
 };
 
 export interface RestoredViewState {
-  navigation: RepositoryNavigationState;
   preferences: RepositoryViewPreferences;
-  migrateNavigation: boolean;
   migratePreferences: boolean;
+  removeNavigation: boolean;
   removeLegacy: boolean;
 }
 
@@ -24,17 +20,13 @@ export function restoreViewState(
   legacyValue: unknown,
 ): RestoredViewState {
   const hasPreferences = preferencesValue !== undefined;
-  const hasNavigation = navigationValue !== undefined;
   const hasLegacy = legacyValue !== undefined;
   return {
     preferences: sanitizeViewPreferences(
       hasPreferences ? preferencesValue : legacyValue,
     ),
-    navigation: sanitizeNavigationState(
-      hasNavigation ? navigationValue : legacyValue,
-    ),
     migratePreferences: hasLegacy && !hasPreferences,
-    migrateNavigation: hasLegacy && !hasNavigation,
+    removeNavigation: navigationValue !== undefined,
     removeLegacy: hasLegacy,
   };
 }
@@ -55,30 +47,6 @@ export function sanitizeViewPreferences(
   };
 }
 
-export function sanitizeNavigationState(
-  value: unknown,
-): RepositoryNavigationState {
-  if (value === null || typeof value !== "object") {
-    return {};
-  }
-
-  const candidate = value as Record<string, unknown>;
-  const selectedWorkingTree = candidate.selectedWorkingTree === true;
-  const selectedHash = optionalString(candidate.selectedHash);
-  const selectionAnchorHash =
-    optionalString(candidate.selectionAnchorHash) ??
-    optionalString(candidate.rangeAnchorHash);
-  const selectionHashes = optionalStringArray(candidate.selectionHashes);
-  const selectedFilePath = optionalString(candidate.selectedFilePath);
-  return {
-    ...(selectedWorkingTree ? { selectedWorkingTree: true } : {}),
-    ...(selectedHash === undefined ? {} : { selectedHash }),
-    ...(selectionAnchorHash === undefined ? {} : { selectionAnchorHash }),
-    ...(selectionHashes === undefined ? {} : { selectionHashes }),
-    ...(selectedFilePath === undefined ? {} : { selectedFilePath }),
-  };
-}
-
 export function mergeViewPreferences(
   current: RepositoryViewPreferences,
   patch: unknown,
@@ -94,21 +62,6 @@ export function mergeViewPreferences(
     filesRatio: value.filesRatio ?? current.filesRatio,
     detailsCollapsed: value.detailsCollapsed ?? current.detailsCollapsed,
   });
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function optionalStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) {
-    return undefined;
-  }
-  const strings = value.filter(
-    (item): item is string => typeof item === "string" && item.length > 0,
-  );
-  const unique = [...new Set(strings)];
-  return unique.length > 1 ? unique : undefined;
 }
 
 function sanitizeRatio(

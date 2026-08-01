@@ -2,6 +2,7 @@ import type {
   ChangedFile,
   Commit,
   CommitGraph,
+  FileHistoryTab,
   FileTreeNode,
   FileViewMode,
   GraphLine,
@@ -47,12 +48,22 @@ const elements = {
   detailsSection: element<HTMLElement>("details-section"),
   expandAll: element<HTMLButtonElement>("expand-all"),
   files: element<HTMLDivElement>("files"),
+  fileHistoryCount: element<HTMLSpanElement>("file-history-count"),
+  fileHistoryDetails: element<HTMLDivElement>("file-history-details"),
+  fileHistoryPath: element<HTMLSpanElement>("file-history-path"),
+  fileHistoryResizer: element<HTMLDivElement>("file-history-resizer"),
+  fileHistoryWorkspace: element<HTMLElement>("file-history-workspace"),
+  fileRevisions: element<HTMLDivElement>("file-revisions"),
+  fileTabs: element<HTMLDivElement>("file-tabs"),
   flatMode: element<HTMLButtonElement>("flat-mode"),
   history: element<HTMLDivElement>("history"),
   historyCount: element<HTMLSpanElement>("history-count"),
   inspection: element<HTMLElement>("inspection"),
+  repositoryTab: element<HTMLButtonElement>("repository-tab"),
   selectedCommit: element<HTMLSpanElement>("selected-commit"),
   status: element<HTMLElement>("status"),
+  tabList: element<HTMLDivElement>("tab-list"),
+  tabStrip: element<HTMLElement>("tab-strip"),
   toggleDetails: element<HTMLButtonElement>("toggle-details"),
   treeActions: element<HTMLDivElement>("tree-actions"),
   treeMode: element<HTMLButtonElement>("tree-mode"),
@@ -73,6 +84,11 @@ let filesRatio = 65;
 let detailsCollapsed = false;
 let expandedTreePaths = new Set<string>();
 let retainedFilesScrollTop: number | undefined;
+let fileHistoryTabs: FileHistoryTab[] = [];
+let activeFileHistoryTabId: string | undefined;
+let changedFilePreviewTimer: number | undefined;
+let fileRevisionPreviewTimer: number | undefined;
+let fileHistoryScrollFrame: number | undefined;
 
 elements.flatMode.addEventListener("click", () => setFileViewMode("flat"));
 elements.treeMode.addEventListener("click", () => setFileViewMode("tree"));
@@ -89,9 +105,33 @@ elements.toggleDetails.addEventListener("click", () => {
   applyDetailsState();
   updateViewState({ detailsCollapsed });
 });
+elements.repositoryTab.addEventListener("click", () => {
+  saveActiveFileHistoryScroll();
+  vscode.postMessage({ type: "activateRepositoryHistory" });
+});
+elements.repositoryTab.addEventListener("keydown", navigateHistoryTabs);
+elements.fileRevisions.addEventListener("scroll", scheduleFileHistoryScroll);
+elements.fileTabs.addEventListener(
+  "wheel",
+  (event) => {
+    if (
+      elements.fileTabs.scrollWidth <= elements.fileTabs.clientWidth + 1 ||
+      Math.abs(event.deltaY) <= Math.abs(event.deltaX)
+    ) {
+      return;
+    }
+    event.preventDefault();
+    elements.fileTabs.scrollLeft += event.deltaY;
+  },
+  { passive: false },
+);
 
 configureResizer();
-configureWorkspaceResizer();
+configureWorkspaceResizer(elements.workspaceResizer, elements.workspace);
+configureWorkspaceResizer(
+  elements.fileHistoryResizer,
+  elements.fileHistoryWorkspace,
+);
 
 window.addEventListener("message", (event: MessageEvent<unknown>) => {
   if (!isHostMessage(event.data)) {
@@ -134,6 +174,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       setStatusWithRetry(message.message);
       break;
     case "filesLoading":
+      clearChangedFilePreview();
       if (sameSelection(message.selection, selection)) {
         retainedFilesScrollTop = elements.files.scrollTop;
       } else {
@@ -168,6 +209,12 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
         setStatus(message.message, true);
       }
       break;
+    case "fileHistoryState":
+      fileHistoryTabs = message.tabs;
+      activeFileHistoryTabId = message.activeTabId;
+      renderHistoryTabs();
+      renderActiveWorkspace();
+      break;
     case "error":
       commits.clear();
       workingTree = undefined;
@@ -179,6 +226,315 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       break;
   }
 });
+
+function renderHistoryTabs(): void {
+  const restoreTabFocus = elements.tabList.contains(document.activeElement);
+  elements.tabStrip.hidden = fileHistoryTabs.length === 0;
+  elements.fileTabs.replaceChildren();
+  elements.repositoryTab.setAttribute(
+    "aria-selected",
+    String(activeFileHistoryTabId === undefined),
+  );
+  elements.repositoryTab.classList.toggle(
+    "active",
+    activeFileHistoryTabId === undefined,
+  );
+
+  const labelCounts = new Map<string, number>();
+  for (const tab of fileHistoryTabs) {
+    labelCounts.set(tab.label, (labelCounts.get(tab.label) ?? 0) + 1);
+  }
+
+  for (const tab of fileHistoryTabs) {
+    const item = document.createElement("div");
+    item.className = "history-tab-item";
+    item.classList.toggle("active", activeFileHistoryTabId === tab.id);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "history-tab file-history-tab";
+    button.dataset.tabId = tab.id;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-controls", "file-history-workspace");
+    button.setAttribute(
+      "aria-selected",
+      String(activeFileHistoryTabId === tab.id),
+    );
+    button.classList.toggle("active", activeFileHistoryTabId === tab.id);
+    button.title = tab.path;
+    button.textContent =
+      (labelCounts.get(tab.label) ?? 0) > 1 ? tab.path : tab.label;
+    button.addEventListener("click", () => {
+      saveActiveFileHistoryScroll();
+      vscode.postMessage({ type: "activateFileHistory", tabId: tab.id });
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Delete") {
+        event.preventDefault();
+        saveActiveFileHistoryScroll();
+        vscode.postMessage({ type: "closeFileHistory", tabId: tab.id });
+        return;
+      }
+      navigateHistoryTabs(event);
+    });
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "history-tab-close";
+    close.title = `Close File History: ${tab.path}`;
+    close.setAttribute("aria-label", `Close File History: ${tab.path}`);
+    close.textContent = "×";
+    close.addEventListener("click", () => {
+      saveActiveFileHistoryScroll();
+      vscode.postMessage({ type: "closeFileHistory", tabId: tab.id });
+    });
+    item.append(button, close);
+    elements.fileTabs.append(item);
+  }
+
+  requestAnimationFrame(() => {
+    const activeTab =
+      activeFileHistoryTabId === undefined
+        ? elements.repositoryTab
+        : elements.fileTabs.querySelector<HTMLButtonElement>(
+            `[role=tab][data-tab-id="${activeFileHistoryTabId}"]`,
+          );
+    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (restoreTabFocus) {
+      activeTab?.focus();
+    }
+  });
+}
+
+function renderActiveWorkspace(): void {
+  const tab = activeFileHistoryTab();
+  const repositoryActive = tab === undefined;
+  elements.workspace.hidden = !repositoryActive;
+  elements.fileHistoryWorkspace.hidden = repositoryActive;
+  if (repositoryActive) {
+    setStatus(
+      "Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.",
+    );
+    return;
+  }
+  renderFileRevisions(tab);
+}
+
+function renderFileRevisions(tab: FileHistoryTab): void {
+  const focusedHash = elements.fileRevisions
+    .querySelector<HTMLElement>(".file-revision-row:focus")
+    ?.dataset.hash;
+  elements.fileHistoryPath.textContent = tab.path;
+  elements.fileHistoryPath.title = tab.path;
+  elements.fileHistoryCount.textContent = tab.loading
+    ? ""
+    : `${tab.revisions.length} revision${tab.revisions.length === 1 ? "" : "s"}`;
+  elements.fileRevisions.replaceChildren();
+  renderFileHistoryDetails(tab);
+  if (tab.loading) {
+    setEmpty(elements.fileRevisions, "Loading file history…");
+    setStatus(`Loading File History for ${tab.path}…`, false, "fileHistory");
+    return;
+  }
+  if (tab.error !== undefined) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "empty-state error retry-state";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "retry-button";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () =>
+      vscode.postMessage({ type: "retryFileHistory", tabId: tab.id }),
+    );
+    wrapper.append(span("", tab.error), retry);
+    elements.fileRevisions.append(wrapper);
+    setStatus(tab.error, true, "fileHistory");
+    return;
+  }
+  if (tab.revisions.length === 0) {
+    setEmpty(elements.fileRevisions, "No committed revisions found.");
+    setStatus(
+      `No committed revisions found for ${tab.path}.`,
+      false,
+      "fileHistory",
+    );
+    return;
+  }
+
+  for (const revision of tab.revisions) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "file-revision-row file-history-columns";
+    row.dataset.hash = revision.commit.hash;
+    row.setAttribute("role", "option");
+    const selected = revision.commit.hash === tab.selectedHash;
+    row.classList.toggle("selected", selected);
+    row.setAttribute("aria-selected", String(selected));
+    const path = fileDisplayPath(revision);
+    const status = statusLabel(revision.status);
+    const description =
+      `${revision.commit.subject || "(no subject)"} · ${revision.commit.hash} · ` +
+      `${path} · ${status} · Authored ${formatFullDate(revision.commit.authoredAt)}`;
+    row.title = description;
+    row.setAttribute("aria-label", description);
+    const commitCell = span("file-revision-commit", "");
+    commitCell.append(
+      span("subject", revision.commit.subject || "(no subject)"),
+      span("file-revision-hash", revision.commit.shortHash),
+    );
+    const statusClass = `status-${revision.status[0] ?? "X"}`;
+    row.append(
+      commitCell,
+      span(`path ${statusClass}`, path),
+      span("date", formatRowDate(revision.commit.authoredAt)),
+      span(`status ${statusClass}`, status),
+    );
+    row.addEventListener("click", () => {
+      if (fileRevisionPreviewTimer !== undefined) {
+        window.clearTimeout(fileRevisionPreviewTimer);
+      }
+      fileRevisionPreviewTimer = window.setTimeout(() => {
+        fileRevisionPreviewTimer = undefined;
+        selectFileRevision(tab.id, revision.commit.hash, true);
+      }, 180);
+    });
+    row.addEventListener("dblclick", () => {
+      if (fileRevisionPreviewTimer !== undefined) {
+        window.clearTimeout(fileRevisionPreviewTimer);
+        fileRevisionPreviewTimer = undefined;
+      }
+      selectFileRevision(tab.id, revision.commit.hash, false);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        selectFileRevision(tab.id, revision.commit.hash, false);
+        return;
+      }
+      navigateRows(event, ".file-revision-row", (target) => {
+        const hash = target.dataset.hash;
+        if (hash !== undefined) {
+          selectFileRevision(tab.id, hash, true);
+        }
+      });
+    });
+    elements.fileRevisions.append(row);
+  }
+  requestAnimationFrame(() => {
+    elements.fileRevisions.scrollTop = tab.scrollTop;
+    if (tab.revealSelected) {
+      elements.fileRevisions
+        .querySelector<HTMLElement>(".file-revision-row.selected")
+        ?.scrollIntoView({ block: "center" });
+      vscode.postMessage({
+        type: "updateFileHistoryScroll",
+        tabId: tab.id,
+        scrollTop: elements.fileRevisions.scrollTop,
+      });
+    }
+    if (focusedHash !== undefined) {
+      elements.fileRevisions
+        .querySelector<HTMLElement>(`.file-revision-row[data-hash="${focusedHash}"]`)
+        ?.focus({ preventScroll: true });
+    }
+  });
+  setStatus(
+    `${tab.revisions.length} file revision${tab.revisions.length === 1 ? "" : "s"}. ` +
+      "Click to preview; double-click or press Enter to keep a diff open.",
+    false,
+    "fileHistory",
+  );
+}
+
+function renderFileHistoryDetails(tab: FileHistoryTab): void {
+  elements.fileHistoryDetails.replaceChildren();
+  if (tab.loading) {
+    setEmpty(elements.fileHistoryDetails, "Loading file history…");
+    return;
+  }
+  if (tab.error !== undefined) {
+    setEmpty(elements.fileHistoryDetails, "Commit details are unavailable.");
+    return;
+  }
+  const revision =
+    tab.revisions.find((item) => item.commit.hash === tab.selectedHash) ??
+    tab.revisions[0];
+  if (revision === undefined) {
+    setEmpty(elements.fileHistoryDetails, "No committed revision selected.");
+    return;
+  }
+  renderCommitDetails(elements.fileHistoryDetails, revision.commit);
+}
+
+function activeFileHistoryTab(): FileHistoryTab | undefined {
+  return activeFileHistoryTabId === undefined
+    ? undefined
+    : fileHistoryTabs.find((tab) => tab.id === activeFileHistoryTabId);
+}
+
+function selectFileRevision(
+  tabId: string,
+  hash: string,
+  preview: boolean,
+): void {
+  saveActiveFileHistoryScroll();
+  vscode.postMessage({
+    type: "selectFileRevision",
+    tabId,
+    hash,
+    preview,
+  });
+}
+
+function saveActiveFileHistoryScroll(): void {
+  if (fileRevisionPreviewTimer !== undefined) {
+    window.clearTimeout(fileRevisionPreviewTimer);
+    fileRevisionPreviewTimer = undefined;
+  }
+  const tab = activeFileHistoryTab();
+  if (tab !== undefined && !elements.fileHistoryWorkspace.hidden) {
+    vscode.postMessage({
+      type: "updateFileHistoryScroll",
+      tabId: tab.id,
+      scrollTop: elements.fileRevisions.scrollTop,
+    });
+  }
+}
+
+function scheduleFileHistoryScroll(): void {
+  if (fileHistoryScrollFrame !== undefined) {
+    cancelAnimationFrame(fileHistoryScrollFrame);
+  }
+  fileHistoryScrollFrame = requestAnimationFrame(() => {
+    fileHistoryScrollFrame = undefined;
+    saveActiveFileHistoryScroll();
+  });
+}
+
+function navigateHistoryTabs(event: KeyboardEvent): void {
+  const current = event.currentTarget;
+  if (!(current instanceof HTMLElement)) {
+    return;
+  }
+  const tabs = [
+    ...elements.tabList.querySelectorAll<HTMLButtonElement>("[role=tab]"),
+  ];
+  const index = tabs.indexOf(current as HTMLButtonElement);
+  let target: HTMLButtonElement | undefined;
+  if (event.key === "ArrowLeft") {
+    target = tabs[Math.max(0, index - 1)];
+  } else if (event.key === "ArrowRight") {
+    target = tabs[Math.min(tabs.length - 1, index + 1)];
+  } else if (event.key === "Home") {
+    target = tabs[0];
+  } else if (event.key === "End") {
+    target = tabs.at(-1);
+  }
+  if (target !== undefined) {
+    event.preventDefault();
+    target.focus();
+    target.click();
+  }
+}
 
 function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
   const scrollTop = elements.history.scrollTop;
@@ -633,7 +989,7 @@ function renderFiles(): void {
       : ` across ${selectionScope()}`;
   setStatus(
     `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${scope}. ` +
-      "Double-click or press Enter to open a diff.",
+      "Click to preview; double-click or press Enter to keep a diff open.",
   );
 }
 
@@ -793,18 +1149,19 @@ function createFileRow(
     pathCell,
     span(`status ${statusClass}`, fileStatusShortLabel(file)),
   );
-  button.addEventListener("click", () => selectFile(file.path));
-  button.addEventListener("dblclick", () => openDiff(file.path));
+  button.addEventListener("click", () => selectFileAndPreview(file.path));
+  button.addEventListener("dblclick", () => pinFileDiff(file.path));
   button.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      openDiff(file.path);
+      pinFileDiff(file.path);
       return;
     }
     navigateRows(event, ".file-row", (target) => {
       const path = target.dataset.filePath;
       if (path !== undefined) {
         selectFile(path);
+        openDiff(path, true);
       }
     });
   });
@@ -842,6 +1199,12 @@ function renderSelectionDetails(): void {
   }
   elements.detailsHeading.textContent = "Commit details";
 
+  renderCommitDetails(elements.details, commit);
+}
+
+function renderCommitDetails(container: HTMLElement, commit: Commit): void {
+  container.replaceChildren();
+
   const subject = document.createElement("p");
   subject.className = "details-subject";
   subject.textContent = commit.subject || "(no subject)";
@@ -864,7 +1227,7 @@ function renderSelectionDetails(): void {
     "Compared with",
     commit.parents[0] ?? "Empty tree (root commit)",
   );
-  elements.details.append(subject, list);
+  container.append(subject, list);
 }
 
 function renderWorkingTreeDetails(
@@ -1129,11 +1492,13 @@ function selectCommit(hash: string, extend: boolean, toggle: boolean): void {
   ) {
     return;
   }
+  clearChangedFilePreview();
   vscode.postMessage({ type: "selectCommit", hash, extend, toggle });
 }
 
 function selectWorkingTree(): void {
   if (selection?.mode !== "workingTree") {
+    clearChangedFilePreview();
     vscode.postMessage({ type: "selectWorkingTree" });
   }
 }
@@ -1203,9 +1568,31 @@ function updateFileSelection(): void {
   }
 }
 
-function openDiff(path: string): void {
+function selectFileAndPreview(path: string): void {
+  selectFile(path);
+  clearChangedFilePreview();
+  changedFilePreviewTimer = window.setTimeout(() => {
+    changedFilePreviewTimer = undefined;
+    openDiff(path, true);
+  }, 180);
+}
+
+function pinFileDiff(path: string): void {
+  clearChangedFilePreview();
+  selectFile(path);
+  openDiff(path, false);
+}
+
+function clearChangedFilePreview(): void {
+  if (changedFilePreviewTimer !== undefined) {
+    window.clearTimeout(changedFilePreviewTimer);
+    changedFilePreviewTimer = undefined;
+  }
+}
+
+function openDiff(path: string, preview: boolean): void {
   if (selection !== undefined) {
-    vscode.postMessage({ type: "openDiff", path });
+    vscode.postMessage({ type: "openDiff", path, preview });
   }
 }
 
@@ -1239,7 +1626,12 @@ function applyFileViewMode(): void {
 
 function applyHistoryRatio(): void {
   elements.workspace.dataset.historyRatio = String(historyRatio);
+  elements.fileHistoryWorkspace.dataset.historyRatio = String(historyRatio);
   elements.workspaceResizer.setAttribute("aria-valuenow", String(historyRatio));
+  elements.fileHistoryResizer.setAttribute(
+    "aria-valuenow",
+    String(historyRatio),
+  );
 }
 
 function applyRatio(): void {
@@ -1305,18 +1697,21 @@ function configureResizer(): void {
   });
 }
 
-function configureWorkspaceResizer(): void {
+function configureWorkspaceResizer(
+  resizer: HTMLDivElement,
+  workspace: HTMLElement,
+): void {
   let dragging = false;
 
-  elements.workspaceResizer.addEventListener("pointerdown", (event) => {
+  resizer.addEventListener("pointerdown", (event) => {
     dragging = true;
-    elements.workspaceResizer.setPointerCapture(event.pointerId);
-    elements.workspaceResizer.classList.add("dragging");
-    updateHistoryRatioFromPointer(event);
+    resizer.setPointerCapture(event.pointerId);
+    resizer.classList.add("dragging");
+    updateHistoryRatioFromPointer(event, workspace);
   });
-  elements.workspaceResizer.addEventListener("pointermove", (event) => {
+  resizer.addEventListener("pointermove", (event) => {
     if (dragging) {
-      updateHistoryRatioFromPointer(event);
+      updateHistoryRatioFromPointer(event, workspace);
     }
   });
   const finish = (event: PointerEvent): void => {
@@ -1324,15 +1719,15 @@ function configureWorkspaceResizer(): void {
       return;
     }
     dragging = false;
-    if (elements.workspaceResizer.hasPointerCapture(event.pointerId)) {
-      elements.workspaceResizer.releasePointerCapture(event.pointerId);
+    if (resizer.hasPointerCapture(event.pointerId)) {
+      resizer.releasePointerCapture(event.pointerId);
     }
-    elements.workspaceResizer.classList.remove("dragging");
+    resizer.classList.remove("dragging");
     updateViewState({ historyRatio });
   };
-  elements.workspaceResizer.addEventListener("pointerup", finish);
-  elements.workspaceResizer.addEventListener("pointercancel", finish);
-  elements.workspaceResizer.addEventListener("keydown", (event) => {
+  resizer.addEventListener("pointerup", finish);
+  resizer.addEventListener("pointercancel", finish);
+  resizer.addEventListener("keydown", (event) => {
     if (event.key === "ArrowLeft") {
       event.preventDefault();
       setHistoryRatio(historyRatio - 5, true);
@@ -1349,8 +1744,11 @@ function configureWorkspaceResizer(): void {
   });
 }
 
-function updateHistoryRatioFromPointer(event: PointerEvent): void {
-  const bounds = elements.workspace.getBoundingClientRect();
+function updateHistoryRatioFromPointer(
+  event: PointerEvent,
+  workspace: HTMLElement,
+): void {
+  const bounds = workspace.getBoundingClientRect();
   if (bounds.width <= 0) {
     return;
   }
@@ -1436,12 +1834,22 @@ function setEmptyWithRetry(container: HTMLElement, message: string): void {
   container.append(wrapper);
 }
 
-function setStatus(message: string, error = false): void {
+function setStatus(
+  message: string,
+  error = false,
+  scope: "repository" | "fileHistory" = "repository",
+): void {
+  if (scope === "repository" && activeFileHistoryTabId !== undefined) {
+    return;
+  }
   elements.status.replaceChildren(span("status-message", message));
   elements.status.classList.toggle("error", error);
 }
 
 function setStatusWithRetry(message: string): void {
+  if (activeFileHistoryTabId !== undefined) {
+    return;
+  }
   elements.status.replaceChildren(
     span("status-message", message),
     createRetryButton(),

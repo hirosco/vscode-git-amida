@@ -28,18 +28,11 @@ This checkpoint is complete when an image selected from Changed files opens a us
 
 ## 3. File History investigations
 
-- Keep one pinned Repository History tab
-- Open and close several independent File History tabs
-- Reuse an existing tab when the same file is opened again
-- Keep File History inside the GitAmida View rather than creating a separate Panel, so Repository History remains the stable center and file investigations share one navigation surface
-- Design the internal tab strip before implementation: keep Repository History visible, keep the active File History tab discoverable, truncate long labels with full paths available, and provide an overflow list when tabs no longer fit
-- Verify tab overflow, close behavior, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
-- Open file history from a changed file, the Explorer, and the active editor
-- Follow renames and represent additions and deletions explicitly
-- Preview a revision diff on selection and pin it on Enter or double-click
+- Verify the conditional Repository History home tab, filename-sized tabs, horizontal tab scrolling, integrated close actions, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
+- Open File History from an Explorer resource; Changed files and the active editor are already entry points
 - Show a file revision in Repository History without closing its File History tab
 - Load a repository commit that is outside the current history page
-- Preserve selected revision and scroll position in every open File History tab
+- Validate renamed, added, and deleted file identities across several simultaneous tabs before treating the checkpoint as complete
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
@@ -65,6 +58,7 @@ This checkpoint is complete when users can investigate several files and always 
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs
+- Create a disposable comprehensive test repository with complex branches, merges, renames, deletions, binary and image files, and multiple worktrees, then run end-to-end validation in Cursor and VS Code before distribution
 - Define supported editor versions and platforms
 - Review product naming, trademarks, licensing, marketplace metadata, and privacy before publication
 
