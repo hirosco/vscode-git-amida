@@ -219,7 +219,7 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     const refNames = row.commit.refs.map((ref) => ref.name).join(", ");
     button.setAttribute(
       "aria-label",
-      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.committedAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
+      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
     );
 
     const graph = createGraph(
@@ -238,8 +238,8 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     if (refs !== undefined) {
       commitCell.append(refs);
     }
-    const date = span("date", formatRowDate(row.commit.committedAt));
-    date.title = `Committed ${formatFullDate(row.commit.committedAt)}`;
+    const date = span("date", formatRowDate(row.commit.authoredAt));
+    date.title = `Authored ${formatFullDate(row.commit.authoredAt)}`;
     button.append(graph, commitCell, date);
     button.addEventListener("click", (event) => {
       selectCommit(
@@ -1024,12 +1024,12 @@ function renderRangeDetails(
     commitSubject.title = commit?.subject ?? "";
     const commitDate = span(
       "range-commit-date",
-      commit === undefined ? "—" : formatRowDate(commit.committedAt),
+      commit === undefined ? "—" : formatRowDate(commit.authoredAt),
     );
     commitDate.title =
       commit === undefined
-        ? "Commit date unavailable"
-        : `Committed ${formatFullDate(commit.committedAt)}`;
+        ? "Author date unavailable"
+        : `Authored ${formatFullDate(commit.authoredAt)}`;
     item.append(hashValue, commitSubject, commitDate);
     commitList.append(item);
   }
@@ -1065,8 +1065,12 @@ function createCommitList(
     commitSubject.title = commit?.subject ?? "";
     const commitDate = span(
       "range-commit-date",
-      commit === undefined ? "—" : formatRowDate(commit.committedAt),
+      commit === undefined ? "—" : formatRowDate(commit.authoredAt),
     );
+    commitDate.title =
+      commit === undefined
+        ? "Author date unavailable"
+        : `Authored ${formatFullDate(commit.authoredAt)}`;
     item.append(hashValue, commitSubject, commitDate);
     list.append(item);
   }

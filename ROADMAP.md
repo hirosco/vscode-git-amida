@@ -12,7 +12,7 @@ The remaining checkpoints build on selection-scoped, endpoint-based comparison a
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
 - Verify all five SCM graph theme colors in light and high-contrast themes
 - Confirm that commit subjects, the checked-out branch or detached hash, remote HEAD/main indicators, and dates remain aligned in narrow Panels
-- Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep Date as the default
+- Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep commit-date ordering as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 

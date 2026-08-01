@@ -34,7 +34,8 @@ The commit list is optimized for scanning a large history.
 - Render every commit as one logical row with a compact primary line
 - Never wrap the subject; place compact ref indicators after it on the same physical line
 - Show graph, subject, and date in the history list; keep author information in commit details
-- Order commits by commit date while ensuring that no parent appears before its children, and show the committed timestamp in the date column
+- Order commits by commit date while ensuring that no parent appears before its children
+- Show the authored timestamp in compact history rows because it represents when the change originated, while commit-date ordering represents when the current commit objects entered the graph. A normal rebase can therefore move commits in the displayed order without replacing their visible authored times; this separation is intentional, and displayed dates need not be monotonic
 - Give the subject flexible width and truncate it with an accessible full-value label
 - Mark local HEAD with a ring around a visible center dot and label it with the checked-out local branch; show the short commit hash instead when HEAD is detached, and retain the remote icon-and-text `HEAD` indicator
 - Label local and remote-tracking `main` or `master` refs as compact orientation anchors; when the local primary branch is checked out, use the current-branch label instead of rendering that local ref twice, while retaining an independent remote indicator at the same commit
@@ -85,7 +86,7 @@ The details pane shows:
 - Full commit subject
 - Full selectable commit hash without a persistent copy button; provide copying through contextual actions
 - Author name and email
-- Authored or committed time, with the chosen meaning labeled
+- Authored and committed times, with each meaning labeled
 - Branch and tag refs pointing directly at the selected commit, shown one per line with the same local, remote, and tag indicators used in Repository History
 - Parent commits
 - The active comparison parent for a merge commit
@@ -186,7 +187,7 @@ This rule, rather than compatibility with another product, is the authority for 
 
 A Range has explicit oldest and newest endpoints and represents one real before/after comparison. Compare the state immediately before the oldest endpoint with the tree at the newest endpoint, using the empty tree before a root commit. Show deduplicated changed files and open the resulting file comparisons in the native diff editor.
 
-The inspection pane keeps its stable **Commit details** heading. Multiple selection adds a shared **Selected commits** section: identify a Range comparison as a **Continuous range**, keep its comparison basis prominent, then show a compact **Included commits** list matching Repository History using short hashes, subjects, and committed timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
+The inspection pane keeps its stable **Commit details** heading. Multiple selection adds a shared **Selected commits** section: identify a Range comparison as a **Continuous range**, keep its comparison basis prominent, then show a compact **Included commits** list matching Repository History using short hashes, subjects, and authored timestamps. Do not repeat complete author metadata for every commit in the limited Panel height; users can still inspect an individual commit by returning to single selection.
 
 Range meaning comes from its displayed base and tip. Use Range only when the visible interval contains exactly its contributing commits; classify an interval with unrelated or date-interleaved rows as Selection instead of silently redefining the Range. A merge at a comparison boundary uses an explicit parent; first parent is the initial default and must be visible to the user.
 

@@ -16,7 +16,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 
 - Adds `GitAmida` beside Terminal, Problems, and Output in the bottom Panel
 - Loads all commits reachable from local branches, remote-tracking branches, and tags in one bounded evaluation pass, ordered by commit date without placing a parent before its children
-- Shows a theme-aware lane graph derived from commit parents, keeps the primary-branch backbone visually stable, joins lines at their parent nodes, and places a non-wrapping subject, inline ref indicators, and date on one physical row
+- Shows a theme-aware lane graph derived from commit parents, keeps the primary-branch backbone visually stable, joins lines at their parent nodes, and places a non-wrapping subject, inline ref indicators, and authored date on one physical row
 - Marks local HEAD with a ring-and-center-dot graph node, labels it with the checked-out branch or short commit hash when detached, retains the remote `HEAD` indicator, labels local and remote `main` or `master` positions independently, and keeps other refs compact through fill and shape
 - Shows saved staged, unstaged, and untracked paths in a distinct **Uncommitted changes** row without treating it as a commit or including it in Range and Selection
 - Refreshes working-tree changes after editor saves and from debounced Git events, including while the retained Panel view is hidden, reloads complete history only when HEAD or refs change, and rechecks that distinction when the Panel becomes visible
@@ -37,7 +37,7 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Runs Git queries and blob reads without a shell; the explicit restore action writes only its confirmed working-tree destination
 - Uses the active workspace folder, or the first workspace folder when no editor is active
 
-Paged automatic history loading, file-history tabs, remote-tracking branch creation, whitespace options, and multi-root repository selection are planned but not implemented yet.
+Paged automatic history loading, file-history tabs, whitespace options, and multi-root repository selection are planned but not implemented yet.
 
 ## Try it in Cursor
 
