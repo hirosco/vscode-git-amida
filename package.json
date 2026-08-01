@@ -40,6 +40,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "gitAmida.openInDifftool",
+        "title": "Open in Git Difftool",
+        "category": "GitAmida",
+        "icon": "$(link-external)"
+      },
+      {
         "command": "gitAmida.switchBranch",
         "title": "Switch Branch…",
         "category": "GitAmida",
@@ -67,7 +73,19 @@
       ]
     },
     "menus": {
+      "editor/title": [
+        {
+          "command": "gitAmida.openInDifftool",
+          "when": "gitAmida.activeDiff",
+          "group": "navigation@10"
+        }
+      ],
       "webview/context": [
+        {
+          "command": "gitAmida.openInDifftool",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "group": "navigation"
+        },
         {
           "command": "gitAmida.switchBranch",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'commit' && gitAmidaHasSwitchableBranch",

@@ -58,8 +58,8 @@ This checkpoint is complete when users can investigate several files and always 
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
-- Open detailed image and text comparisons in Kaleidoscope through a separate opener boundary
-- Explain unavailable tools and retain the native diff as the fallback
+- Validate that the editor-title action where available and the Changed-files row context action open the same single-file text and image endpoints in the configured Git difftool for single commits, Ranges, Selections, and saved working-tree changes
+- Confirm additions, deletions, renames, missing tool configuration, and launch failures retain an understandable native-diff fallback
 
 ## 6. Performance and public distribution
 

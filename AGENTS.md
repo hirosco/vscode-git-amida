@@ -128,6 +128,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Validate Webview messages and ignore unknown fields and actions.
 - Use VS Code theme tokens and accessibility semantics.
 - Use `TextDocumentContentProvider` for read-only historical text, a dedicated read-only `FileSystemProvider` for supported image bytes, and `vscode.diff` for both comparison types.
+- Expose an external Git difftool only through an explicit action on an active GitAmida native diff or one current Changed-files row. Use the native diff's registered endpoints when available; otherwise resolve only the context-clicked file against the currently loaded selection. Pass private endpoint copies through `git difftool --no-index` and do not add an aggregate Changed-files launch.
 - Match the built-in image preview formats (`jpg`, `jpe`, `jpeg`, `png`, `bmp`, `gif`, `ico`, `webp`, `avif`, and `svg`) and keep other binary content and unsupported encodings explicit rather than coercing them into a diff.
 - Use the current `diffEditor.maxFileSize` value for text comparison instead of imposing a narrower GitAmida-specific limit, and refresh content classification when that setting changes.
 - Do not impose a GitAmida-specific image-size limit narrower than the native preview. Size the Git blob read for the actual object while retaining bounded output for other Git operations.

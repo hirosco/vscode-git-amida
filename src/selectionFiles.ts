@@ -1,7 +1,9 @@
 import type {
   ChangedFile,
   ChangedFileContent,
+  Commit,
   CommitFileChange,
+  RepositorySelection,
 } from "./model";
 
 export interface FileComparison {
@@ -17,6 +19,36 @@ export interface SelectionFileState {
   file: ChangedFile;
   changes: CommitFileChange[];
   comparison: FileComparison;
+}
+
+export function resolveFileComparison(
+  selection: Exclude<RepositorySelection, { mode: "workingTree" }>,
+  file: ChangedFile,
+  activeCommit: Commit | undefined,
+  selectionComparison?: FileComparison,
+): FileComparison | undefined {
+  if (selection.mode === "selection") {
+    return selectionComparison;
+  }
+  if (activeCommit === undefined) {
+    return undefined;
+  }
+  return {
+    beforeRef: file.status.startsWith("A")
+      ? undefined
+      : selection.mode === "single"
+        ? activeCommit.parents[0]
+        : selection.baseHash,
+    afterRef: file.status.startsWith("D")
+      ? undefined
+      : selection.mode === "single"
+        ? activeCommit.hash
+        : selection.newestHash,
+    beforePath: file.oldPath ?? file.path,
+    afterPath: file.path,
+    status: file.status,
+    ...(file.content === undefined ? {} : { content: file.content }),
+  };
 }
 
 export function buildSelectionFiles(

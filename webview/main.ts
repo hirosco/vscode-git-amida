@@ -747,6 +747,11 @@ function createFileRow(
   button.type = "button";
   button.className = tree ? "file-row tree-file-row" : "file-row";
   button.dataset.filePath = file.path;
+  button.dataset.vscodeContext = JSON.stringify({
+    webviewSection: "changedFile",
+    preventDefaultContextMenuItems: true,
+    gitAmidaFilePath: file.path,
+  });
   button.setAttribute("role", tree ? "treeitem" : "option");
   const status = fileStatusLabel(file);
   const contributors = file.selection?.changes

@@ -11,6 +11,8 @@ import {
   GitContentProvider,
   GitImageFileSystemProvider,
 } from "./contentProvider";
+import { NativeDiffSessionRegistry } from "./diffSessions";
+import { ExternalDifftoolService } from "./externalDifftool";
 import { buildFileTree } from "./fileTree";
 import { GitClient, GitError } from "./git";
 import type {
@@ -34,6 +36,7 @@ import {
 } from "./selection";
 import {
   buildSelectionFiles,
+  resolveFileComparison,
   type FileComparison,
   type SelectionFileState,
 } from "./selectionFiles";
@@ -84,6 +87,8 @@ export class HistoryViewProvider
     private readonly branchMutations: BranchMutationService,
     private readonly contentProvider: GitContentProvider,
     private readonly imageProvider: GitImageFileSystemProvider,
+    private readonly diffSessions: NativeDiffSessionRegistry,
+    private readonly externalDifftool: ExternalDifftoolService,
     private readonly workspaceState: vscode.Memento,
     private readonly globalState: vscode.Memento,
   ) {
@@ -155,6 +160,76 @@ export class HistoryViewProvider
         void this.refreshWorkingTree();
       }
     }, 300);
+  }
+
+  public async openFileInDifftool(path: string): Promise<void> {
+    await this.stateReady;
+    const selection = this.selection;
+    const file = this.findFile(path);
+    const repository = this.repository;
+    if (
+      selection === undefined ||
+      file === undefined ||
+      repository === undefined
+    ) {
+      return;
+    }
+    if (file.content?.kind === "submodule") {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Submodule comparisons cannot be opened in an external diff tool.",
+      );
+      return;
+    }
+
+    try {
+      const beforePath = file.oldPath ?? file.path;
+      if (selection.mode === "workingTree") {
+        const [beforeContent, afterContent] = await Promise.all([
+          this.git.readBlob(
+            repository,
+            file.status.startsWith("A") ? undefined : selection.headHash,
+            beforePath,
+          ),
+          file.status.startsWith("D")
+            ? Promise.resolve(Buffer.alloc(0))
+            : this.git.readWorkingFile(repository, file.path),
+        ]);
+        await this.externalDifftool.open({
+          repository,
+          beforePath,
+          afterPath: file.path,
+          beforeContent,
+          afterContent,
+        });
+        return;
+      }
+
+      const comparison = this.fileComparison(selection, file);
+      if (comparison === undefined) {
+        return;
+      }
+      const [beforeContent, afterContent] = await Promise.all([
+        this.git.readBlob(
+          repository,
+          comparison.beforeRef,
+          comparison.beforePath,
+        ),
+        this.git.readBlob(
+          repository,
+          comparison.afterRef,
+          comparison.afterPath,
+        ),
+      ]);
+      await this.externalDifftool.open({
+        repository,
+        beforePath: comparison.beforePath,
+        afterPath: comparison.afterPath,
+        beforeContent,
+        afterContent,
+      });
+    } catch (error) {
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
   }
 
   public async refresh(showLoading = true): Promise<void> {
@@ -628,42 +703,16 @@ export class HistoryViewProvider
       return;
     }
 
-    if (selection.mode === "selection") {
-      const state = this.selectionFiles.get(path);
-      if (state !== undefined) {
-        await this.openSelectionDiff(selection, state, repository);
-      }
+    const comparison = this.fileComparison(selection, file);
+    if (comparison === undefined) {
       return;
     }
-
-    const activeCommit = this.commits.get(selection.activeHash);
-    if (activeCommit === undefined) {
-      return;
-    }
-    const beforeRef = file.status.startsWith("A")
-      ? undefined
-      : selection.mode === "single"
-        ? activeCommit.parents[0]
-        : selection.baseHash;
-    const afterRef = file.status.startsWith("D")
-      ? undefined
-      : selection.mode === "single"
-        ? activeCommit.hash
-        : selection.newestHash;
-    const beforePath = file.oldPath ?? file.path;
     const diffIdentity = selectionIdentity(selection);
     const request = this.selectionRequest;
 
     await this.openComparison(
       repository,
-      {
-        beforeRef,
-        afterRef,
-        beforePath,
-        afterPath: file.path,
-        status: file.status,
-        ...(file.content === undefined ? {} : { content: file.content }),
-      },
+      comparison,
       this.selectionLabel(selection),
       diffIdentity,
       request,
@@ -755,6 +804,7 @@ export class HistoryViewProvider
         `${basename(file.path)} (Working Tree)`,
         { preview: true },
       );
+      this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
@@ -811,32 +861,10 @@ export class HistoryViewProvider
         `${basename(file.path)} (Working Tree)`,
         { preview: true },
       );
+      this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
-  }
-
-  private async openSelectionDiff(
-    selection: Extract<RepositorySelection, { mode: "selection" }>,
-    state: SelectionFileState,
-    repository: string,
-  ): Promise<void> {
-    const identity = selectionIdentity(selection);
-    const request = this.selectionRequest;
-    if (
-      request !== this.selectionRequest ||
-      this.selection === undefined ||
-      selectionIdentity(this.selection) !== identity
-    ) {
-      return;
-    }
-    await this.openComparison(
-      repository,
-      state.comparison,
-      this.selectionLabel(selection),
-      identity,
-      request,
-    );
   }
 
   private async openComparison(
@@ -938,6 +966,13 @@ export class HistoryViewProvider
         `${basename(comparison.afterPath)} (${label})`,
         { preview: true },
       );
+      this.registerDiffSession(
+        repository,
+        comparison.beforePath,
+        comparison.afterPath,
+        left,
+        right,
+      );
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
@@ -1001,6 +1036,13 @@ export class HistoryViewProvider
         `${basename(comparison.afterPath)} (${label})`,
         { preview: true },
       );
+      this.registerDiffSession(
+        repository,
+        comparison.beforePath,
+        comparison.afterPath,
+        left,
+        right,
+      );
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
@@ -1008,6 +1050,34 @@ export class HistoryViewProvider
 
   private findFile(path: string): ChangedFile | undefined {
     return this.currentFiles.find((file) => file.path === path);
+  }
+
+  private fileComparison(
+    selection: Exclude<RepositorySelection, { mode: "workingTree" }>,
+    file: ChangedFile,
+  ): FileComparison | undefined {
+    return resolveFileComparison(
+      selection,
+      file,
+      this.commits.get(selection.activeHash),
+      this.selectionFiles.get(file.path)?.comparison,
+    );
+  }
+
+  private registerDiffSession(
+    repository: string,
+    beforePath: string,
+    afterPath: string,
+    original: vscode.Uri,
+    modified: vscode.Uri,
+  ): void {
+    this.diffSessions.register({
+      repository,
+      beforePath,
+      afterPath,
+      originalUri: original.toString(),
+      modifiedUri: modified.toString(),
+    });
   }
 
   private unsavedEditorPaths(repository: string): string[] {

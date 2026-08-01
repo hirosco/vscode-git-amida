@@ -1,8 +1,76 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CommitFileChange } from "../src/model";
-import { buildSelectionFiles } from "../src/selectionFiles";
+import type { Commit, CommitFileChange } from "../src/model";
+import {
+  buildSelectionFiles,
+  resolveFileComparison,
+} from "../src/selectionFiles";
+
+test("resolveFileComparison keeps single and Range endpoints explicit", () => {
+  const active = commit("tip", ["parent"]);
+
+  assert.deepEqual(
+    resolveFileComparison(
+      { mode: "single", activeHash: "tip" },
+      { status: "R100", path: "new.png", oldPath: "old.png" },
+      active,
+    ),
+    {
+      beforeRef: "parent",
+      afterRef: "tip",
+      beforePath: "old.png",
+      afterPath: "new.png",
+      status: "R100",
+    },
+  );
+  assert.deepEqual(
+    resolveFileComparison(
+      {
+        mode: "range",
+        anchorHash: "old",
+        activeHash: "tip",
+        oldestHash: "old",
+        newestHash: "tip",
+        baseHash: "base",
+        commitHashes: ["tip", "old"],
+      },
+      { status: "M", path: "image.png", content: { kind: "image" } },
+      active,
+    ),
+    {
+      beforeRef: "base",
+      afterRef: "tip",
+      beforePath: "image.png",
+      afterPath: "image.png",
+      status: "M",
+      content: { kind: "image" },
+    },
+  );
+});
+
+test("resolveFileComparison uses the precomputed Selection endpoints", () => {
+  const comparison = {
+    beforeRef: "side-base",
+    afterRef: "main-tip",
+    beforePath: "shared.png",
+    afterPath: "shared.png",
+    status: "M",
+  };
+  assert.equal(
+    resolveFileComparison(
+      {
+        mode: "selection",
+        activeHash: "main-tip",
+        commitHashes: ["main-tip", "side-tip"],
+      },
+      { status: "S", path: "shared.png" },
+      commit("main-tip", ["main-base"]),
+      comparison,
+    ),
+    comparison,
+  );
+});
 
 test("buildSelectionFiles compares unrelated same-path changes by selection endpoints", () => {
   const states = buildSelectionFiles(
@@ -136,5 +204,19 @@ function change(
     path,
     oldObject,
     newObject,
+  };
+}
+
+function commit(hash: string, parents: string[]): Commit {
+  return {
+    hash,
+    shortHash: hash,
+    parents,
+    authorName: "Test",
+    authorEmail: "test@example.com",
+    authoredAt: "2026-01-01T00:00:00Z",
+    committedAt: "2026-01-01T00:00:00Z",
+    subject: hash,
+    refs: [],
   };
 }
