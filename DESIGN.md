@@ -243,6 +243,8 @@ Node.js is a development and build tool only. Extension users do not need to ins
 
 Create local evaluation packages with the exact `@vscode/vsce` development dependency and the repository's `npm run package:vsix` command. The command runs the build first and packages only the JavaScript, Webview assets, manifest, and README declared by the `files` allowlist. Publishing credentials and signing are outside this checkpoint, so lifecycle scripts for the transitive credential and signing helpers remain explicitly denied. Local packaging may skip the license-file check while the manifest is `UNLICENSED`; public distribution requires a separate license and publication review.
 
+Keep the editable Marketplace icon source in `assets/brand/git-amida-marketplace.svg`, outside the VSIX allowlist. Commit its 256-pixel PNG export as `media/git-amida-marketplace.png` for the manifest and package, while retaining `media/git-amida.svg` as the separate monochrome, theme-colored Panel icon.
+
 ### Webview View
 
 Use a Webview View because a topology graph, compact data grid, resizable details split, and multiple internal history tabs exceed what one native Tree View represents well.

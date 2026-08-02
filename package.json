@@ -2,6 +2,7 @@
   "name": "git-amida",
   "displayName": "GitAmida",
   "description": "Review Git history and open commit diffs without hiding the history panel.",
+  "icon": "media/git-amida-marketplace.png",
   "version": "0.0.1",
   "private": true,
   "publisher": "hirosco",
