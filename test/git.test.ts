@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  mkdirSync,
   mkdtempSync,
   realpathSync,
   renameSync,
@@ -10,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
@@ -21,6 +23,7 @@ import {
   parseRawDiff,
   parseRefs,
 } from "../src/git";
+import type { HistoryRow } from "../src/model";
 import {
   resolveRange,
   resolveVisibleSelection,
@@ -910,6 +913,125 @@ test("GitClient builds connected lanes for a merge history", async (context) => 
   );
 });
 
+test("GitClient loads octopus and criss-cross ancestry with bounded graph lanes", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-complex-graph-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  const timestamp = "2026-08-02T00:00:00Z";
+  const root = commitTree(repository, "root", timestamp);
+  const leftBase = commitTree(repository, "left base", timestamp, root);
+  const rightBase = commitTree(repository, "right base", timestamp, root);
+  const thirdBase = commitTree(repository, "third base", timestamp, root);
+  const leftMerge = commitTree(
+    repository,
+    "left merge",
+    timestamp,
+    leftBase,
+    rightBase,
+  );
+  const rightMerge = commitTree(
+    repository,
+    "right merge",
+    timestamp,
+    rightBase,
+    leftBase,
+  );
+  const crissCrossTip = commitTree(
+    repository,
+    "criss-cross tip",
+    timestamp,
+    leftMerge,
+    rightMerge,
+  );
+  const octopusTip = commitTree(
+    repository,
+    "octopus tip",
+    timestamp,
+    leftBase,
+    rightBase,
+    thirdBase,
+  );
+  git(repository, "update-ref", "refs/heads/main", crissCrossTip);
+  git(repository, "update-ref", "refs/heads/octopus", octopusTip);
+
+  const history = await new GitClient().loadHistory(repository);
+  const rowByHash = new Map(
+    history.rows.map((row, index) => [row.commit.hash, { row, index }]),
+  );
+
+  assert.equal(history.rows.length, 8);
+  assert.deepEqual(rowByHash.get(octopusTip)?.row.commit.parents, [
+    leftBase,
+    rightBase,
+    thirdBase,
+  ]);
+  assert.deepEqual(rowByHash.get(crissCrossTip)?.row.commit.parents, [
+    leftMerge,
+    rightMerge,
+  ]);
+  assert.deepEqual(rowByHash.get(leftMerge)?.row.commit.parents, [
+    leftBase,
+    rightBase,
+  ]);
+  assert.deepEqual(rowByHash.get(rightMerge)?.row.commit.parents, [
+    rightBase,
+    leftBase,
+  ]);
+  assertHistoryGraphBounds(history.rows, history.graphLaneCount);
+  for (const [childIndex, row] of history.rows.entries()) {
+    for (const parent of row.commit.parents) {
+      const parentIndex = rowByHash.get(parent)?.index;
+      assert.ok(parentIndex !== undefined && parentIndex > childIndex);
+    }
+  }
+});
+
+test("GitClient loads a shallow history boundary as a valid graph root", async (context) => {
+  const fixture = mkdtempSync(join(tmpdir(), "git-amida-shallow-graph-test-"));
+  const source = join(fixture, "source");
+  const shallow = join(fixture, "shallow");
+  context.after(() => rmSync(fixture, { recursive: true, force: true }));
+  mkdirSync(source);
+  git(source, "init", "-q");
+  git(source, "config", "user.name", "GitAmida Test");
+  git(source, "config", "user.email", "test@example.invalid");
+  git(source, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  let parent: string | undefined;
+  for (let index = 0; index < 5; index += 1) {
+    parent = git(
+      source,
+      "commit-tree",
+      EMPTY_TREE,
+      ...(parent === undefined ? [] : ["-p", parent]),
+      "-m",
+      `commit ${index}`,
+    ).trim();
+  }
+  assert.ok(parent);
+  git(source, "update-ref", "refs/heads/main", parent);
+  execFileSync(
+    "git",
+    ["clone", "-q", "--depth", "2", pathToFileURL(source).href, shallow],
+    {
+      env: {
+        ...process.env,
+        GIT_CONFIG_NOSYSTEM: "1",
+      },
+    },
+  );
+
+  const history = await new GitClient().loadHistory(shallow);
+
+  assert.equal(history.rows.length, 2);
+  assert.equal(history.rows[1]?.commit.parents.length, 0);
+  assertHistoryGraphBounds(history.rows, history.graphLaneCount);
+});
+
 test("GitClient orders independent lanes by commit date", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-order-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));
@@ -972,7 +1094,7 @@ function commitTree(
   repository: string,
   message: string,
   timestamp: string,
-  parent?: string,
+  ...parents: string[]
 ): string {
   return execFileSync(
     "git",
@@ -981,7 +1103,7 @@ function commitTree(
       repository,
       "commit-tree",
       EMPTY_TREE,
-      ...(parent === undefined ? [] : ["-p", parent]),
+      ...parents.flatMap((parent) => ["-p", parent]),
       "-m",
       message,
     ],
@@ -994,6 +1116,22 @@ function commitTree(
       },
     },
   ).trim();
+}
+
+function assertHistoryGraphBounds(
+  rows: readonly HistoryRow[],
+  laneCount: number,
+): void {
+  assert.ok(laneCount >= 1);
+  for (const row of rows) {
+    assert.ok(row.graph.nodeLane >= 0 && row.graph.nodeLane < laneCount);
+    assert.ok(row.graph.nodeColor >= 0 && row.graph.nodeColor < 5);
+    for (const line of row.graph.lines) {
+      assert.ok(line.fromLane >= 0 && line.fromLane < laneCount);
+      assert.ok(line.toLane >= 0 && line.toLane < laneCount);
+      assert.ok(line.color >= 0 && line.color < 5);
+    }
+  }
 }
 
 function createBmp(width: number, height: number, shade: number): Buffer {
