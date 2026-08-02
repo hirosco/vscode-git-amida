@@ -11,6 +11,14 @@ export interface RemoteDefaultBranch {
   targetFullName: string;
 }
 
+export interface CompactBranchRefGroup {
+  label: string;
+  displayLabel?: string;
+  localRefs: CommitRef[];
+  remoteRefs: CommitRef[];
+  current: boolean;
+}
+
 export function remoteDefaultBranches(
   refs: readonly CommitRef[],
 ): RemoteDefaultBranch[] {
@@ -37,6 +45,69 @@ export function remoteDefaultLabel(
 ): string | undefined {
   return defaults.find((candidate) => candidate.targetFullName === ref.fullName)
     ?.branchName;
+}
+
+export function compactBranchLabel(ref: CommitRef): string | undefined {
+  if (ref.type === "localBranch") {
+    return ref.name;
+  }
+  if (ref.type !== "remoteBranch") {
+    return undefined;
+  }
+  if (ref.symbolicTarget !== undefined) {
+    return undefined;
+  }
+  const separator = ref.name.indexOf("/");
+  return separator < 0 || separator === ref.name.length - 1
+    ? undefined
+    : ref.name.slice(separator + 1);
+}
+
+export function compactBranchRefGroups(
+  refs: readonly CommitRef[],
+  defaults: readonly RemoteDefaultBranch[],
+): CompactBranchRefGroup[] {
+  const labels: string[] = [];
+  const currentBranch = refs.find(
+    (ref) => ref.type === "localBranch" && ref.current,
+  );
+  addUnique(labels, currentBranch?.name);
+  for (const ref of refs) {
+    addUnique(labels, compactBranchLabel(ref));
+  }
+
+  return labels.map((label) => {
+    const localRefs = refs.filter(
+      (ref) => ref.type === "localBranch" && ref.name === label,
+    );
+    const remoteRefs = refs.filter(
+      (ref) =>
+        ref.type === "remoteBranch" &&
+        ref.symbolicTarget === undefined &&
+        compactBranchLabel(ref) === label,
+    );
+    const current = localRefs.some((ref) => ref.current);
+    const remoteDefault = remoteRefs
+      .map((ref) => remoteDefaultLabel(ref, defaults))
+      .find((candidate) => candidate !== undefined);
+    const displayLabel = current
+      ? label
+      : remoteDefault ??
+        (label === "main" || label === "master" ? label : undefined);
+    return {
+      label,
+      ...(displayLabel === undefined ? {} : { displayLabel }),
+      localRefs,
+      remoteRefs,
+      current,
+    };
+  });
+}
+
+function addUnique(values: string[], value: string | undefined): void {
+  if (value !== undefined && !values.includes(value)) {
+    values.push(value);
+  }
 }
 
 function remoteDefaultBranch(

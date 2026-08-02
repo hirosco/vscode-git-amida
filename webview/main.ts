@@ -17,8 +17,10 @@ import type {
   WebviewToHostMessage,
 } from "../src/protocol";
 import {
+  compactBranchRefGroups,
   remoteDefaultBranches,
   remoteDefaultLabel,
+  type CompactBranchRefGroup,
   type RemoteDefaultBranch,
 } from "../src/refs.js";
 
@@ -849,9 +851,11 @@ function createGraph(
   }
 
   const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-  node.classList.add("graph-node", graphColorClass(graph.nodeColor));
+  node.classList.add("graph-node");
   if (isHead) {
-    node.classList.add("graph-head-node");
+    node.classList.add("graph-head-node", "ref-head-color");
+  } else {
+    node.classList.add(graphColorClass(graph.nodeColor));
   }
   node.setAttribute(
     "cx",
@@ -865,10 +869,7 @@ function createGraph(
       "http://www.w3.org/2000/svg",
       "circle",
     );
-    center.classList.add(
-      "graph-head-center",
-      graphColorClass(graph.nodeColor),
-    );
+    center.classList.add("graph-head-center", "ref-head-color");
     center.setAttribute(
       "cx",
       formatGraphNumber(laneX(graph.nodeLane, laneCount, width)),
@@ -957,34 +958,36 @@ function createRefList(
   commit: Commit,
   isHead: boolean,
 ): HTMLSpanElement | undefined {
-  const currentBranch = commit.refs.find((ref) => ref.current);
   const remoteDefaults = remoteDefaultBranches(commit.refs);
   const remoteHeadRefs = new Set(
     remoteDefaults.map((candidate) => candidate.headFullName),
   );
-  const visibleRefs = commit.refs
-    .filter((ref) => !ref.current && !remoteHeadRefs.has(ref.fullName))
-    .sort(
-      (left, right) =>
-        refPresentationOrder(left, remoteDefaults) -
-          refPresentationOrder(right, remoteDefaults),
-    );
-  if (!isHead && visibleRefs.length === 0) {
+  const groups = compactBranchRefGroups(commit.refs, remoteDefaults);
+  const groupedRefs = new Set(
+    groups.flatMap((group) =>
+      [...group.localRefs, ...group.remoteRefs].map((ref) => ref.fullName),
+    ),
+  );
+  const visibleRefs = commit.refs.filter(
+    (ref) =>
+      !groupedRefs.has(ref.fullName) && !remoteHeadRefs.has(ref.fullName),
+  );
+  if (!isHead && groups.length === 0 && visibleRefs.length === 0) {
     return undefined;
   }
 
   const list = document.createElement("span");
   list.className = "ref-list";
-  if (isHead) {
-    const description =
-      currentBranch === undefined
-        ? `HEAD · Detached at ${commit.shortHash}`
-        : `HEAD · ${refDescription(currentBranch)}`;
+  const currentGroup = groups.find((group) => group.current);
+  if (isHead && currentGroup === undefined) {
+    list.append(createDetachedHeadIndicator(commit));
+  }
+  for (const group of groups) {
     list.append(
-      createHeadIndicator(
-        currentBranch?.type ?? "detached",
-        currentBranch?.name ?? commit.shortHash,
-        description,
+      createGroupedRefIndicator(
+        group,
+        isHead && group.current,
+        remoteDefaults,
       ),
     );
   }
@@ -993,14 +996,6 @@ function createRefList(
     const isRemoteDefault =
       remoteDefaultLabel(ref, remoteDefaults) !== undefined;
     const description = refDescription(ref, isRemoteDefault);
-    const primaryLabel = primaryBranchLabel(ref, remoteDefaults);
-    if (primaryLabel !== undefined) {
-      list.append(
-        createNamedRefIndicator(ref, primaryLabel, description),
-      );
-      continue;
-    }
-
     const indicator = document.createElement("span");
     indicator.className = `ref-indicator ref-${ref.type}`;
     indicator.setAttribute("role", "img");
@@ -1011,58 +1006,72 @@ function createRefList(
   return list;
 }
 
-function refPresentationOrder(
-  ref: Commit["refs"][number],
+function createGroupedRefIndicator(
+  group: CompactBranchRefGroup,
+  isHead: boolean,
   remoteDefaults: readonly RemoteDefaultBranch[],
-): number {
-  return primaryBranchLabel(ref, remoteDefaults) === undefined ? 2 : 1;
-}
-
-function primaryBranchLabel(
-  ref: Commit["refs"][number],
-  remoteDefaults: readonly RemoteDefaultBranch[],
-): string | undefined {
-  if (
-    ref.type === "localBranch" &&
-    (ref.name === "main" || ref.name === "master")
-  ) {
-    return ref.name;
-  }
-  if (ref.type !== "remoteBranch") {
-    return undefined;
-  }
-  const remoteDefault = remoteDefaultLabel(ref, remoteDefaults);
-  if (remoteDefault !== undefined) {
-    return remoteDefault;
-  }
-  const label = /^[^/]+\/(main|master)$/.exec(ref.name)?.[1];
-  return label === "main" || label === "master" ? label : undefined;
-}
-
-function createNamedRefIndicator(
-  ref: Commit["refs"][number],
-  label: string,
-  description: string,
 ): HTMLSpanElement {
   const indicator = document.createElement("span");
-  indicator.className = `ref-named ref-${ref.type}`;
+  const type = group.localRefs.length > 0 ? "localBranch" : "remoteBranch";
+  indicator.className = `ref-branch-group ref-${type}`;
+  if (group.displayLabel !== undefined) {
+    indicator.classList.add("ref-named");
+  }
+  if (group.current) {
+    indicator.classList.add("ref-current-branch");
+  }
+  const descriptions = [
+    ...(isHead ? [`Local HEAD · Checked out at ${group.label}`] : []),
+    ...group.localRefs.map((ref) => refDescription(ref)),
+    ...group.remoteRefs.map((ref) =>
+      refDescription(
+        ref,
+        remoteDefaultLabel(ref, remoteDefaults) !== undefined,
+      ),
+    ),
+  ];
+  const description = descriptions.join("; ");
   indicator.setAttribute("role", "img");
   indicator.setAttribute("aria-label", description);
-  indicator.append(span("ref-symbol", ""), span("ref-name", label));
+  indicator.title = description;
+
+  const symbols = span("ref-symbol-group", "");
+  symbols.setAttribute("aria-hidden", "true");
+  if (isHead) {
+    symbols.append(createGroupedRefSymbol("head"));
+  }
+  symbols.append(
+    ...group.localRefs.map(() => createGroupedRefSymbol("localBranch")),
+    ...group.remoteRefs.map(() => createGroupedRefSymbol("remoteBranch")),
+  );
+  indicator.append(symbols);
+  if (group.displayLabel !== undefined) {
+    indicator.append(span("ref-name", group.displayLabel));
+  }
   return indicator;
 }
 
-function createHeadIndicator(
-  type: Commit["refs"][number]["type"] | "detached",
-  label: string,
-  description: string,
+function createGroupedRefSymbol(
+  type: "remoteBranch" | "localBranch" | "head",
 ): HTMLSpanElement {
-  const head = document.createElement("span");
-  head.className = `ref-head ref-${type}`;
-  head.setAttribute("role", "img");
-  head.setAttribute("aria-label", description);
-  head.append(span("ref-symbol", ""), span("ref-head-label", label));
-  return head;
+  const symbol = span("ref-symbol", "");
+  symbol.classList.add(`ref-group-${type}`);
+  return symbol;
+}
+
+function createDetachedHeadIndicator(commit: Commit): HTMLSpanElement {
+  const indicator = document.createElement("span");
+  indicator.className =
+    "ref-named ref-branch-group ref-detached ref-current-branch";
+  const description = `Local HEAD · Detached at ${commit.hash}`;
+  indicator.setAttribute("role", "img");
+  indicator.setAttribute("aria-label", description);
+  indicator.title = description;
+  const symbols = span("ref-symbol-group", "");
+  symbols.setAttribute("aria-hidden", "true");
+  symbols.append(createGroupedRefSymbol("head"));
+  indicator.append(symbols, span("ref-name", commit.shortHash));
+  return indicator;
 }
 
 function renderFiles(): void {

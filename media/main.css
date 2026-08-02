@@ -1,4 +1,20 @@
 :root {
+  --git-amida-head-ref-color: var(
+    --vscode-gitAmida-headRefColor,
+    var(--vscode-charts-yellow, var(--vscode-gitDecoration-modifiedResourceForeground))
+  );
+  --git-amida-local-ref-color: var(
+    --vscode-scmGraph-historyItemRefColor,
+    var(--vscode-charts-green, var(--vscode-gitDecoration-addedResourceForeground))
+  );
+  --git-amida-remote-ref-color: var(
+    --vscode-scmGraph-historyItemRemoteRefColor,
+    var(--vscode-charts-purple, var(--vscode-textLink-foreground))
+  );
+  --git-amida-tag-ref-color: var(
+    --vscode-gitAmida-tagRefColor,
+    var(--vscode-descriptionForeground, var(--vscode-foreground))
+  );
   color-scheme: light dark;
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
@@ -590,6 +606,10 @@ h2 {
   stroke: none;
 }
 
+.ref-head-color {
+  color: var(--git-amida-head-ref-color);
+}
+
 .working-tree-marker {
   fill: transparent;
   stroke: currentColor;
@@ -725,8 +745,8 @@ h2 {
   white-space: nowrap;
 }
 
-.ref-head,
 .ref-named,
+.ref-branch-group,
 .ref-indicator {
   display: inline-flex;
   height: 14px;
@@ -737,11 +757,18 @@ h2 {
   vertical-align: middle;
 }
 
+.ref-branch-group {
+  margin-left: 6px;
+}
+
+.ref-branch-group + .ref-indicator {
+  margin-left: 6px;
+}
+
 .ref-list > :first-child {
   margin-left: 0;
 }
 
-.ref-head,
 .ref-named {
   gap: 2px;
   padding: 0 2px;
@@ -750,20 +777,8 @@ h2 {
   line-height: 14px;
 }
 
-.ref-head {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.ref-head-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .ref-indicator {
-  width: 14px;
+  width: 9px;
 }
 
 .ref-symbol {
@@ -775,27 +790,72 @@ h2 {
   background: transparent;
 }
 
-.ref-localBranch .ref-symbol {
+.ref-symbol-group {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.ref-symbol-group .ref-symbol {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.ref-group-remoteBranch {
+  color: var(--git-amida-remote-ref-color);
+}
+
+.ref-group-localBranch {
+  color: var(--git-amida-local-ref-color);
+  border-color: currentColor;
+  background: currentColor;
+}
+
+.ref-group-head {
+  color: var(--git-amida-head-ref-color);
+}
+
+.ref-group-head::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+.ref-current-branch {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+
+.ref-current-branch .ref-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ref-localBranch > .ref-symbol {
   border-color: currentColor;
   background: currentColor;
 }
 
 .ref-localBranch {
-  color: var(
-    --vscode-scmGraph-historyItemRefColor,
-    var(--vscode-charts-green, var(--vscode-gitDecoration-addedResourceForeground))
-  );
+  color: var(--git-amida-local-ref-color);
 }
 
 .ref-remoteBranch {
-  color: var(
-    --vscode-scmGraph-historyItemRemoteRefColor,
-    var(--vscode-charts-purple, var(--vscode-textLink-foreground))
-  );
+  color: var(--git-amida-remote-ref-color);
 }
 
 .ref-tag {
-  color: var(--vscode-charts-yellow, var(--vscode-gitDecoration-modifiedResourceForeground));
+  color: var(--git-amida-tag-ref-color);
 }
 
 .ref-tag .ref-symbol {

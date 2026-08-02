@@ -14,8 +14,15 @@ interface CommandContribution {
   title: string;
 }
 
+interface ColorContribution {
+  id: string;
+  description: string;
+  defaults: Record<string, string>;
+}
+
 interface ExtensionManifest {
   contributes: {
+    colors: ColorContribution[];
     commands: CommandContribution[];
     menus: Record<string, MenuContribution[]>;
   };
@@ -24,6 +31,31 @@ interface ExtensionManifest {
 const manifest = JSON.parse(
   readFileSync(resolve(__dirname, "../../package.json"), "utf8"),
 ) as ExtensionManifest;
+
+test("GitAmida exposes stable semantic colors for HEAD and tags", () => {
+  assert.deepEqual(manifest.contributes.colors, [
+    {
+      id: "gitAmida.headRefColor",
+      description: "Color of the GitAmida local HEAD indicator.",
+      defaults: {
+        dark: "#E2C08D",
+        light: "#895503",
+        highContrast: "#FFD370",
+        highContrastLight: "#895503",
+      },
+    },
+    {
+      id: "gitAmida.tagRefColor",
+      description: "Color of GitAmida tag indicators.",
+      defaults: {
+        dark: "#8C8C8C",
+        light: "#8E8E90",
+        highContrast: "#A7A8A9",
+        highContrastLight: "#8E8E90",
+      },
+    },
+  ]);
+});
 
 test("Explorer files expose the shared File History context action", () => {
   const explorerAction = manifest.contributes.menus["explorer/context"]?.find(
