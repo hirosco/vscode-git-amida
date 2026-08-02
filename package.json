@@ -56,6 +56,11 @@
         "category": "GitAmida"
       },
       {
+        "command": "gitAmida.showInRepositoryHistory",
+        "title": "Show in Repository History",
+        "category": "GitAmida"
+      },
+      {
         "command": "gitAmida.openChanges",
         "title": "Open Changes",
         "category": "GitAmida",
@@ -149,6 +154,11 @@
           "command": "gitAmida.switchBranch",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'commit' && gitAmidaHasSwitchableBranch",
           "group": "navigation"
+        },
+        {
+          "command": "gitAmida.showInRepositoryHistory",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'fileRevision'",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
@@ -161,6 +171,10 @@
       "commandPalette": [
         {
           "command": "gitAmida.openFileHistoryFromChangedFile",
+          "when": "false"
+        },
+        {
+          "command": "gitAmida.showInRepositoryHistory",
           "when": "false"
         }
       ],

@@ -94,6 +94,15 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand(
+      "gitAmida.showInRepositoryHistory",
+      async (contextValue?: unknown) => {
+        await historyProvider.showFileRevisionInRepositoryHistory(
+          contextFileHistoryTabId(contextValue),
+          contextCommitHash(contextValue),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
       "gitAmida.openChanges",
       async (contextValue?: unknown) => {
         await historyProvider.openChangedFileDiff(
@@ -204,6 +213,14 @@ function contextFilePath(value: unknown): string | undefined {
   }
   const path = (value as Record<string, unknown>).gitAmidaFilePath;
   return typeof path === "string" ? path : undefined;
+}
+
+function contextFileHistoryTabId(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  const tabId = (value as Record<string, unknown>).gitAmidaFileHistoryTabId;
+  return typeof tabId === "string" ? tabId : undefined;
 }
 
 function contextResourceUri(value: unknown): vscode.Uri | undefined {

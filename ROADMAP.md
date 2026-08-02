@@ -29,7 +29,6 @@ This checkpoint is complete when an image selected from Changed files opens a us
 ## 3. File History investigations
 
 - Verify the conditional Repository History home tab, filename-sized tabs, horizontal tab scrolling, integrated close actions, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
-- From a file revision, activate Repository History without closing its File History tab, loading additional history pages until that commit can be selected and revealed
 - Validate renamed, added, and deleted file identities across several simultaneous tabs before treating the checkpoint as complete
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.

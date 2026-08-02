@@ -53,3 +53,28 @@ test("the short context action stays out of the Command Palette", () => {
     when: "false",
   });
 });
+
+test("File History revisions expose only the context reveal action", () => {
+  const contextAction = manifest.contributes.menus["webview/context"]?.find(
+    ({ command }) => command === "gitAmida.showInRepositoryHistory",
+  );
+  const paletteAction = manifest.contributes.menus.commandPalette?.find(
+    ({ command }) => command === "gitAmida.showInRepositoryHistory",
+  );
+
+  assert.deepEqual(contextAction, {
+    command: "gitAmida.showInRepositoryHistory",
+    when: "webviewId == 'gitAmida.history' && webviewSection == 'fileRevision'",
+    group: "navigation",
+  });
+  assert.deepEqual(paletteAction, {
+    command: "gitAmida.showInRepositoryHistory",
+    when: "false",
+  });
+  assert.equal(
+    manifest.contributes.commands.find(
+      ({ command }) => command === "gitAmida.showInRepositoryHistory",
+    )?.title,
+    "Show in Repository History",
+  );
+});

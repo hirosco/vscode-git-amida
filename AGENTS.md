@@ -28,7 +28,7 @@ Do not create append-only completion histories, ADR directories, or per-feature 
 - Do not retain unused features merely because they were expensive to build.
 - Keep the Webview limited to rendering and input; trusted repository and navigation state belong to the Extension Host.
 - Keep the Git adapter independent of VS Code and Webview types.
-- Provide an equivalent keyboard action for every mouse action.
+- Keep established list navigation and primary actions keyboard-accessible, but do not assign dedicated shortcuts piecemeal. Design shortcuts as a coherent command set; secondary context-menu actions may ship without a dedicated keyboard binding.
 - Reflow safely when the View is moved to a narrow container.
 - Keep branch switching behind a separate mutation boundary from all history queries.
 - Do not add history-editing operations without an explicit design change.

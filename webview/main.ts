@@ -251,6 +251,14 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       renderHistoryTabs();
       renderActiveWorkspace();
       break;
+    case "revealRepositoryCommit":
+      requestAnimationFrame(() => {
+        const row = [...elements.history.querySelectorAll<HTMLElement>(
+          ".history-row",
+        )].find((candidate) => candidate.dataset.hash === message.hash);
+        row?.scrollIntoView({ block: "center" });
+      });
+      break;
     case "error":
       historyHasMore = false;
       historyPageLoading = false;
@@ -409,6 +417,12 @@ function renderFileRevisions(tab: FileHistoryTab): void {
     row.type = "button";
     row.className = "file-revision-row file-history-columns";
     row.dataset.hash = revision.commit.hash;
+    row.dataset.vscodeContext = JSON.stringify({
+      webviewSection: "fileRevision",
+      preventDefaultContextMenuItems: true,
+      gitAmidaFileHistoryTabId: tab.id,
+      gitAmidaCommitHash: revision.commit.hash,
+    });
     row.setAttribute("role", "option");
     const selected = revision.commit.hash === tab.selectedHash;
     row.classList.toggle("selected", selected);

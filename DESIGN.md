@@ -118,7 +118,7 @@ Each File History tab shows the available revisions that changed the file, follo
 
 - Single-clicking a revision updates a preview diff
 - Enter or double-click opens or pins the native diff
-- **Show in Repository History** activates the singleton Repository History tab, loads the commit if necessary, and selects it
+- A revision's **Show in Repository History** context action activates the singleton Repository History tab, loads the commit if necessary, selects it, and reveals its graph row. This secondary context action does not introduce a dedicated shortcut; shortcut assignments remain a coherent future command-set decision
 - Returning to Repository History never closes the originating File History tab
 
 Path history must handle additions, deletions, renames, merge simplification, and commits outside the initially loaded repository-history page explicitly.
@@ -252,7 +252,7 @@ Use a Webview View because a topology graph, compact data grid, resizable detail
 - Apply a restrictive Content Security Policy with a per-render nonce
 - Render Git data through DOM text nodes, never HTML interpolation
 - Validate every message at the Extension Host boundary
-- Provide complete keyboard equivalents and visible focus
+- Keep visible focus and established list interactions keyboard-accessible, while designing dedicated command shortcuts as a coherent set instead of mirroring every pointer-only context action
 - Preserve responsive reflow and usable target sizes
 
 ### Git CLI

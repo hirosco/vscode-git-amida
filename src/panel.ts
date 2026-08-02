@@ -24,6 +24,7 @@ import {
 } from "./fileHistory";
 import { buildFileTree } from "./fileTree";
 import { buildHistoryGraph, type HistoryGraphState } from "./graph";
+import { ensureHistoryCommitLoaded } from "./historyNavigation";
 import {
   GitClient,
   GitError,
@@ -105,6 +106,7 @@ export class HistoryViewProvider
   private historyRows: HistoryRow[] = [];
   private historyHasMore = false;
   private historyPageLoading = false;
+  private historyPageRequest?: Promise<boolean>;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -305,6 +307,45 @@ export class HistoryViewProvider
     } catch (error) {
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
+  }
+
+  public async showFileRevisionInRepositoryHistory(
+    tabId?: string,
+    hash?: string,
+  ): Promise<void> {
+    await this.stateReady;
+    const tab =
+      tabId === undefined ? undefined : this.findFileHistoryTabById(tabId);
+    const revision = tab?.revisions.find(
+      (candidate) => candidate.commit.hash === hash,
+    );
+    if (tab === undefined || revision === undefined || hash === undefined) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a File History revision first.",
+      );
+      return;
+    }
+
+    tab.selectedHash = hash;
+    tab.revealSelected = false;
+    await this.postFileHistoryState();
+
+    const loaded = await ensureHistoryCommitLoaded(hash, {
+      hasCommit: (candidate) => this.commits.has(candidate),
+      hasMore: () => this.historyHasMore,
+      loadNextPage: () => this.loadNextHistoryPage(),
+    });
+    if (!loaded) {
+      await vscode.window.showWarningMessage(
+        "GitAmida: This file revision could not be loaded in Repository History. Refresh and try again.",
+      );
+      return;
+    }
+
+    this.activeFileHistoryTabId = undefined;
+    await this.postFileHistoryState();
+    await this.selectAndLoad(singleCommitSelection(hash));
+    await this.post({ type: "revealRepositoryCommit", hash });
   }
 
   public async openChangedFileDiff(path?: string): Promise<void> {
@@ -903,14 +944,25 @@ export class HistoryViewProvider
     }
   }
 
-  private async loadNextHistoryPage(): Promise<void> {
+  private async loadNextHistoryPage(): Promise<boolean> {
+    if (this.historyPageRequest !== undefined) {
+      return this.historyPageRequest;
+    }
+    const operation = this.performLoadNextHistoryPage();
+    this.historyPageRequest = operation;
+    try {
+      return await operation;
+    } finally {
+      if (this.historyPageRequest === operation) {
+        this.historyPageRequest = undefined;
+      }
+    }
+  }
+
+  private async performLoadNextHistoryPage(): Promise<boolean> {
     const cursor = this.historyCursor;
-    if (
-      cursor === undefined ||
-      !this.historyHasMore ||
-      this.historyPageLoading
-    ) {
-      return;
+    if (cursor === undefined || !this.historyHasMore) {
+      return false;
     }
 
     const request = this.historyRequest;
@@ -919,7 +971,7 @@ export class HistoryViewProvider
     try {
       const page = await this.git.loadNextHistoryPage(cursor);
       if (request !== this.historyRequest || cursor !== this.historyCursor) {
-        return;
+        return false;
       }
       const knownHashes = new Set(this.commits.keys());
       const nextCommits: Commit[] = [];
@@ -943,18 +995,20 @@ export class HistoryViewProvider
         graphLaneCount: graph.laneCount,
         hasMore: page.hasMore,
       });
+      return true;
     } catch (error) {
       if (request !== this.historyRequest) {
-        return;
+        return false;
       }
       if (error instanceof HistoryChangedError) {
         await this.refresh(false);
-        return;
+        return true;
       }
       await this.post({
         type: "historyPageError",
         message: userMessage(error),
       });
+      return false;
     } finally {
       if (request === this.historyRequest) {
         this.historyPageLoading = false;

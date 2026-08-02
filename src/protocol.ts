@@ -49,6 +49,7 @@ export type HostToWebviewMessage =
       tabs: FileHistoryTab[];
       activeTabId?: string;
     }
+  | { type: "revealRepositoryCommit"; hash: string }
   | { type: "error"; message: string };
 
 export type WebviewToHostMessage =
