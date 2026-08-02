@@ -95,6 +95,24 @@ test("parseHistory reads commit records without terminal graph text", () => {
   ]);
 });
 
+test("parseRefs retains a remote default symbolic target", () => {
+  const refs = parseRefs(
+    [
+      "\x1eabc\x00\x00refs/remotes/origin/HEAD\x00 \x00\x00\x00refs/remotes/origin/main\x00",
+      "\x1eabc\x00\x00refs/remotes/origin/main\x00 \x00\x00\x00\x00",
+    ].join("\n"),
+  ).get("abc");
+
+  assert.equal(
+    refs?.find((ref) => ref.name === "origin/HEAD")?.symbolicTarget,
+    "refs/remotes/origin/main",
+  );
+  assert.equal(
+    refs?.find((ref) => ref.name === "origin/main")?.symbolicTarget,
+    undefined,
+  );
+});
+
 test("parseRawDiff and parseBinaryPaths preserve rename metadata", () => {
   assert.deepEqual(
     parseRawDiff(

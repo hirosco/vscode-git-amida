@@ -61,6 +61,10 @@ assert.ok(
     (ref) => ref.type === "remoteBranch" && ref.name === "origin/main",
   ),
 );
+assert.equal(
+  remoteMain.refs.find((ref) => ref.name === "origin/HEAD")?.symbolicTarget,
+  "refs/remotes/origin/main",
+);
 
 const offlineMerge = commits.get("merge: integrate offline mode");
 const visualMerge = commits.get("merge: integrate visual refresh");

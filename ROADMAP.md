@@ -11,7 +11,7 @@ The remaining checkpoints build on selection-scoped, endpoint-based comparison a
 - Observe dense branch and merge histories during normal repository work
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
 - Verify all five SCM graph theme colors in light and high-contrast themes
-- Confirm that commit subjects, the checked-out branch or detached hash, remote HEAD/main indicators, and dates remain aligned in narrow Panels
+- Confirm that commit subjects, the checked-out branch or detached hash, remote-default/main indicators, and dates remain aligned in narrow Panels
 - Add a global Date/Topology ordering choice only if daily use demonstrates that topology ordering is worth the additional option; keep commit-date ordering as the default
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
@@ -29,8 +29,7 @@ This checkpoint is complete when an image selected from Changed files opens a us
 ## 3. File History investigations
 
 - Verify the conditional Repository History home tab, filename-sized tabs, horizontal tab scrolling, integrated close actions, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
-- Show a file revision in Repository History without closing its File History tab
-- Load a repository commit that is outside the current history page
+- From a file revision, activate Repository History without closing its File History tab, loading additional history pages until that commit can be selected and revealed
 - Validate renamed, added, and deleted file identities across several simultaneous tabs before treating the checkpoint as complete
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.

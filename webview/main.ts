@@ -16,6 +16,11 @@ import type {
   HostToWebviewMessage,
   WebviewToHostMessage,
 } from "../src/protocol";
+import {
+  remoteDefaultBranches,
+  remoteDefaultLabel,
+  type RemoteDefaultBranch,
+} from "../src/refs.js";
 
 interface VsCodeApi {
   postMessage(message: WebviewToHostMessage): void;
@@ -939,11 +944,16 @@ function createRefList(
   isHead: boolean,
 ): HTMLSpanElement | undefined {
   const currentBranch = commit.refs.find((ref) => ref.current);
+  const remoteDefaults = remoteDefaultBranches(commit.refs);
+  const remoteHeadRefs = new Set(
+    remoteDefaults.map((candidate) => candidate.headFullName),
+  );
   const visibleRefs = commit.refs
-    .filter((ref) => !ref.current)
+    .filter((ref) => !ref.current && !remoteHeadRefs.has(ref.fullName))
     .sort(
       (left, right) =>
-        refPresentationOrder(left) - refPresentationOrder(right),
+        refPresentationOrder(left, remoteDefaults) -
+          refPresentationOrder(right, remoteDefaults),
     );
   if (!isHead && visibleRefs.length === 0) {
     return undefined;
@@ -966,12 +976,10 @@ function createRefList(
   }
 
   for (const ref of visibleRefs) {
-    const description = refDescription(ref);
-    if (ref.type === "remoteBranch" && ref.name.endsWith("/HEAD")) {
-      list.append(createHeadIndicator(ref.type, "HEAD", description));
-      continue;
-    }
-    const primaryLabel = primaryBranchLabel(ref);
+    const isRemoteDefault =
+      remoteDefaultLabel(ref, remoteDefaults) !== undefined;
+    const description = refDescription(ref, isRemoteDefault);
+    const primaryLabel = primaryBranchLabel(ref, remoteDefaults);
     if (primaryLabel !== undefined) {
       list.append(
         createNamedRefIndicator(ref, primaryLabel, description),
@@ -989,16 +997,17 @@ function createRefList(
   return list;
 }
 
-function refPresentationOrder(ref: Commit["refs"][number]): number {
-  if (ref.type === "remoteBranch" && ref.name.endsWith("/HEAD")) {
-    return 0;
-  }
-  return primaryBranchLabel(ref) === undefined ? 2 : 1;
+function refPresentationOrder(
+  ref: Commit["refs"][number],
+  remoteDefaults: readonly RemoteDefaultBranch[],
+): number {
+  return primaryBranchLabel(ref, remoteDefaults) === undefined ? 2 : 1;
 }
 
 function primaryBranchLabel(
   ref: Commit["refs"][number],
-): "main" | "master" | undefined {
+  remoteDefaults: readonly RemoteDefaultBranch[],
+): string | undefined {
   if (
     ref.type === "localBranch" &&
     (ref.name === "main" || ref.name === "master")
@@ -1007,6 +1016,10 @@ function primaryBranchLabel(
   }
   if (ref.type !== "remoteBranch") {
     return undefined;
+  }
+  const remoteDefault = remoteDefaultLabel(ref, remoteDefaults);
+  if (remoteDefault !== undefined) {
+    return remoteDefault;
   }
   const label = /^[^/]+\/(main|master)$/.exec(ref.name)?.[1];
   return label === "main" || label === "master" ? label : undefined;
@@ -1294,7 +1307,9 @@ function renderCommitDetails(container: HTMLElement, commit: Commit): void {
   );
   appendDetail(list, "Authored", formatFullDate(commit.authoredAt));
   appendDetail(list, "Committed", formatFullDate(commit.committedAt));
-  appendRefsDetail(list, commit.refs);
+  const remoteDefaults = remoteDefaultBranches(commit.refs);
+  appendRefsDetail(list, commit.refs, remoteDefaults);
+  appendRemoteDefaultsDetail(list, remoteDefaults);
   appendDetail(list, "Parents", commit.parents.join(", ") || "None (root commit)");
   appendDetail(
     list,
@@ -1533,28 +1548,49 @@ function appendDetail(
 function appendRefsDetail(
   list: HTMLDListElement,
   refs: readonly Commit["refs"][number][],
+  remoteDefaults: readonly RemoteDefaultBranch[],
 ): void {
   const term = document.createElement("dt");
   term.textContent = "Refs";
   const description = document.createElement("dd");
-  if (refs.length === 0) {
+  const remoteHeadRefs = new Set(
+    remoteDefaults.map((candidate) => candidate.headFullName),
+  );
+  const visibleRefs = refs.filter((ref) => !remoteHeadRefs.has(ref.fullName));
+  if (visibleRefs.length === 0) {
     description.textContent = "—";
     list.append(term, description);
     return;
   }
 
   description.className = "details-ref-list";
-  for (const ref of refs) {
+  for (const ref of visibleRefs) {
+    const isRemoteDefault =
+      remoteDefaultLabel(ref, remoteDefaults) !== undefined;
     const item = document.createElement("span");
     item.className = `details-ref-item ref-${ref.type}`;
-    item.title = refDescription(ref);
-    item.setAttribute("aria-label", refDescription(ref));
+    item.title = refDescription(ref, isRemoteDefault);
+    item.setAttribute("aria-label", refDescription(ref, isRemoteDefault));
     const symbol = span("ref-symbol", "");
     symbol.setAttribute("aria-hidden", "true");
     item.append(symbol, span("details-ref-name", ref.name));
     description.append(item);
   }
   list.append(term, description);
+}
+
+function appendRemoteDefaultsDetail(
+  list: HTMLDListElement,
+  defaults: readonly RemoteDefaultBranch[],
+): void {
+  if (defaults.length === 0) {
+    return;
+  }
+  appendDetail(
+    list,
+    defaults.length === 1 ? "Remote default" : "Remote defaults",
+    defaults.map((candidate) => candidate.targetName).join(", "),
+  );
 }
 
 function selectCommit(hash: string, extend: boolean, toggle: boolean): void {
@@ -2036,10 +2072,15 @@ function collectDirectoryPaths(nodes: FileTreeNode[]): Set<string> {
   return paths;
 }
 
-function refDescription(ref: Commit["refs"][number]): string {
+function refDescription(
+  ref: Commit["refs"][number],
+  remoteDefault = false,
+): string {
   const type = {
     localBranch: "Local branch",
-    remoteBranch: "Remote-tracking branch",
+    remoteBranch: remoteDefault
+      ? "Remote default branch"
+      : "Remote-tracking branch",
     tag: "Tag",
   }[ref.type];
   const parts = [`${type}: ${ref.name}`, ref.fullName];

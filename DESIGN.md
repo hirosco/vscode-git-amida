@@ -37,11 +37,11 @@ The commit list is optimized for scanning a large history.
 - Order commits by commit date while ensuring that no parent appears before its children
 - Show the authored timestamp in compact history rows because it represents when the change originated, while commit-date ordering represents when the current commit objects entered the graph. A normal rebase can therefore move commits in the displayed order without replacing their visible authored times; this separation is intentional, and displayed dates need not be monotonic
 - Give the subject flexible width and truncate it with an accessible full-value label
-- Mark local HEAD with a ring around a visible center dot and label it with the checked-out local branch; show the short commit hash instead when HEAD is detached, and retain the remote icon-and-text `HEAD` indicator
-- Label local and remote-tracking `main` or `master` refs as compact orientation anchors; when the local primary branch is checked out, use the current-branch label instead of rendering that local ref twice, while retaining an independent remote indicator at the same commit
+- Mark local HEAD with a ring around a visible center dot and label it with the checked-out local branch; show the short commit hash instead when HEAD is detached
+- Treat each local `<remote>/HEAD` symbolic ref as metadata identifying that remote's default branch rather than rendering a separate icon-and-text `HEAD` indicator. Label its target remote-tracking branch by branch name, and keep local and remote-tracking `main` or `master` refs as fallback compact orientation anchors when no remote-default relationship supplies that label. When the local primary branch is checked out, use the current-branch label instead of rendering that local ref twice, while retaining an independent remote indicator at the same commit
 - Use fill as well as color to distinguish refs: local branch indicators are filled, remote-tracking indicators are outlined, and tags use a distinct shape
 - Prefer the subject when horizontal space is scarce, then truncate overflowing ref indicators with an ellipsis
-- Keep complete ref names in commit details and accessible labels rather than hover-only UI
+- Keep complete branch and tag ref names in commit details and accessible labels rather than hover-only UI. Present remote defaults as labeled relationships such as `Remote default: origin/main`, not raw symbolic-arrow notation
 - Treat refs as branch or tag pointers whose current target is exactly that commit. Git does not record one owning branch for a commit; branches that contain it are a separate reachability query
 - Keep graph alignment stable while refs appear or disappear
 - Keep the selected row visually distinct without relying on color alone
@@ -88,6 +88,7 @@ The details pane shows:
 - Author name and email
 - Authored and committed times, with each meaning labeled
 - Branch and tag refs pointing directly at the selected commit, shown one per line with the same local, remote, and tag indicators used in Repository History
+- Remote-default branch targets recorded by local `<remote>/HEAD` symbolic refs, shown as semantic `Remote default` values without duplicating `HEAD` as a branch-like ref
 - Parent commits
 - The active comparison parent for a merge commit
 

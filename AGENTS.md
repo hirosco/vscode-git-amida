@@ -53,8 +53,8 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Use the editor's `scmGraph.foreground1` through `scmGraph.foreground5` theme colors with safe workbench fallbacks.
 - Show graph, subject, inline ref indicators, and date on one physical row. Truncate the subject and then excessive refs as space narrows.
 - Show the authored timestamp in compact history rows and selected-commit lists, retain both timestamps in commit details, and keep the displayed timestamp independent from commit-date ordering.
-- Mark local HEAD with a ring-and-center-dot graph node and label it with the checked-out branch, or the short commit hash when detached. Retain the remote icon-and-text `HEAD` indicator. Distinguish local, remote, and tag refs by fill and shape as well as color.
-- Label local and remote-tracking `main` or `master` refs independently as orientation anchors, even at the same commit, and keep other branch names out of the compact row unless requirements change.
+- Mark local HEAD with a ring-and-center-dot graph node and label it with the checked-out branch, or the short commit hash when detached. Distinguish local, remote, and tag refs by fill and shape as well as color.
+- Do not render `<remote>/HEAD` as a separate compact `HEAD` indicator. Use its local symbolic-ref target to label that remote's default branch; continue labeling local and remote-tracking `main` or `master` refs independently as fallback orientation anchors. Keep full remote-default relationships in commit details without symbolic-arrow notation.
 - Keep the primary branch's first-parent backbone on a stable graph color and let other tips retain a different color until they converge at a commit node.
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI.
 - Keep author information in commit details instead of spending permanent history width.

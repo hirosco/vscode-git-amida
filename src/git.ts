@@ -28,7 +28,7 @@ const RECORD_MARKER = "\x1e";
 const MAX_BUFFER = 16 * 1024 * 1024;
 const HISTORY_REFS_FORMAT =
   `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
-  "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00";
+  "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00%(symref)%00";
 const IMAGE_EXTENSIONS = new Set([
   ".avif",
   ".bmp",
@@ -779,6 +779,7 @@ export function parseRefs(output: string): Map<string, CommitRef[]> {
       head = "",
       upstream = "",
       tracking = "",
+      symbolicTarget = "",
     ] = record.split("\x00");
     const targetHash = peeledHash || objectHash;
     const identity = parseRefIdentity(fullName);
@@ -789,6 +790,7 @@ export function parseRefs(output: string): Map<string, CommitRef[]> {
       ...identity,
       fullName,
       current: head.trim() === "*",
+      ...(symbolicTarget.length === 0 ? {} : { symbolicTarget }),
       ...(upstream.length === 0 ? {} : { upstream }),
       ...(tracking.length === 0 ? {} : { tracking }),
     };

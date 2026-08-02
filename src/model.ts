@@ -25,6 +25,7 @@ export interface CommitRef {
   fullName: string;
   type: RefType;
   current: boolean;
+  symbolicTarget?: string;
   upstream?: string;
   tracking?: string;
 }
