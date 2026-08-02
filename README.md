@@ -72,6 +72,16 @@ Use `code --install-extension git-amida-0.0.1.vsix --force` for VS Code when its
 
 This command deliberately skips a license-file requirement only for local evaluation while the package is marked `UNLICENSED`. Define the public license and use a reviewed publication workflow before distributing GitAmida.
 
+## Comprehensive validation repository
+
+Create a separate synthetic repository for end-to-end testing and publication screenshots without using private project history:
+
+```sh
+node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo
+```
+
+The generator uses only Node.js standard APIs and the Git CLI. It creates the main demo repository, a local submodule source, and a linked review worktree, and refuses to overwrite any existing target. After building GitAmida, run `node scripts/validate-demo-repository.mjs /absolute/path/to/git-amida-demo` to verify the fixtures through the production Git adapter. The generated repository README identifies screenshot-friendly commits; its validation guide covers graph, File History, image, binary, oversized-file, worktree, and safe-mutation scenarios.
+
 ## Product principles
 
 - **Repository history first**: Keep the repository-wide log as the stable center of navigation

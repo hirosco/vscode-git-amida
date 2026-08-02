@@ -58,7 +58,7 @@ This checkpoint is complete when users can investigate several files and always 
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, worktrees, and long-lived file-history tabs
-- Create a disposable comprehensive test repository with complex branches, merges, renames, deletions, binary and image files, and multiple worktrees, then run end-to-end validation in Cursor and VS Code before distribution
+- Regenerate the separate synthetic repository with `scripts/create-demo-repository.mjs`, then run end-to-end validation of its complex branches, merges, renames, deletions, binary and image files, long history, local submodule, and linked worktree in Cursor and VS Code before distribution
 - Define supported editor versions and platforms
 - Review product naming, trademarks, licensing, marketplace metadata, and privacy before publication
 

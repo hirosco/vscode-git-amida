@@ -175,6 +175,9 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Test navigation state independently: Repository History singleton, File History tab deduplication, selection retention, and reveal-in-log.
 - Test branch switching only in temporary repositories and cover every refusal state before success paths.
 - Test file restoration only in temporary repositories. Cover exact binary bytes, rename destinations, missing-file recreation, index preservation, and every refusal state before success paths.
+- Regenerate the separate synthetic demo repository with `node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo` for comprehensive manual validation and publication screenshots. The generator refuses to overwrite its main repository, component source, or linked review worktree; remove those exact disposable targets explicitly before regenerating.
+- Build GitAmida, then run `node scripts/validate-demo-repository.mjs /absolute/path/to/git-amida-demo` to verify the generated history through the production Git adapter before manual editor testing.
+- Keep the generated demo repository clean for normal screenshots. Introduce staged, unstaged, or untracked states only for the documented refusal checks, then restore them immediately.
 - Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on HTML snapshots.
 - Run `npm ci`, `npm run check`, `npm test`, and `npm run package:inspect` at each checkpoint.
 - Manually verify mouse, keyboard, resizing, focus, Panel persistence, and native diff opening in Cursor and VS Code.
