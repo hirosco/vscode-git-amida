@@ -99,6 +99,7 @@ export interface HistoryResult {
   repository: RepositoryInfo;
   rows: HistoryRow[];
   graphLaneCount: number;
+  hasMore: boolean;
 }
 
 export interface WorkingTreeState {

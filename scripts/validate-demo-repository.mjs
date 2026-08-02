@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { GitClient } from "../dist/src/git.js";
+import { buildHistoryGraph } from "../dist/src/graph.js";
 
 if (process.argv[2] === undefined) {
   throw new Error(
@@ -17,7 +18,27 @@ if (!existsSync(repository)) {
 }
 
 const client = new GitClient();
-const history = await client.loadHistory(repository);
+const firstPage = await client.loadHistory(repository);
+const loadedRows = [...firstPage.rows];
+let graphState = firstPage.graphState;
+let cursor = firstPage.cursor;
+let hasMore = firstPage.hasMore;
+while (hasMore) {
+  const page = await client.loadNextHistoryPage(cursor);
+  const nextGraph = buildHistoryGraph(page.commits, graphState);
+  loadedRows.push(...nextGraph.rows);
+  graphState = nextGraph.state;
+  cursor = page.cursor;
+  hasMore = page.hasMore;
+}
+const history = {
+  ...firstPage,
+  rows: loadedRows,
+  graphLaneCount: graphState.laneCount,
+  hasMore,
+  cursor,
+  graphState,
+};
 const commits = new Map(
   history.rows.map((row) => [row.commit.subject, row.commit]),
 );

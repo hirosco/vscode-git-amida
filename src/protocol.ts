@@ -17,6 +17,14 @@ export type HostToWebviewMessage =
       viewState: RepositoryViewState;
       workingTree?: WorkingTreeState;
     })
+  | { type: "historyPageLoading" }
+  | {
+      type: "historyPage";
+      rows: HistoryResult["rows"];
+      graphLaneCount: number;
+      hasMore: boolean;
+    }
+  | { type: "historyPageError"; message: string }
   | {
       type: "workingTree";
       workingTree: WorkingTreeState | undefined;
@@ -46,6 +54,7 @@ export type HostToWebviewMessage =
 export type WebviewToHostMessage =
   | { type: "ready" }
   | { type: "refresh" }
+  | { type: "loadMoreHistory" }
   | { type: "selectWorkingTree" }
   | {
       type: "selectCommit";

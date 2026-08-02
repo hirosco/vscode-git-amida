@@ -2,23 +2,40 @@ import type { Commit, CommitRef, GraphLine, HistoryRow } from "./model";
 
 const COLOR_COUNT = 5;
 
-interface Lane {
+export interface HistoryGraphLaneState {
   hash: string;
   color: number;
+}
+
+export interface HistoryGraphState {
+  lanes: readonly HistoryGraphLaneState[];
+  laneCount: number;
+  reservePrimaryColor: boolean;
 }
 
 export interface HistoryGraph {
   rows: HistoryRow[];
   laneCount: number;
+  state: HistoryGraphState;
 }
 
-export function buildHistoryGraph(commits: readonly Commit[]): HistoryGraph {
-  let lanes: Lane[] = [];
-  let laneCount = 1;
+export function buildHistoryGraph(
+  commits: readonly Commit[],
+  previousState?: HistoryGraphState,
+  reservePrimaryColor = false,
+): HistoryGraph {
+  let lanes: HistoryGraphLaneState[] =
+    previousState?.lanes.map((lane) => ({ ...lane })) ?? [];
+  let laneCount = previousState?.laneCount ?? 1;
   const rows: HistoryRow[] = [];
   const primaryBackbone = findPrimaryBackbone(commits);
-  const reservedColors =
-    primaryBackbone.size === 0 ? new Set<number>() : new Set([0]);
+  const shouldReservePrimaryColor =
+    previousState?.reservePrimaryColor === true ||
+    reservePrimaryColor ||
+    primaryBackbone.size > 0;
+  const reservedColors = shouldReservePrimaryColor
+    ? new Set([0])
+    : new Set<number>();
 
   for (const commit of commits) {
     let incomingLanes = laneIndexesForHash(lanes, commit.hash);
@@ -45,7 +62,7 @@ export function buildHistoryGraph(commits: readonly Commit[]): HistoryGraph {
 
     const after = before.filter((_, index) => !incomingSet.has(index));
     let insertionIndex = Math.min(nodeLane, after.length);
-    const parentLanes: Lane[] = [];
+    const parentLanes: HistoryGraphLaneState[] = [];
 
     for (const [parentIndex, parent] of commit.parents.entries()) {
       const color =
@@ -97,7 +114,15 @@ export function buildHistoryGraph(commits: readonly Commit[]): HistoryGraph {
     lanes = after;
   }
 
-  return { rows, laneCount };
+  return {
+    rows,
+    laneCount,
+    state: {
+      lanes: lanes.map((lane) => ({ ...lane })),
+      laneCount,
+      reservePrimaryColor: shouldReservePrimaryColor,
+    },
+  };
 }
 
 function line(
@@ -110,7 +135,10 @@ function line(
   return { fromLane, from, toLane, to, color };
 }
 
-function laneIndexesForHash(lanes: readonly Lane[], hash: string): number[] {
+function laneIndexesForHash(
+  lanes: readonly HistoryGraphLaneState[],
+  hash: string,
+): number[] {
   const indexes: number[] = [];
   for (const [index, lane] of lanes.entries()) {
     if (lane.hash === hash) {
@@ -190,7 +218,7 @@ function primaryRefName(ref: CommitRef): "main" | "master" | undefined {
 }
 
 function nextColor(
-  lanes: readonly Lane[],
+  lanes: readonly HistoryGraphLaneState[],
   reserved: ReadonlySet<number> = new Set(),
 ): number {
   const used = new Set(lanes.map((lane) => lane.color));

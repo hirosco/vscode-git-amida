@@ -217,6 +217,27 @@ test("buildHistoryGraph leaves a safe continuation for a parent outside the load
   ]);
 });
 
+test("buildHistoryGraph preserves loaded row lanes when older rows append", () => {
+  const commits = [
+    commit("tip", ["merge"], [localBranch("main")]),
+    commit("merge", ["main", "side"]),
+    commit("main", ["root"]),
+    commit("side", ["root"]),
+    commit("root", []),
+  ];
+  const firstPage = buildHistoryGraph(commits.slice(0, 3));
+  const retainedRows = structuredClone(firstPage.rows);
+  const nextPage = buildHistoryGraph(commits.slice(3), firstPage.state);
+  const complete: HistoryGraph = {
+    rows: [...firstPage.rows, ...nextPage.rows],
+    laneCount: nextPage.laneCount,
+    state: nextPage.state,
+  };
+
+  assert.deepEqual(firstPage.rows, retainedRows);
+  assertGraphInvariants(commits, complete);
+});
+
 test("buildHistoryGraph bounds and converges many simultaneous lanes", () => {
   const laneTotal = 16;
   const commits = [
@@ -242,9 +263,13 @@ test("buildHistoryGraph remains deterministic across generated valid DAGs", () =
     const commits = generatedDag(seed, 120);
     const first = buildHistoryGraph(commits);
     const second = buildHistoryGraph(commits);
+    const pagedFirst = buildPagedGraph(commits, 30);
+    const pagedSecond = buildPagedGraph(commits, 30);
 
     assertGraphInvariants(commits, first);
     assert.deepEqual(first, second);
+    assertGraphInvariants(commits, pagedFirst);
+    assert.deepEqual(pagedFirst, pagedSecond);
   }
 });
 
@@ -380,4 +405,20 @@ function generatedDag(seed: number, size: number): Commit[] {
   }
 
   return oldestFirst.reverse();
+}
+
+function buildPagedGraph(
+  commits: readonly Commit[],
+  pageSize: number,
+): HistoryGraph {
+  let graph = buildHistoryGraph(commits.slice(0, pageSize));
+  const rows = [...graph.rows];
+  for (let offset = pageSize; offset < commits.length; offset += pageSize) {
+    graph = buildHistoryGraph(
+      commits.slice(offset, offset + pageSize),
+      graph.state,
+    );
+    rows.push(...graph.rows);
+  }
+  return { rows, laneCount: graph.laneCount, state: graph.state };
 }

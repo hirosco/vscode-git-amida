@@ -16,6 +16,7 @@ import test from "node:test";
 
 import {
   GitClient,
+  HistoryChangedError,
   parseBinaryPaths,
   parseFileHistory,
   parseHistory,
@@ -23,6 +24,7 @@ import {
   parseRawDiff,
   parseRefs,
 } from "../src/git";
+import { buildHistoryGraph } from "../src/graph";
 import type { HistoryRow } from "../src/model";
 import {
   resolveRange,
@@ -385,7 +387,7 @@ test("GitClient fingerprints only history-affecting repository state", async (co
   assert.notEqual(await client.historyFingerprint(repository), fetched);
 });
 
-test("GitClient loads all branch, remote, and tag history in one evaluation pass", async (context) => {
+test("GitClient pages all branch, remote, and tag history without a product limit", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-history-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));
   git(repository, "init", "-q");
@@ -394,7 +396,7 @@ test("GitClient loads all branch, remote, and tag history in one evaluation pass
   git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
 
   let parent: string | undefined;
-  for (let index = 0; index < 105; index += 1) {
+  for (let index = 0; index < 205; index += 1) {
     parent = git(
       repository,
       "commit-tree",
@@ -416,15 +418,155 @@ test("GitClient loads all branch, remote, and tag history in one evaluation pass
   git(repository, "update-ref", "refs/tags/archive", tagged);
   git(repository, "update-ref", "refs/stash", stashed);
 
-  const history = await new GitClient().loadHistory(repository);
-  const commits = history.rows;
-  assert.equal(commits.length, 108);
-  const hashes = new Set(commits.map((row) => row.commit.hash));
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  assert.equal(history.rows.length, 100);
+  assert.equal(history.hasMore, true);
+  assert.equal(history.cursor.offset, 100);
+
+  const next = await client.loadNextHistoryPage(history.cursor);
+  assert.equal(next.commits.length, 100);
+  assert.equal(next.hasMore, true);
+  assert.equal(next.cursor.offset, 200);
+  const last = await client.loadNextHistoryPage(next.cursor);
+  assert.equal(last.commits.length, 8);
+  assert.equal(last.hasMore, false);
+  assert.equal(last.cursor.offset, 208);
+  const nextGraph = buildHistoryGraph(next.commits, history.graphState);
+  const lastGraph = buildHistoryGraph(last.commits, nextGraph.state);
+  assertHistoryGraphBounds(
+    [...history.rows, ...nextGraph.rows, ...lastGraph.rows],
+    lastGraph.laneCount,
+  );
+  const hashes = new Set([
+    ...history.rows.map((row) => row.commit.hash),
+    ...next.commits.map((commit) => commit.hash),
+    ...last.commits.map((commit) => commit.hash),
+  ]);
+  assert.equal(hashes.size, 208);
   assert.equal(hashes.has(parent), true);
   assert.equal(hashes.has(side), true);
   assert.equal(hashes.has(remote), true);
   assert.equal(hashes.has(tagged), true);
   assert.equal(hashes.has(stashed), false);
+});
+
+test("GitClient preserves a merge that crosses the 100-commit page boundary", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-page-merge-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  const timestamp = (hour: number): string =>
+    new Date(Date.UTC(2026, 0, 1, hour)).toISOString();
+  const root = commitTree(repository, "root", timestamp(0));
+  const left = commitTree(repository, "left parent", timestamp(1), root);
+  const right = commitTree(repository, "right parent", timestamp(2), root);
+  const merge = commitTree(
+    repository,
+    "boundary merge",
+    timestamp(3),
+    left,
+    right,
+  );
+
+  let tip = merge;
+  for (let index = 0; index < 98; index += 1) {
+    tip = commitTree(
+      repository,
+      `newer commit ${index}`,
+      timestamp(index + 4),
+      tip,
+    );
+  }
+  git(repository, "update-ref", "refs/heads/main", tip);
+
+  const client = new GitClient();
+  const first = await client.loadHistory(repository);
+  assert.equal(first.rows.length, 100);
+  assert.equal(first.hasMore, true);
+  assert.equal(first.rows[98]?.commit.hash, merge);
+  assert.equal(
+    first.rows[98]?.graph.lines.filter((line) => line.from === "node").length,
+    2,
+  );
+
+  const firstPageHashes = new Set(first.rows.map((row) => row.commit.hash));
+  const visibleParents = [left, right].filter((hash) => firstPageHashes.has(hash));
+  const pendingParents = [left, right].filter((hash) => !firstPageHashes.has(hash));
+  assert.equal(visibleParents.length, 1);
+  assert.equal(pendingParents.length, 1);
+  assert.equal(first.rows[99]?.commit.hash, visibleParents[0]);
+
+  const retainedRows = structuredClone(first.rows);
+  const second = await client.loadNextHistoryPage(first.cursor);
+  const appendedGraph = buildHistoryGraph(second.commits, first.graphState);
+  const combinedRows = [...first.rows, ...appendedGraph.rows];
+
+  assert.equal(second.hasMore, false);
+  assert.equal(second.commits.length, 2);
+  assert.equal(second.commits[0]?.hash, pendingParents[0]);
+  assert.equal(second.commits[1]?.hash, root);
+  assert.deepEqual(first.rows, retainedRows);
+  const boundaryContinuation = first.rows[99]?.graph.lines.find(
+    (line) => line.from === "top" && line.to === "bottom",
+  );
+  assert.ok(boundaryContinuation);
+  assert.ok(
+    appendedGraph.rows[0]?.graph.lines.some(
+      (line) =>
+        line.from === "top" &&
+        line.to === "node" &&
+        line.fromLane === boundaryContinuation.toLane &&
+        line.color === boundaryContinuation.color,
+    ),
+  );
+  assert.equal(new Set(combinedRows.map((row) => row.commit.hash)).size, 102);
+  assertHistoryGraphBounds(combinedRows, appendedGraph.laneCount);
+});
+
+test("GitClient rejects a stale history cursor after refs change", async (context) => {
+  const repository = mkdtempSync(join(tmpdir(), "git-amida-history-cursor-test-"));
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "symbolic-ref", "HEAD", "refs/heads/main");
+
+  let parent: string | undefined;
+  for (let index = 0; index < 101; index += 1) {
+    parent = git(
+      repository,
+      "commit-tree",
+      EMPTY_TREE,
+      ...(parent === undefined ? [] : ["-p", parent]),
+      "-m",
+      `commit ${index}`,
+    ).trim();
+  }
+  assert.ok(parent);
+  git(repository, "update-ref", "refs/heads/main", parent);
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  assert.equal(history.hasMore, true);
+  const moved = git(
+    repository,
+    "commit-tree",
+    EMPTY_TREE,
+    "-p",
+    parent,
+    "-m",
+    "moved ref",
+  ).trim();
+  git(repository, "update-ref", "refs/heads/main", moved);
+
+  await assert.rejects(
+    client.loadNextHistoryPage(history.cursor),
+    HistoryChangedError,
+  );
 });
 
 test("GitClient compares the final effect of a linear commit range", async (context) => {

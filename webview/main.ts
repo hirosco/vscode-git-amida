@@ -89,6 +89,10 @@ let activeFileHistoryTabId: string | undefined;
 let changedFilePreviewTimer: number | undefined;
 let fileRevisionPreviewTimer: number | undefined;
 let fileHistoryScrollFrame: number | undefined;
+let historyScrollFrame: number | undefined;
+let historyHasMore = false;
+let historyPageLoading = false;
+let historyPageError: string | undefined;
 
 elements.flatMode.addEventListener("click", () => setFileViewMode("flat"));
 elements.treeMode.addEventListener("click", () => setFileViewMode("tree"));
@@ -111,6 +115,7 @@ elements.repositoryTab.addEventListener("click", () => {
 });
 elements.repositoryTab.addEventListener("keydown", navigateHistoryTabs);
 elements.fileRevisions.addEventListener("scroll", scheduleFileHistoryScroll);
+elements.history.addEventListener("scroll", scheduleHistoryPrefetch);
 elements.fileTabs.addEventListener(
   "wheel",
   (event) => {
@@ -141,16 +146,41 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
 
   switch (message.type) {
     case "historyLoading":
+      historyHasMore = false;
+      historyPageLoading = true;
+      historyPageError = undefined;
       setStatus("Loading history…");
       setEmpty(elements.history, "Loading commits…");
       break;
     case "history":
+      historyHasMore = message.hasMore;
+      historyPageLoading = false;
+      historyPageError = undefined;
       applyViewState(message.viewState);
       selection = message.selection;
       currentHead = message.repository.head;
       workingTree = message.workingTree;
       renderHistory(message.rows, message.graphLaneCount);
       renderSelectionDetails();
+      scheduleHistoryPrefetch();
+      break;
+    case "historyPageLoading":
+      historyPageLoading = true;
+      historyPageError = undefined;
+      setStatus("Loading more commits…");
+      break;
+    case "historyPage":
+      historyHasMore = message.hasMore;
+      historyPageLoading = false;
+      historyPageError = undefined;
+      renderHistory(message.rows, message.graphLaneCount);
+      renderSelectionDetails();
+      scheduleHistoryPrefetch();
+      break;
+    case "historyPageError":
+      historyPageLoading = false;
+      historyPageError = message.message;
+      setHistoryPageError(message.message);
       break;
     case "workingTree":
       workingTree = message.workingTree;
@@ -171,6 +201,7 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       setStatusWithRetry(message.message);
       break;
     case "refreshError":
+      historyPageLoading = false;
       setStatusWithRetry(message.message);
       break;
     case "filesLoading":
@@ -216,6 +247,9 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       renderActiveWorkspace();
       break;
     case "error":
+      historyHasMore = false;
+      historyPageLoading = false;
+      historyPageError = undefined;
       commits.clear();
       workingTree = undefined;
       selection = undefined;
@@ -311,9 +345,14 @@ function renderActiveWorkspace(): void {
   elements.workspace.hidden = !repositoryActive;
   elements.fileHistoryWorkspace.hidden = repositoryActive;
   if (repositoryActive) {
+    if (historyPageError !== undefined) {
+      setHistoryPageError(historyPageError);
+      return;
+    }
     setStatus(
       "Click: commit · Shift+click: select visible interval · Cmd/Ctrl+click or Space: toggle commit.",
     );
+    scheduleHistoryPrefetch();
     return;
   }
   renderFileRevisions(tab);
@@ -510,6 +549,40 @@ function scheduleFileHistoryScroll(): void {
   });
 }
 
+function scheduleHistoryPrefetch(): void {
+  if (historyScrollFrame !== undefined) {
+    cancelAnimationFrame(historyScrollFrame);
+  }
+  historyScrollFrame = requestAnimationFrame(() => {
+    historyScrollFrame = undefined;
+    if (
+      !historyHasMore ||
+      historyPageLoading ||
+      historyPageError !== undefined ||
+      elements.workspace.hidden
+    ) {
+      return;
+    }
+    const remaining =
+      elements.history.scrollHeight -
+      elements.history.scrollTop -
+      elements.history.clientHeight;
+    const threshold = Math.max(250, elements.history.clientHeight);
+    if (remaining <= threshold) {
+      requestMoreHistory();
+    }
+  });
+}
+
+function requestMoreHistory(): void {
+  if (!historyHasMore || historyPageLoading) {
+    return;
+  }
+  historyPageError = undefined;
+  historyPageLoading = true;
+  vscode.postMessage({ type: "loadMoreHistory" });
+}
+
 function navigateHistoryTabs(event: KeyboardEvent): void {
   const current = event.currentTarget;
   if (!(current instanceof HTMLElement)) {
@@ -552,7 +625,8 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
   if (historyPane !== null) {
     historyPane.dataset.graphSize = metrics.size;
   }
-  elements.historyCount.textContent = `${rows.length} commits`;
+  elements.historyCount.textContent =
+    `${rows.length}${historyHasMore ? "+" : ""} commits`;
 
   renderWorkingTreeRow();
 
@@ -1854,6 +1928,19 @@ function setStatusWithRetry(message: string): void {
     span("status-message", message),
     createRetryButton(),
   );
+  elements.status.classList.add("error");
+}
+
+function setHistoryPageError(message: string): void {
+  if (activeFileHistoryTabId !== undefined) {
+    return;
+  }
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.className = "retry-button";
+  retry.textContent = "Retry";
+  retry.addEventListener("click", requestMoreHistory);
+  elements.status.replaceChildren(span("status-message", message), retry);
   elements.status.classList.add("error");
 }
 

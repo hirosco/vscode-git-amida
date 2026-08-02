@@ -171,7 +171,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 - Test Git parsing with fixed byte sequences and temporary repositories.
 - Never mutate the user's real repositories or global Git configuration in tests.
-- Test root commits, merges, renames, deletions, binary files, and paths with spaces or non-ASCII characters as those behaviors are added.
+- Test root commits, merges, paged graph boundaries, renames, deletions, binary files, and paths with spaces or non-ASCII characters as those behaviors are added.
 - Test navigation state independently: Repository History singleton, File History tab deduplication, selection retention, and reveal-in-log.
 - Test branch switching only in temporary repositories and cover every refusal state before success paths.
 - Test file restoration only in temporary repositories. Cover exact binary bytes, rename destinations, missing-file recreation, index preservation, and every refusal state before success paths.

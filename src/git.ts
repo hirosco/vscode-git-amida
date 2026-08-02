@@ -10,7 +10,7 @@ import {
 } from "node:path";
 import { promisify } from "node:util";
 
-import { buildHistoryGraph } from "./graph";
+import { buildHistoryGraph, type HistoryGraphState } from "./graph";
 import type {
   ChangedFile,
   Commit,
@@ -41,6 +41,21 @@ const IMAGE_EXTENSIONS = new Set([
   ".svg",
   ".webp",
 ]);
+export const HISTORY_PAGE_SIZE = 100;
+
+export interface HistoryCursor {
+  readonly repository: string;
+  readonly historyFingerprint: string;
+  readonly refsByCommit: ReadonlyMap<string, CommitRef[]>;
+  readonly offset: number;
+  readonly pageSize: number;
+}
+
+export interface HistoryPage {
+  commits: Commit[];
+  cursor: HistoryCursor;
+  hasMore: boolean;
+}
 
 export interface RawDiffEntry extends ChangedFile {
   oldMode: string;
@@ -69,6 +84,14 @@ export class GitError extends Error {
     this.name = "GitError";
   }
 }
+
+export class HistoryChangedError extends GitError {
+  public constructor() {
+    super("Repository history changed while more commits were loading.");
+    this.name = "HistoryChangedError";
+  }
+}
+
 export class GitClient {
   public async resolveRepository(candidate: string): Promise<string> {
     const output = await this.run(candidate, ["rev-parse", "--show-toplevel"]);
@@ -77,21 +100,20 @@ export class GitClient {
 
   public async loadHistory(
     candidate: string,
-  ): Promise<HistoryResult & { historyFingerprint: string }> {
+    pageSize = HISTORY_PAGE_SIZE,
+  ): Promise<
+    HistoryResult & {
+      historyFingerprint: string;
+      cursor: HistoryCursor;
+      graphState: HistoryGraphState;
+    }
+  > {
+    validatePageSize(pageSize);
     const root = await this.resolveRepository(candidate);
     const [headOutput, branchResult, logOutput, refsOutput] = await Promise.all([
       this.run(root, ["rev-parse", "HEAD"]),
       this.tryRun(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
-      this.run(root, [
-        "log",
-        "--branches",
-        "--remotes",
-        "--tags",
-        "--date-order",
-        "--color=never",
-        "--no-decorate",
-        `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
-      ]),
+      this.run(root, historyLogArgs(0, pageSize)),
       this.run(root, [
         "for-each-ref",
         `--format=${HISTORY_REFS_FORMAT}`,
@@ -112,22 +134,70 @@ export class GitClient {
       head,
       detached: !branchResult.ok,
     };
+    const refsByCommit = parseRefs(refsOutput.toString("utf8"));
+    const parsedCommits = parseHistory(
+      logOutput.toString("utf8"),
+      refsByCommit,
+    );
+    const commits = parsedCommits.slice(0, pageSize);
+    const hasMore = parsedCommits.length > pageSize;
+    const historyFingerprint = createHistoryFingerprint(
+      head,
+      branchResult.ok ? branch : undefined,
+      refsOutput,
+    );
 
     const graph = buildHistoryGraph(
-      parseHistory(
-        logOutput.toString("utf8"),
-        parseRefs(refsOutput.toString("utf8")),
-      ),
+      commits,
+      undefined,
+      hasPrimaryBranchRef(refsByCommit),
     );
     return {
       repository,
       rows: graph.rows,
       graphLaneCount: graph.laneCount,
-      historyFingerprint: createHistoryFingerprint(
-        head,
-        branchResult.ok ? branch : undefined,
-        refsOutput,
-      ),
+      hasMore,
+      historyFingerprint,
+      graphState: graph.state,
+      cursor: {
+        repository: root,
+        historyFingerprint,
+        refsByCommit,
+        offset: commits.length,
+        pageSize,
+      },
+    };
+  }
+
+  public async loadNextHistoryPage(
+    cursor: HistoryCursor,
+  ): Promise<HistoryPage> {
+    validatePageSize(cursor.pageSize);
+    const fingerprintBefore = await this.historyFingerprint(cursor.repository);
+    if (fingerprintBefore !== cursor.historyFingerprint) {
+      throw new HistoryChangedError();
+    }
+    const output = await this.run(
+      cursor.repository,
+      historyLogArgs(cursor.offset, cursor.pageSize),
+    );
+    const fingerprintAfter = await this.historyFingerprint(cursor.repository);
+    if (fingerprintAfter !== cursor.historyFingerprint) {
+      throw new HistoryChangedError();
+    }
+    const parsedCommits = parseHistory(
+      output.toString("utf8"),
+      cursor.refsByCommit,
+    );
+    const commits = parsedCommits.slice(0, cursor.pageSize);
+    const hasMore = parsedCommits.length > cursor.pageSize;
+    return {
+      commits,
+      hasMore,
+      cursor: {
+        ...cursor,
+        offset: cursor.offset + commits.length,
+      },
     };
   }
 
@@ -545,6 +615,40 @@ function commandEnvironment(): NodeJS.ProcessEnv {
     GIT_PAGER: "cat",
     GIT_EXTERNAL_DIFF: "",
   };
+}
+
+function validatePageSize(pageSize: number): void {
+  if (!Number.isSafeInteger(pageSize) || pageSize < 1) {
+    throw new GitError("History page size must be a positive integer.");
+  }
+}
+
+function historyLogArgs(offset: number, pageSize: number): string[] {
+  return [
+    "log",
+    "--branches",
+    "--remotes",
+    "--tags",
+    "--date-order",
+    "--color=never",
+    "--no-decorate",
+    ...(offset === 0 ? [] : [`--skip=${offset}`]),
+    `--max-count=${pageSize + 1}`,
+    `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+  ];
+}
+
+function hasPrimaryBranchRef(
+  refsByCommit: ReadonlyMap<string, CommitRef[]>,
+): boolean {
+  return [...refsByCommit.values()].some((refs) =>
+    refs.some(
+      (ref) =>
+        (ref.type === "localBranch" &&
+          (ref.name === "main" || ref.name === "master")) ||
+        (ref.type === "remoteBranch" && /\/(main|master)$/.test(ref.name)),
+    ),
+  );
 }
 
 function createHistoryFingerprint(

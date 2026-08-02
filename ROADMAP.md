@@ -41,9 +41,6 @@ This checkpoint is complete when users can investigate several files and always 
 - Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
 - Present detached HEAD, empty repositories, and non-Git folders as explicit states
 - Cancel stale history and blob requests as selection changes
-- Prefetch additional history automatically near the current end instead of stopping at 100 commits or requiring a **Load more** action
-- Preserve the visible scroll position while pages append and show an explicit retry only after a loading failure
-- Preserve lane and color continuity while history pages append
 - Test behavior in both Cursor and VS Code
 
 ## 5. Diff controls and external tools

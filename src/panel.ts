@@ -23,12 +23,19 @@ import {
   selectedFileRevisionHash,
 } from "./fileHistory";
 import { buildFileTree } from "./fileTree";
-import { GitClient, GitError } from "./git";
+import { buildHistoryGraph, type HistoryGraphState } from "./graph";
+import {
+  GitClient,
+  GitError,
+  HistoryChangedError,
+  type HistoryCursor,
+} from "./git";
 import type {
   ChangedFile,
   Commit,
   CommitFileChange,
   FileHistoryTab,
+  HistoryRow,
   RepositoryNavigationState,
   RepositorySelection,
   RepositoryViewPreferences,
@@ -93,6 +100,11 @@ export class HistoryViewProvider
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private pendingRefresh?: RefreshScope;
   private historyFingerprint?: string;
+  private historyCursor?: HistoryCursor;
+  private historyGraphState?: HistoryGraphState;
+  private historyRows: HistoryRow[] = [];
+  private historyHasMore = false;
+  private historyPageLoading = false;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -436,6 +448,7 @@ export class HistoryViewProvider
     ++this.workingTreeRequest;
     ++this.filesRequest;
     ++this.selectionRequest;
+    this.historyPageLoading = false;
     if (showLoading) {
       await this.post({ type: "historyLoading" });
     }
@@ -447,8 +460,52 @@ export class HistoryViewProvider
         throw new GitError("Open a folder containing a Git repository first.");
       }
 
-      const loadedHistory = await this.git.loadHistory(folder.uri.fsPath);
-      const { historyFingerprint, ...history } = loadedHistory;
+      let loadedHistory = await this.git.loadHistory(folder.uri.fsPath);
+      const navigationHashes = new Set(
+        [
+          this.navigationState.selectedHash,
+          this.navigationState.selectionAnchorHash,
+          ...(this.navigationState.selectionHashes ?? []),
+        ].filter((hash): hash is string => hash !== undefined),
+      );
+      const loadedRows = [...loadedHistory.rows];
+      let graphState = loadedHistory.graphState;
+      const loadedHashes = new Set(
+        loadedHistory.rows.map((row) => row.commit.hash),
+      );
+      while (
+        loadedHistory.hasMore &&
+        [...navigationHashes].some((hash) => !loadedHashes.has(hash))
+      ) {
+        const page = await this.git.loadNextHistoryPage(loadedHistory.cursor);
+        if (request !== this.historyRequest) {
+          return;
+        }
+        const nextCommits: Commit[] = [];
+        for (const commit of page.commits) {
+          if (!loadedHashes.has(commit.hash)) {
+            nextCommits.push(commit);
+            loadedHashes.add(commit.hash);
+          }
+        }
+        const graph = buildHistoryGraph(nextCommits, graphState);
+        loadedRows.push(...graph.rows);
+        graphState = graph.state;
+        loadedHistory = {
+          ...loadedHistory,
+          rows: loadedRows,
+          graphLaneCount: graph.laneCount,
+          hasMore: page.hasMore,
+          cursor: page.cursor,
+          graphState,
+        };
+      }
+      const {
+        historyFingerprint,
+        cursor,
+        graphState: loadedGraphState,
+        ...history
+      } = loadedHistory;
       const workingTree = await this.git.workingTreeChanges(
         history.repository.root,
         history.repository.head,
@@ -460,6 +517,10 @@ export class HistoryViewProvider
 
       this.repository = history.repository.root;
       this.historyFingerprint = historyFingerprint;
+      this.historyCursor = cursor;
+      this.historyGraphState = loadedGraphState;
+      this.historyRows = history.rows;
+      this.historyHasMore = history.hasMore;
       this.headHash = history.repository.head;
       this.workingTree =
         workingTree.files.length === 0 ? undefined : workingTree;
@@ -697,6 +758,10 @@ export class HistoryViewProvider
       await this.refresh(false);
       return;
     }
+    if (value.type === "loadMoreHistory") {
+      await this.loadNextHistoryPage();
+      return;
+    }
 
     if (value.type === "selectWorkingTree") {
       const workingTree = this.workingTree;
@@ -835,6 +900,65 @@ export class HistoryViewProvider
         value.patch,
       );
       await this.persistViewPreferences();
+    }
+  }
+
+  private async loadNextHistoryPage(): Promise<void> {
+    const cursor = this.historyCursor;
+    if (
+      cursor === undefined ||
+      !this.historyHasMore ||
+      this.historyPageLoading
+    ) {
+      return;
+    }
+
+    const request = this.historyRequest;
+    this.historyPageLoading = true;
+    await this.post({ type: "historyPageLoading" });
+    try {
+      const page = await this.git.loadNextHistoryPage(cursor);
+      if (request !== this.historyRequest || cursor !== this.historyCursor) {
+        return;
+      }
+      const knownHashes = new Set(this.commits.keys());
+      const nextCommits: Commit[] = [];
+      for (const commit of page.commits) {
+        if (!knownHashes.has(commit.hash)) {
+          nextCommits.push(commit);
+          knownHashes.add(commit.hash);
+        }
+      }
+      const graph = buildHistoryGraph(nextCommits, this.historyGraphState);
+      this.historyRows = [...this.historyRows, ...graph.rows];
+      for (const row of graph.rows) {
+        this.commits.set(row.commit.hash, row.commit);
+      }
+      this.historyCursor = page.cursor;
+      this.historyGraphState = graph.state;
+      this.historyHasMore = page.hasMore;
+      await this.post({
+        type: "historyPage",
+        rows: this.historyRows,
+        graphLaneCount: graph.laneCount,
+        hasMore: page.hasMore,
+      });
+    } catch (error) {
+      if (request !== this.historyRequest) {
+        return;
+      }
+      if (error instanceof HistoryChangedError) {
+        await this.refresh(false);
+        return;
+      }
+      await this.post({
+        type: "historyPageError",
+        message: userMessage(error),
+      });
+    } finally {
+      if (request === this.historyRequest) {
+        this.historyPageLoading = false;
+      }
     }
   }
 
