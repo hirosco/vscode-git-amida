@@ -158,7 +158,7 @@ For a single commit:
 
 - Compare an ordinary commit with its first parent
 - Compare a root commit with Git's empty tree
-- Show the active parent for merge commits and later allow explicit parent selection
+- Show the first parent as the active comparison parent for merge commits, and avoid adding parent-selection UI until a concrete investigation requires it
 
 For the working tree, read the saved filesystem state through a repository-scoped path boundary and compare it with the corresponding HEAD blob. Capture the working-tree image bytes when opening the comparison so later saves do not silently change that endpoint. Do not use the editor buffer as the comparison endpoint because an unsaved document is not yet part of Git's working tree.
 

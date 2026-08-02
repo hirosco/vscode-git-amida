@@ -36,7 +36,6 @@ This checkpoint is complete when users can investigate several files and always 
 ## 4. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
-- Make first-parent behavior visible for individual merge commits and allow another parent to be chosen
 - Present detached HEAD, empty repositories, and non-Git folders as explicit states
 - Cancel stale history and blob requests as selection changes
 - Test behavior in both Cursor and VS Code
