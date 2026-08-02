@@ -151,6 +151,13 @@
           "group": "navigation"
         }
       ],
+      "explorer/context": [
+        {
+          "command": "gitAmida.openFileHistory",
+          "when": "resourceScheme == file && !explorerResourceIsFolder",
+          "group": "git"
+        }
+      ],
       "commandPalette": [
         {
           "command": "gitAmida.openFileHistoryFromChangedFile",

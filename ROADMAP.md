@@ -29,7 +29,6 @@ This checkpoint is complete when an image selected from Changed files opens a us
 ## 3. File History investigations
 
 - Verify the conditional Repository History home tab, filename-sized tabs, horizontal tab scrolling, integrated close actions, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
-- Open File History from an Explorer resource; Changed files and the active editor are already entry points
 - Show a file revision in Repository History without closing its File History tab
 - Load a repository commit that is outside the current history page
 - Validate renamed, added, and deleted file identities across several simultaneous tabs before treating the checkpoint as complete
