@@ -144,6 +144,15 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.commands.registerCommand(
+      "gitAmida.openInDifftoolFromChangedFile",
+      async (contextValue?: unknown) => {
+        await vscode.commands.executeCommand(
+          "gitAmida.openInDifftool",
+          contextValue,
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
       "gitAmida.switchBranch",
       async (contextValue?: unknown) => {
         await historyProvider.switchBranchAtCommit(

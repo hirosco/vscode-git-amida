@@ -12,6 +12,7 @@ interface MenuContribution {
 interface CommandContribution {
   command: string;
   title: string;
+  category?: string;
 }
 
 interface ColorContribution {
@@ -82,6 +83,49 @@ test("the short context action stays out of the Command Palette", () => {
 
   assert.deepEqual(paletteAction, {
     command: "gitAmida.openFileHistoryFromChangedFile",
+    when: "false",
+  });
+});
+
+test("native diffs identify GitAmida while Changed Files keeps a short action", () => {
+  const externalCommand = manifest.contributes.commands.find(
+    ({ command }) => command === "gitAmida.openInDifftool",
+  );
+  const contextCommand = manifest.contributes.commands.find(
+    ({ command }) => command === "gitAmida.openInDifftoolFromChangedFile",
+  );
+  const editorAction = manifest.contributes.menus["editor/title"]?.find(
+    ({ command }) => command === "gitAmida.openInDifftool",
+  );
+  const contextAction = manifest.contributes.menus["webview/context"]?.find(
+    ({ command }) => command === "gitAmida.openInDifftoolFromChangedFile",
+  );
+  const paletteAction = manifest.contributes.menus.commandPalette?.find(
+    ({ command }) => command === "gitAmida.openInDifftoolFromChangedFile",
+  );
+
+  assert.deepEqual(externalCommand, {
+    command: "gitAmida.openInDifftool",
+    title: "GitAmida: Open in Git Difftool",
+    icon: "$(link-external)",
+  });
+  assert.deepEqual(contextCommand, {
+    command: "gitAmida.openInDifftoolFromChangedFile",
+    title: "Open in Git Difftool",
+    category: "GitAmida",
+  });
+  assert.deepEqual(editorAction, {
+    command: "gitAmida.openInDifftool",
+    when: "gitAmida.activeDiff",
+    group: "navigation@10",
+  });
+  assert.deepEqual(contextAction, {
+    command: "gitAmida.openInDifftoolFromChangedFile",
+    when: "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+    group: "navigation@3",
+  });
+  assert.deepEqual(paletteAction, {
+    command: "gitAmida.openInDifftoolFromChangedFile",
     when: "false",
   });
 });

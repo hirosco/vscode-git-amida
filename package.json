@@ -64,9 +64,13 @@
       },
       {
         "command": "gitAmida.openInDifftool",
-        "title": "Open in Git Difftool",
-        "category": "GitAmida",
+        "title": "GitAmida: Open in Git Difftool",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "gitAmida.openInDifftoolFromChangedFile",
+        "title": "Open in Git Difftool",
+        "category": "GitAmida"
       },
       {
         "command": "gitAmida.openFileHistory",
@@ -164,7 +168,7 @@
           "group": "navigation@2"
         },
         {
-          "command": "gitAmida.openInDifftool",
+          "command": "gitAmida.openInDifftoolFromChangedFile",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
           "group": "navigation@3"
         },
@@ -194,6 +198,10 @@
       "commandPalette": [
         {
           "command": "gitAmida.openFileHistoryFromChangedFile",
+          "when": "false"
+        },
+        {
+          "command": "gitAmida.openInDifftoolFromChangedFile",
           "when": "false"
         },
         {
