@@ -767,6 +767,9 @@ function renderWorkingTreeRow(): boolean {
   button.type = "button";
   button.className = "history-row history-columns working-tree-row";
   button.dataset.workingTree = "true";
+  button.dataset.vscodeContext = JSON.stringify({
+    preventDefaultContextMenuItems: true,
+  });
   button.setAttribute("role", "option");
   button.setAttribute(
     "aria-label",
@@ -1168,6 +1171,9 @@ function renderTreeNodes(nodes: FileTreeNode[], container: HTMLElement): void {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "tree-directory-row";
+    button.dataset.vscodeContext = JSON.stringify({
+      preventDefaultContextMenuItems: true,
+    });
     button.title = node.path;
     button.append(
       createTreeChevron(expanded),
