@@ -88,6 +88,7 @@ Persistent borders are reserved for the structural boundaries between Repository
 The details pane shows:
 
 - Full commit subject
+- Non-empty multi-line commit body as selectable plain text; do not render commit-message content as HTML or Markdown
 - Full selectable commit hash without a persistent copy button; provide copying through contextual actions
 - Author name and email
 - Authored and committed times, with each meaning labeled

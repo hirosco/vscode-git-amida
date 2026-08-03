@@ -31,6 +31,9 @@ const MAX_BUFFER = 16 * 1024 * 1024;
 const HISTORY_REFS_FORMAT =
   `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
   "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00%(symref)%00";
+const COMMIT_LOG_FORMAT =
+  `${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00` +
+  "%s%x00%b%x00";
 const IMAGE_EXTENSIONS = new Set([
   ".avif",
   ".bmp",
@@ -390,7 +393,7 @@ export class GitClient {
       "--color=never",
       "--no-decorate",
       "--diff-merges=first-parent",
-      `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+      `--format=${COMMIT_LOG_FORMAT}`,
       "--name-status",
       "-z",
       "--",
@@ -663,7 +666,7 @@ function historyLogArgs(
     "--no-decorate",
     ...(offset === 0 ? [] : [`--skip=${offset}`]),
     `--max-count=${pageSize + 1}`,
-    `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+    `--format=${COMMIT_LOG_FORMAT}`,
     ...worktreeHeads,
   ];
 }
@@ -702,18 +705,11 @@ export function parseHistory(
 ): Commit[] {
   const commits: Commit[] = [];
 
-  for (const rawLine of output.split("\n")) {
-    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-    if (line.length === 0) {
+  for (const rawRecord of output.split(RECORD_MARKER).slice(1)) {
+    if (rawRecord.length === 0) {
       continue;
     }
-
-    const markerIndex = line.indexOf(RECORD_MARKER);
-    if (markerIndex === -1) {
-      continue;
-    }
-
-    const fields = line.slice(markerIndex + 1).split("\x00");
+    const fields = rawRecord.split("\x00");
     const [
       hash,
       shortHash = "",
@@ -723,6 +719,7 @@ export function parseHistory(
       authoredAt = "",
       committedAt = "",
       subject = "",
+      body = "",
     ] = fields;
     if (!hash) {
       continue;
@@ -738,6 +735,7 @@ export function parseHistory(
       authoredAt,
       committedAt,
       subject,
+      ...commitBody(body),
       refs: refsByCommit.get(hash) ?? [],
       ...(worktrees.length === 0 ? {} : { worktrees }),
     });
@@ -806,6 +804,7 @@ export function parseFileHistory(output: Buffer): FileRevision[] {
       authoredAt = "",
       committedAt = "",
       subject = "",
+      body = "",
     ] = fields;
     if (!hash) {
       continue;
@@ -819,9 +818,10 @@ export function parseFileHistory(output: Buffer): FileRevision[] {
       authoredAt,
       committedAt,
       subject,
+      ...commitBody(body),
       refs: [],
     };
-    for (let index = 8; index < fields.length; ) {
+    for (let index = 9; index < fields.length; ) {
       const status = (fields[index++] ?? "").replace(/^\r?\n+/, "");
       if (!/^[A-Z][0-9]*$/.test(status)) {
         continue;
@@ -845,6 +845,11 @@ export function parseFileHistory(output: Buffer): FileRevision[] {
     }
   }
   return revisions;
+}
+
+function commitBody(body: string): { body?: string } {
+  const normalized = body.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+  return normalized.trim().length === 0 ? {} : { body: normalized };
 }
 
 export function parseRefs(output: string): Map<string, CommitRef[]> {

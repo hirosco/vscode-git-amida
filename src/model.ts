@@ -15,6 +15,7 @@ export interface Commit {
   authoredAt: string;
   committedAt: string;
   subject: string;
+  body?: string;
   refs: CommitRef[];
   worktrees?: CommitWorktree[];
 }

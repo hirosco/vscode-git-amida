@@ -99,9 +99,21 @@ function rename(repository, before, after) {
   renameSync(pathIn(repository, before), afterPath);
 }
 
-function commit(repository, subject, date, authorDate = date) {
+function commit(repository, subject, date, options = {}) {
+  const authorDate = options.authorDate ?? date;
+  const body = options.body;
   git(repository, ["add", "--all"]);
-  git(repository, ["commit", "-q", "-m", subject], { date, authorDate });
+  git(
+    repository,
+    [
+      "commit",
+      "-q",
+      "-m",
+      subject,
+      ...(body === undefined ? [] : ["-m", body]),
+    ],
+    { date, authorDate },
+  );
   return git(repository, ["rev-parse", "HEAD"]);
 }
 
@@ -425,7 +437,7 @@ commit(
   target,
   "feat: refresh gallery artwork",
   "2026-07-05T10:40:00+09:00",
-  "2026-07-03T16:10:00+09:00",
+  { authorDate: "2026-07-03T16:10:00+09:00" },
 );
 rename(target, "src/theme.css", "src/styles/theme.css");
 append(
@@ -488,7 +500,7 @@ commit(
   target,
   "fix: refresh stale previews",
   "2026-07-12T16:00:00+09:00",
-  "2026-07-10T12:25:00+09:00",
+  { authorDate: "2026-07-10T12:25:00+09:00" },
 );
 
 switchTo(target, "main");
@@ -599,6 +611,9 @@ const latestMainHash = commit(
   target,
   "feat: publish seasonal collection",
   "2026-07-20T09:00:00+09:00",
+  {
+    body: "Refresh the gallery artwork and release notes for the summer collection.\n\nKeep image, rename, and configuration changes together for review.",
+  },
 );
 git(target, ["tag", "v0.2.0", latestMainHash]);
 

@@ -1359,6 +1359,11 @@ function renderCommitDetails(container: HTMLElement, commit: Commit): void {
   subject.textContent = commit.subject || "(no subject)";
   subject.title = commit.subject;
 
+  const body = document.createElement("div");
+  body.className = "details-message-body";
+  body.textContent = commit.body ?? "";
+  body.hidden = commit.body === undefined;
+
   const list = document.createElement("dl");
   list.className = "details-list";
   appendDetail(list, "Commit", commit.hash);
@@ -1379,7 +1384,7 @@ function renderCommitDetails(container: HTMLElement, commit: Commit): void {
     "Compared with",
     commit.parents[0] ?? "Empty tree (root commit)",
   );
-  container.append(subject, list);
+  container.append(subject, body, list);
 }
 
 function renderWorkingTreeDetails(

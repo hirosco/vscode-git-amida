@@ -79,6 +79,10 @@ assert.deepEqual(
 const latest = commits.get("feat: publish seasonal collection");
 assert.ok(latest);
 assert.equal(history.repository.head, latest.hash);
+assert.equal(
+  latest.body,
+  "Refresh the gallery artwork and release notes for the summer collection.\n\nKeep image, rename, and configuration changes together for review.",
+);
 assert.ok(latest.refs.some((ref) => ref.type === "tag" && ref.name === "v0.2.0"));
 
 const remoteMain = commits.get("chore: remove legacy gallery assets");

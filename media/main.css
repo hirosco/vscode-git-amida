@@ -1095,6 +1095,15 @@ code {
   overflow-wrap: anywhere;
 }
 
+.details-message-body {
+  margin: 0 0 12px;
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .details-list {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);

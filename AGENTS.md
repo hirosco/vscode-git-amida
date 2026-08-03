@@ -60,6 +60,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Include every registered, non-prunable worktree HEAD as a history root so detached background-task commits remain visible. Mark only commits checked out by another worktree with one compact overlapping-frame symbol, and show each linked path with its branch or detached state in commit details.
 - Keep linked-worktree visibility read-only. Do not add dirty-state inspection, task detection, worktree creation, deletion, pruning, or a dedicated management surface without a separate demonstrated requirement.
 - Keep author information in commit details instead of spending permanent history width.
+- Keep commit subjects on one history row, and show a non-empty multi-line commit body as plain text only in single-commit details, including File History details.
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
 - Keep both the Repository History/inspection split and the changed-files/details split resizable.
 - Keep Flat and Tree file presentation as explicit user-selectable modes.

@@ -36,7 +36,7 @@ const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 test("parseHistory reads commit records without terminal graph text", () => {
   const output = [
-    "\x1b[31m* \x1b[m\x1eabc\x00abc1234\x00parent\x00A. U. Thor\x00author@example.invalid\x002026-07-21T10:00:00+09:00\x002026-07-21T11:00:00+09:00\x00subject\x00",
+    "\x1b[31m* \x1b[m\x1eabc\x00abc1234\x00parent\x00A. U. Thor\x00author@example.invalid\x002026-07-21T10:00:00+09:00\x002026-07-21T11:00:00+09:00\x00subject\x00First paragraph.\n\nSecond paragraph.\n\x00",
     "\x1b[31m|\\\x1b[m",
     "\x1b[33m| * \x1b[m\x1edef\x00def5678\x00\x00Root Author\x00root@example.invalid\x002026-07-20T10:00:00+09:00\x002026-07-20T10:00:00+09:00\x00root\x00",
   ].join("\n");
@@ -58,6 +58,7 @@ test("parseHistory reads commit records without terminal graph text", () => {
       authoredAt: "2026-07-21T10:00:00+09:00",
       committedAt: "2026-07-21T11:00:00+09:00",
       subject: "subject",
+      body: "First paragraph.\n\nSecond paragraph.",
       refs: [
         {
           name: "main",
@@ -156,7 +157,7 @@ test("parseRawDiff and parseBinaryPaths preserve rename metadata", () => {
 test("parseFileHistory preserves revision paths and rename metadata", () => {
   const output = Buffer.from(
     "\x1enew\x00new1234\x00old\x00Author\x00author@example.invalid\x00" +
-      "2026-08-02T10:00:00+09:00\x002026-08-02T11:00:00+09:00\x00rename\x00\x00\n" +
+      "2026-08-02T10:00:00+09:00\x002026-08-02T11:00:00+09:00\x00rename\x00Explain the rename.\n\nKeep both paths visible.\n\x00\x00\n" +
       "R100\x00old name.png\x00new name.png\x00" +
       "\x1eold\x00old1234\x00\x00Author\x00author@example.invalid\x00" +
       "2026-08-01T10:00:00+09:00\x002026-08-01T10:00:00+09:00\x00add\x00\x00\n" +
@@ -174,6 +175,7 @@ test("parseFileHistory preserves revision paths and rename metadata", () => {
         authoredAt: "2026-08-02T10:00:00+09:00",
         committedAt: "2026-08-02T11:00:00+09:00",
         subject: "rename",
+        body: "Explain the rename.\n\nKeep both paths visible.",
         refs: [],
       },
       status: "R100",
@@ -216,7 +218,15 @@ test("GitClient follows renamed file history", async (context) => {
   git(repository, "commit", "-q", "-m", "rename file");
   writeFileSync(join(repository, "new name.txt"), "two\n");
   git(repository, "add", "--", "new name.txt");
-  git(repository, "commit", "-q", "-m", "modify file");
+  git(
+    repository,
+    "commit",
+    "-q",
+    "-m",
+    "modify file",
+    "-m",
+    "Explain the file-history change.\n\nKeep this paragraph visible.",
+  );
   unlinkSync(join(repository, "new name.txt"));
   git(repository, "add", "-A", "--", "new name.txt");
   git(repository, "commit", "-q", "-m", "delete file");
@@ -224,6 +234,11 @@ test("GitClient follows renamed file history", async (context) => {
   const revisions = await new GitClient().fileHistory(
     repository,
     "new name.txt",
+  );
+  assert.equal(
+    revisions.find((revision) => revision.commit.subject === "modify file")
+      ?.commit.body,
+    "Explain the file-history change.\n\nKeep this paragraph visible.",
   );
   assert.deepEqual(
     revisions.map((revision) => ({
@@ -281,7 +296,15 @@ test("GitClient loads root and later commit changes from a temporary repository"
   writeFileSync(join(repository, "hello.txt"), "changed\n");
   writeFileSync(join(repository, "space name.txt"), "added\n");
   git(repository, "add", "--", "hello.txt", "space name.txt");
-  git(repository, "commit", "-q", "-m", "second commit");
+  git(
+    repository,
+    "commit",
+    "-q",
+    "-m",
+    "second commit",
+    "-m",
+    "Explain the repository change.\n\nPreserve the second paragraph.",
+  );
   git(repository, "update-ref", "refs/remotes/origin/main", "HEAD");
   git(repository, "tag", "v1", "HEAD~1");
 
@@ -300,6 +323,10 @@ test("GitClient loads root and later commit changes from a temporary repository"
   assert.ok(newest.shortHash.length >= 4);
   assert.equal(newest.authorName, "GitAmida Test");
   assert.equal(newest.authorEmail, "test@example.invalid");
+  assert.equal(
+    newest.body,
+    "Explain the repository change.\n\nPreserve the second paragraph.",
+  );
   assert.deepEqual(
     newest.refs.map((ref) => [ref.type, ref.name, ref.current]),
     [
