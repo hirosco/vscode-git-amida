@@ -16,6 +16,13 @@ export interface Commit {
   committedAt: string;
   subject: string;
   refs: CommitRef[];
+  worktrees?: CommitWorktree[];
+}
+
+export interface CommitWorktree {
+  path: string;
+  branch?: string;
+  detached: boolean;
 }
 
 export type RefType = "localBranch" | "remoteBranch" | "tag";

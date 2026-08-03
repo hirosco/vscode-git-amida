@@ -16,11 +16,13 @@ import type {
   Commit,
   CommitFileChange,
   CommitRef,
+  CommitWorktree,
   FileRevision,
   HistoryResult,
   RepositoryInfo,
   WorkingTreeState,
 } from "./model";
+import { parseGitWorktrees, type GitWorktree } from "./worktrees";
 
 const execFileAsync = promisify(execFile);
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -47,6 +49,8 @@ export interface HistoryCursor {
   readonly repository: string;
   readonly historyFingerprint: string;
   readonly refsByCommit: ReadonlyMap<string, CommitRef[]>;
+  readonly worktreesByCommit: ReadonlyMap<string, CommitWorktree[]>;
+  readonly worktreeHeads: readonly string[];
   readonly offset: number;
   readonly pageSize: number;
 }
@@ -110,10 +114,19 @@ export class GitClient {
   > {
     validatePageSize(pageSize);
     const root = await this.resolveRepository(candidate);
+    const worktreesOutput = await this.run(root, [
+      "worktree",
+      "list",
+      "--porcelain",
+      "-z",
+    ]);
+    const worktrees = activeWorktrees(worktreesOutput);
+    const worktreeHeads = uniqueWorktreeHeads(worktrees);
+    const worktreesByCommit = linkedWorktreesByCommit(worktrees, root);
     const [headOutput, branchResult, logOutput, refsOutput] = await Promise.all([
       this.run(root, ["rev-parse", "HEAD"]),
       this.tryRun(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
-      this.run(root, historyLogArgs(0, pageSize)),
+      this.run(root, historyLogArgs(0, pageSize, worktreeHeads)),
       this.run(root, [
         "for-each-ref",
         `--format=${HISTORY_REFS_FORMAT}`,
@@ -138,6 +151,7 @@ export class GitClient {
     const parsedCommits = parseHistory(
       logOutput.toString("utf8"),
       refsByCommit,
+      worktreesByCommit,
     );
     const commits = parsedCommits.slice(0, pageSize);
     const hasMore = parsedCommits.length > pageSize;
@@ -145,6 +159,7 @@ export class GitClient {
       head,
       branchResult.ok ? branch : undefined,
       refsOutput,
+      worktreesOutput,
     );
 
     const graph = buildHistoryGraph(
@@ -163,6 +178,8 @@ export class GitClient {
         repository: root,
         historyFingerprint,
         refsByCommit,
+        worktreesByCommit,
+        worktreeHeads,
         offset: commits.length,
         pageSize,
       },
@@ -179,7 +196,11 @@ export class GitClient {
     }
     const output = await this.run(
       cursor.repository,
-      historyLogArgs(cursor.offset, cursor.pageSize),
+      historyLogArgs(
+        cursor.offset,
+        cursor.pageSize,
+        cursor.worktreeHeads,
+      ),
     );
     const fingerprintAfter = await this.historyFingerprint(cursor.repository);
     if (fingerprintAfter !== cursor.historyFingerprint) {
@@ -188,6 +209,7 @@ export class GitClient {
     const parsedCommits = parseHistory(
       output.toString("utf8"),
       cursor.refsByCommit,
+      cursor.worktreesByCommit,
     );
     const commits = parsedCommits.slice(0, cursor.pageSize);
     const hasMore = parsedCommits.length > cursor.pageSize;
@@ -202,7 +224,8 @@ export class GitClient {
   }
 
   public async historyFingerprint(repository: string): Promise<string> {
-    const [headOutput, branchResult, refsOutput] = await Promise.all([
+    const [headOutput, branchResult, refsOutput, worktreesOutput] =
+      await Promise.all([
       this.run(repository, ["rev-parse", "HEAD"]),
       this.tryRun(repository, [
         "symbolic-ref",
@@ -217,6 +240,7 @@ export class GitClient {
         "refs/remotes",
         "refs/tags",
       ]),
+      this.run(repository, ["worktree", "list", "--porcelain", "-z"]),
     ]);
     return createHistoryFingerprint(
       headOutput.toString("utf8").trim(),
@@ -224,6 +248,7 @@ export class GitClient {
         ? branchResult.output.toString("utf8").trim()
         : undefined,
       refsOutput,
+      worktreesOutput,
     );
   }
 
@@ -623,7 +648,11 @@ function validatePageSize(pageSize: number): void {
   }
 }
 
-function historyLogArgs(offset: number, pageSize: number): string[] {
+function historyLogArgs(
+  offset: number,
+  pageSize: number,
+  worktreeHeads: readonly string[] = [],
+): string[] {
   return [
     "log",
     "--branches",
@@ -635,6 +664,7 @@ function historyLogArgs(offset: number, pageSize: number): string[] {
     ...(offset === 0 ? [] : [`--skip=${offset}`]),
     `--max-count=${pageSize + 1}`,
     `--format=${RECORD_MARKER}%H%x00%h%x00%P%x00%an%x00%ae%x00%aI%x00%cI%x00%s%x00`,
+    ...worktreeHeads,
   ];
 }
 
@@ -655,13 +685,20 @@ function createHistoryFingerprint(
   headHash: string,
   branch: string | undefined,
   refsOutput: Buffer,
+  worktreesOutput: Buffer,
 ): string {
-  return [headHash, branch ?? "", refsOutput.toString("utf8")].join("\x00");
+  return [
+    headHash,
+    branch ?? "",
+    refsOutput.toString("utf8"),
+    worktreesOutput.toString("utf8"),
+  ].join("\x00");
 }
 
 export function parseHistory(
   output: string,
   refsByCommit: ReadonlyMap<string, CommitRef[]> = new Map(),
+  worktreesByCommit: ReadonlyMap<string, CommitWorktree[]> = new Map(),
 ): Commit[] {
   const commits: Commit[] = [];
 
@@ -691,6 +728,7 @@ export function parseHistory(
       continue;
     }
 
+    const worktrees = worktreesByCommit.get(hash) ?? [];
     commits.push({
       hash,
       shortHash,
@@ -701,10 +739,55 @@ export function parseHistory(
       committedAt,
       subject,
       refs: refsByCommit.get(hash) ?? [],
+      ...(worktrees.length === 0 ? {} : { worktrees }),
     });
   }
 
   return commits;
+}
+
+function activeWorktrees(output: Buffer): GitWorktree[] {
+  return parseGitWorktrees(output).filter(
+    (worktree) =>
+      worktree.head !== undefined && !worktree.bare && !worktree.prunable,
+  );
+}
+
+function uniqueWorktreeHeads(worktrees: readonly GitWorktree[]): string[] {
+  return [
+    ...new Set(
+      worktrees.flatMap((worktree) =>
+        worktree.head === undefined ? [] : [worktree.head],
+      ),
+    ),
+  ];
+}
+
+function linkedWorktreesByCommit(
+  worktrees: readonly GitWorktree[],
+  repository: string,
+): Map<string, CommitWorktree[]> {
+  const currentPath = resolve(repository);
+  const byCommit = new Map<string, CommitWorktree[]>();
+  for (const worktree of worktrees) {
+    if (
+      worktree.head === undefined ||
+      resolve(worktree.path) === currentPath
+    ) {
+      continue;
+    }
+    const locations = byCommit.get(worktree.head) ?? [];
+    locations.push({
+      path: worktree.path,
+      ...(worktree.branch === undefined ? {} : { branch: worktree.branch }),
+      detached: worktree.detached,
+    });
+    byCommit.set(worktree.head, locations);
+  }
+  for (const locations of byCommit.values()) {
+    locations.sort((left, right) => left.path.localeCompare(right.path));
+  }
+  return byCommit;
 }
 
 export function parseFileHistory(output: Buffer): FileRevision[] {

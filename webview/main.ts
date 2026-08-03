@@ -668,9 +668,10 @@ function renderHistory(rows: HistoryRow[], graphLaneCount: number): void {
     button.setAttribute("role", "option");
     const isHead = row.commit.hash === currentHead;
     const refNames = row.commit.refs.map((ref) => ref.name).join(", ");
+    const worktreeDescription = describeWorktrees(row.commit.worktrees ?? []);
     button.setAttribute(
       "aria-label",
-      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}`,
+      `${isHead ? "HEAD, " : ""}${row.commit.subject}, ${formatFullDate(row.commit.authoredAt)}${refNames.length === 0 ? "" : `, ${refNames}`}${worktreeDescription.length === 0 ? "" : `, ${worktreeDescription}`}`,
     );
 
     const graph = createGraph(
@@ -958,6 +959,7 @@ function createRefList(
   commit: Commit,
   isHead: boolean,
 ): HTMLSpanElement | undefined {
+  const worktrees = commit.worktrees ?? [];
   const remoteDefaults = remoteDefaultBranches(commit.refs);
   const remoteHeadRefs = new Set(
     remoteDefaults.map((candidate) => candidate.headFullName),
@@ -972,12 +974,20 @@ function createRefList(
     (ref) =>
       !groupedRefs.has(ref.fullName) && !remoteHeadRefs.has(ref.fullName),
   );
-  if (!isHead && groups.length === 0 && visibleRefs.length === 0) {
+  if (
+    !isHead &&
+    worktrees.length === 0 &&
+    groups.length === 0 &&
+    visibleRefs.length === 0
+  ) {
     return undefined;
   }
 
   const list = document.createElement("span");
   list.className = "ref-list";
+  if (worktrees.length > 0) {
+    list.append(createWorktreeIndicator(worktrees));
+  }
   const currentGroup = groups.find((group) => group.current);
   if (isHead && currentGroup === undefined) {
     list.append(createDetachedHeadIndicator(commit));
@@ -1004,6 +1014,35 @@ function createRefList(
     list.append(indicator);
   }
   return list;
+}
+
+function createWorktreeIndicator(
+  worktrees: NonNullable<Commit["worktrees"]>,
+): HTMLSpanElement {
+  const description = describeWorktrees(worktrees);
+  const indicator = span("worktree-indicator", "");
+  indicator.setAttribute("role", "img");
+  indicator.setAttribute("aria-label", description);
+  indicator.title = description;
+  const symbol = span("worktree-symbol", "");
+  symbol.setAttribute("aria-hidden", "true");
+  indicator.append(symbol);
+  return indicator;
+}
+
+function describeWorktrees(
+  worktrees: NonNullable<Commit["worktrees"]>,
+): string {
+  const label = worktrees.length === 1 ? "Other worktree" : "Other worktrees";
+  return `${label}: ${worktrees.map(worktreeDescription).join("; ")}`;
+}
+
+function worktreeDescription(
+  worktree: NonNullable<Commit["worktrees"]>[number],
+): string {
+  const state =
+    worktree.branch ?? (worktree.detached ? "Detached" : "No branch");
+  return `${state} · ${worktree.path}`;
 }
 
 function createGroupedRefIndicator(
@@ -1333,6 +1372,7 @@ function renderCommitDetails(container: HTMLElement, commit: Commit): void {
   const remoteDefaults = remoteDefaultBranches(commit.refs);
   appendRefsDetail(list, commit.refs, remoteDefaults);
   appendRemoteDefaultsDetail(list, remoteDefaults);
+  appendWorktreesDetail(list, commit.worktrees ?? []);
   appendDetail(list, "Parents", commit.parents.join(", ") || "None (root commit)");
   appendDetail(
     list,
@@ -1614,6 +1654,25 @@ function appendRemoteDefaultsDetail(
     defaults.length === 1 ? "Remote default" : "Remote defaults",
     defaults.map((candidate) => candidate.targetName).join(", "),
   );
+}
+
+function appendWorktreesDetail(
+  list: HTMLDListElement,
+  worktrees: NonNullable<Commit["worktrees"]>,
+): void {
+  if (worktrees.length === 0) {
+    return;
+  }
+  const term = document.createElement("dt");
+  term.textContent = worktrees.length === 1 ? "Other worktree" : "Other worktrees";
+  const description = document.createElement("dd");
+  description.className = "details-worktree-list";
+  for (const worktree of worktrees) {
+    const item = span("details-worktree-item", worktreeDescription(worktree));
+    item.title = worktreeDescription(worktree);
+    description.append(item);
+  }
+  list.append(term, description);
 }
 
 function selectCommit(hash: string, extend: boolean, toggle: boolean): void {

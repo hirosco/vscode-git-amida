@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { GitClient } from "../dist/src/git.js";
@@ -13,8 +14,12 @@ if (process.argv[2] === undefined) {
 }
 
 const repository = resolve(process.argv[2]);
+const agentWorktree = `${repository}-agent`;
 if (!existsSync(repository)) {
   throw new Error(`Demo repository does not exist: ${repository}`);
+}
+if (!existsSync(agentWorktree)) {
+  throw new Error(`Detached agent worktree does not exist: ${agentWorktree}`);
 }
 
 const client = new GitClient();
@@ -46,8 +51,30 @@ const commits = new Map(
 assert.equal(history.repository.root, repository);
 assert.equal(history.repository.branch, "main");
 assert.equal(history.repository.detached, false);
-assert.equal(history.rows.length, 129);
+assert.equal(history.rows.length, 130);
 assert.ok(history.graphLaneCount >= 4);
+
+const agentWorktreeSubject = execFileSync(
+  "git",
+  ["log", "-1", "--format=%s"],
+  { cwd: agentWorktree, encoding: "utf8" },
+).trim();
+assert.equal(agentWorktreeSubject, "feat: draft parallel agent workspace");
+assert.equal(
+  execFileSync("git", ["branch", "--show-current"], {
+    cwd: agentWorktree,
+    encoding: "utf8",
+  }).trim(),
+  "",
+);
+assert.equal(
+  commits.has("feat: draft parallel agent workspace"),
+  true,
+);
+assert.deepEqual(
+  commits.get("feat: draft parallel agent workspace")?.worktrees,
+  [{ path: agentWorktree, detached: true }],
+);
 
 const latest = commits.get("feat: publish seasonal collection");
 assert.ok(latest);
@@ -152,3 +179,4 @@ console.log(`Graph lanes: ${history.graphLaneCount}`);
 console.log(`Latest changed files: ${latestFiles.length}`);
 console.log(`Palette revisions: ${paletteHistory.length}`);
 console.log(`Gallery revisions: ${galleryHistory.length}`);
+console.log("Detached worktree commit visible: yes");

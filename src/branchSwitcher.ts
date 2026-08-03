@@ -3,6 +3,8 @@ import { lstat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { parseGitWorktrees } from "./worktrees";
+
 const execFileAsync = promisify(execFile);
 const MAX_BUFFER = 4 * 1024 * 1024;
 
@@ -244,22 +246,10 @@ export class BranchMutationService {
 }
 
 export function parseWorktreeBranches(output: Buffer): WorktreeBranch[] {
-  const worktrees: WorktreeBranch[] = [];
-  for (const record of output.toString("utf8").split("\x00\x00")) {
-    let path: string | undefined;
-    let branch: string | undefined;
-    for (const field of record.split("\x00")) {
-      if (field.startsWith("worktree ")) {
-        path = field.slice("worktree ".length);
-      } else if (field.startsWith("branch refs/heads/")) {
-        branch = field.slice("branch refs/heads/".length);
-      }
-    }
-    if (path !== undefined) {
-      worktrees.push({ path, ...(branch === undefined ? {} : { branch }) });
-    }
-  }
-  return worktrees;
+  return parseGitWorktrees(output).map(({ path, branch }) => ({
+    path,
+    ...(branch === undefined ? {} : { branch }),
+  }));
 }
 
 function commandArgs(repository: string, args: string[]): string[] {

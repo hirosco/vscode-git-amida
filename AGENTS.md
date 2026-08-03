@@ -57,6 +57,8 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Group every co-located local and remote ref by its branch name, placing its indicators side by side as HEAD, local, then remote. Keep non-anchor branch groups unlabeled but separate them with wider spacing; label only the current branch, remote-default targets, and `main` or `master` fallback anchors. Do not render `<remote>/HEAD` as a separate compact indicator. Keep full ref names and remote-default relationships in commit details.
 - Keep the primary branch's first-parent backbone on a stable graph color and let other tips retain a different color until they converge at a commit node.
 - Keep complete ref names in commit details and accessible labels rather than hover-only UI.
+- Include every registered, non-prunable worktree HEAD as a history root so detached background-task commits remain visible. Mark only commits checked out by another worktree with one compact overlapping-frame symbol, and show each linked path with its branch or detached state in commit details.
+- Keep linked-worktree visibility read-only. Do not add dirty-state inspection, task detection, worktree creation, deletion, pruning, or a dedicated management surface without a separate demonstrated requirement.
 - Keep author information in commit details instead of spending permanent history width.
 - Preserve complete values through details, accessible labels, or tooltips when columns truncate or hide.
 - Keep both the Repository History/inspection split and the changed-files/details split resizable.
@@ -75,7 +77,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Show saved working-tree changes as one transient row above commits only while dirty. Keep it visually distinct, compare it with HEAD, and never include it in Range or Selection.
 - Exclude unsaved editor buffers from the working-tree row until they are saved.
 - Preserve commit selection and scroll while working-tree updates appear or disappear; return a selected working-tree row to HEAD when the repository becomes clean.
-- Expose one theme-safe manual Refresh action in the native View title as recovery for missed external repository changes; do not add a second Refresh control inside the Webview.
+- Expose one theme-safe manual Refresh action in the native View title as recovery for missed external repository or worktree-HEAD changes; do not add a second Refresh control inside the Webview.
 
 ## File History UI
 
@@ -151,7 +153,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Match the built-in image preview formats (`jpg`, `jpe`, `jpeg`, `png`, `bmp`, `gif`, `ico`, `webp`, `avif`, and `svg`) and keep other binary content and unsupported encodings explicit rather than coercing them into a diff.
 - Use the current `diffEditor.maxFileSize` value for text comparison instead of imposing a narrower GitAmida-specific limit, and refresh content classification when that setting changes.
 - Do not impose a GitAmida-specific image-size limit narrower than the native preview. Size the Git blob read for the actual object while retaining bounded output for other Git operations.
-- Debounce built-in Git repository events. Refresh only working-tree state when HEAD and refs are stable, and reload history when their fingerprint changes.
+- Debounce built-in Git repository events. Refresh only working-tree state when HEAD, refs, and registered worktree HEADs are stable, and reload history when their fingerprint changes.
 - Recheck the repository history fingerprint when the retained View becomes visible so missed background events cannot leave stale history.
 - Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.
 - Keep manual refresh available from both the native View title and Command Palette, and keep inline retry limited to errors.
@@ -175,7 +177,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Test navigation state independently: Repository History singleton, File History tab deduplication, selection retention, and reveal-in-log.
 - Test branch switching only in temporary repositories and cover every refusal state before success paths.
 - Test file restoration only in temporary repositories. Cover exact binary bytes, rename destinations, missing-file recreation, index preservation, and every refusal state before success paths.
-- Regenerate the separate synthetic demo repository with `node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo` for comprehensive manual validation and publication screenshots. The generator refuses to overwrite its main repository, component source, or linked review worktree; remove those exact disposable targets explicitly before regenerating.
+- Regenerate the separate synthetic demo repository with `node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo` for comprehensive manual validation and publication screenshots. The generator refuses to overwrite its main repository, component source, branch-backed review worktree, or detached agent worktree; remove those exact disposable targets explicitly before regenerating.
 - Build GitAmida, then run `node scripts/validate-demo-repository.mjs /absolute/path/to/git-amida-demo` to verify the generated history through the production Git adapter before manual editor testing.
 - Keep the generated demo repository clean for normal screenshots. Introduce staged, unstaged, or untracked states only for the documented refusal checks, then restore them immediately.
 - Keep Webview logic small; test trusted state transitions in TypeScript rather than relying only on HTML snapshots.

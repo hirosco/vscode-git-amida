@@ -21,7 +21,8 @@ if (process.argv[2] === undefined) {
 const target = resolve(process.argv[2]);
 const component = `${target}-component`;
 const reviewWorktree = `${target}-review`;
-const ownedPaths = [target, component, reviewWorktree];
+const agentWorktree = `${target}-agent`;
+const ownedPaths = [target, component, reviewWorktree, agentWorktree];
 
 for (const path of ownedPaths) {
   if (existsSync(path)) {
@@ -205,7 +206,7 @@ The repository deliberately combines readable product-like commits with Git edge
 - supported image changes and unsupported binary content
 - paths with spaces and non-ASCII characters
 - an intentionally oversized text blob on a test branch
-- a local submodule and a branch occupied by another worktree
+- a local submodule, a branch occupied by another worktree, and a detached agent worktree commit
 - more than 100 commits reachable through a long-history branch
 
 ## Screenshot candidates
@@ -229,6 +230,7 @@ The repository starts clean on \`main\`. Associated fixtures are siblings:
 
 - \`${basename(component)}\`: source repository for the local submodule
 - \`${basename(reviewWorktree)}\`: linked worktree holding \`release/preview\`
+- \`${basename(agentWorktree)}\`: detached linked worktree resembling a background agent task
 
 ## Read-only navigation
 
@@ -262,6 +264,12 @@ rm local-note.txt
 \`\`\`
 
 Selecting \`release/preview\` for branch switching must be refused because it is checked out in the linked worktree. Other clean local branches remain valid switch targets.
+
+## Worktree visibility
+
+The detached \`${basename(agentWorktree)}\` worktree contains **feat: draft parallel agent workspace**, a clean commit that is not held by a local branch, remote-tracking branch, or tag. Open the main repository and verify whether Repository History can still show that worktree HEAD and identify its linked path.
+
+To evaluate an in-progress background task without leaving the demo permanently dirty, edit \`agent/session-notes.md\` in that worktree, refresh GitAmida in the main repository, record what is visible, and then run \`git restore agent/session-notes.md\` inside the agent worktree.
 
 ## Publication capture
 
@@ -639,6 +647,17 @@ git(target, ["update-ref", "refs/remotes/origin/main", cleanupHash]);
 git(target, ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
 git(target, ["branch", "release/preview", cleanupHash]);
 git(target, ["worktree", "add", "-q", reviewWorktree, "release/preview"]);
+git(target, ["worktree", "add", "-q", "--detach", agentWorktree, cleanupHash]);
+write(
+  agentWorktree,
+  "agent/session-notes.md",
+  "# Parallel agent draft\n\nThis detached worktree models an isolated background task.\n",
+);
+const agentWorktreeHash = commit(
+  agentWorktree,
+  "feat: draft parallel agent workspace",
+  "2026-07-17T10:30:00+09:00",
+);
 
 const commitCount = Number(git(target, ["rev-list", "--all", "--count"]));
 const status = git(target, ["status", "--porcelain"]);
@@ -655,6 +674,9 @@ if (status !== "") {
 if (!worktrees.includes(reviewWorktree)) {
   throw new Error("Linked review worktree was not registered.");
 }
+if (!worktrees.includes(agentWorktree) || !worktrees.includes("detached")) {
+  throw new Error("Detached agent worktree was not registered.");
+}
 if (!submoduleStatus.includes("vendor/sample-widget")) {
   throw new Error("Sample widget submodule was not registered.");
 }
@@ -662,5 +684,7 @@ if (!submoduleStatus.includes("vendor/sample-widget")) {
 console.log(`Created GitAmida demo repository: ${target}`);
 console.log(`Created submodule source: ${component}`);
 console.log(`Created linked worktree: ${reviewWorktree}`);
+console.log(`Created detached agent worktree: ${agentWorktree}`);
+console.log(`Detached agent HEAD: ${agentWorktreeHash}`);
 console.log(`Reachable commits: ${commitCount}`);
 console.log(`Current branch: ${git(target, ["branch", "--show-current"])}`);

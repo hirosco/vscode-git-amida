@@ -405,6 +405,98 @@ test("GitClient fingerprints only history-affecting repository state", async (co
   assert.notEqual(await client.historyFingerprint(repository), fetched);
 });
 
+test("GitClient includes linked worktree HEADs and fingerprints their commits", async (context) => {
+  const fixture = mkdtempSync(join(tmpdir(), "git-amida-worktree-history-test-"));
+  const repository = join(fixture, "main");
+  const reviewWorktree = join(fixture, "review worktree");
+  const agentWorktree = join(fixture, "agent worktree");
+  context.after(() => rmSync(fixture, { recursive: true, force: true }));
+  mkdirSync(repository);
+  git(repository, "init", "-q", "-b", "main");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "tracked.txt"), "base\n");
+  git(repository, "add", "--", "tracked.txt");
+  git(repository, "commit", "-q", "-m", "base");
+  git(repository, "branch", "release/preview");
+  git(repository, "worktree", "add", "-q", reviewWorktree, "release/preview");
+  git(repository, "worktree", "add", "-q", "--detach", agentWorktree, "HEAD");
+
+  writeFileSync(join(agentWorktree, "agent.txt"), "detached task\n");
+  git(agentWorktree, "add", "--", "agent.txt");
+  git(agentWorktree, "commit", "-q", "-m", "detached agent commit");
+
+  const client = new GitClient();
+  const history = await client.loadHistory(repository);
+  const bySubject = new Map(
+    history.rows.map((row) => [row.commit.subject, row.commit]),
+  );
+  assert.deepEqual(bySubject.get("detached agent commit")?.worktrees, [
+    {
+      path: realpathSync(agentWorktree),
+      detached: true,
+    },
+  ]);
+  assert.deepEqual(bySubject.get("base")?.worktrees, [
+    {
+      path: realpathSync(reviewWorktree),
+      branch: "release/preview",
+      detached: false,
+    },
+  ]);
+
+  const initialFingerprint = history.historyFingerprint;
+  writeFileSync(join(agentWorktree, "agent.txt"), "uncommitted task\n");
+  assert.equal(
+    await client.historyFingerprint(repository),
+    initialFingerprint,
+  );
+  git(agentWorktree, "add", "--", "agent.txt");
+  git(agentWorktree, "commit", "-q", "-m", "advance detached agent");
+  assert.notEqual(
+    await client.historyFingerprint(repository),
+    initialFingerprint,
+  );
+
+  const refreshed = await client.loadHistory(repository);
+  const advanced = refreshed.rows.find(
+    (row) => row.commit.subject === "advance detached agent",
+  );
+  assert.deepEqual(advanced?.commit.worktrees, [
+    {
+      path: realpathSync(agentWorktree),
+      detached: true,
+    },
+  ]);
+
+  const fromAgentWorktree = await client.loadHistory(agentWorktree);
+  assert.equal(fromAgentWorktree.repository.detached, true);
+  assert.equal(fromAgentWorktree.repository.head, advanced?.commit.hash);
+  assert.equal(
+    fromAgentWorktree.rows.find(
+      (row) => row.commit.subject === "advance detached agent",
+    )?.commit.worktrees,
+    undefined,
+  );
+  assert.deepEqual(
+    fromAgentWorktree.rows.find((row) => row.commit.subject === "base")?.commit
+      .worktrees,
+    [
+      {
+        path: realpathSync(repository),
+        branch: "main",
+        detached: false,
+      },
+      {
+        path: realpathSync(reviewWorktree),
+        branch: "release/preview",
+        detached: false,
+      },
+    ],
+  );
+});
+
 test("GitClient pages all branch, remote, and tag history without a product limit", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-history-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));

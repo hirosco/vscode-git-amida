@@ -802,6 +802,41 @@ h2 {
   flex: 0 0 auto;
 }
 
+.worktree-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.worktree-symbol {
+  position: relative;
+  display: block;
+  width: 11px;
+  height: 10px;
+}
+
+.worktree-symbol::before,
+.worktree-symbol::after {
+  position: absolute;
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1px solid currentColor;
+  border-radius: 1px;
+  content: "";
+}
+
+.worktree-symbol::before {
+  top: 0;
+  left: 0;
+}
+
+.worktree-symbol::after {
+  right: 0;
+  bottom: 0;
+}
+
 .ref-group-remoteBranch {
   color: var(--git-amida-remote-ref-color);
 }
@@ -1097,6 +1132,16 @@ code {
 .details-ref-name {
   min-width: 0;
   color: var(--vscode-foreground);
+  overflow-wrap: anywhere;
+}
+
+.details-worktree-list {
+  display: grid;
+  gap: 4px;
+}
+
+.details-worktree-item {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 
