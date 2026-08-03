@@ -606,10 +606,6 @@ h2 {
   stroke: none;
 }
 
-.ref-head-color {
-  color: var(--git-amida-head-ref-color);
-}
-
 .working-tree-marker {
   fill: transparent;
   stroke: currentColor;

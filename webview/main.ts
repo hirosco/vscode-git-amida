@@ -854,7 +854,7 @@ function createGraph(
   const node = document.createElementNS("http://www.w3.org/2000/svg", "circle");
   node.classList.add("graph-node");
   if (isHead) {
-    node.classList.add("graph-head-node", "ref-head-color");
+    node.classList.add("graph-head-node", graphColorClass(graph.nodeColor));
   } else {
     node.classList.add(graphColorClass(graph.nodeColor));
   }
@@ -870,7 +870,10 @@ function createGraph(
       "http://www.w3.org/2000/svg",
       "circle",
     );
-    center.classList.add("graph-head-center", "ref-head-color");
+    center.classList.add(
+      "graph-head-center",
+      graphColorClass(graph.nodeColor),
+    );
     center.setAttribute(
       "cx",
       formatGraphNumber(laneX(graph.nodeLane, laneCount, width)),

@@ -36,7 +36,7 @@ test("GitAmida exposes stable semantic colors for HEAD and tags", () => {
   assert.deepEqual(manifest.contributes.colors, [
     {
       id: "gitAmida.headRefColor",
-      description: "Color of the GitAmida local HEAD indicator.",
+      description: "Color of the GitAmida inline local HEAD indicator.",
       defaults: {
         dark: "#E2C08D",
         light: "#895503",
