@@ -1,51 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
   <title id="title">GitAmida marketplace icon</title>
-  <desc id="description">A radiant commit node branching through repository history on a deep navy field with a subtle ivory keyline.</desc>
+  <desc id="description">A blue-navy radiant commit node branching through repository history on a gold field.</desc>
 
-  <rect x="4" y="4" width="248" height="248" rx="32" fill="#0B1739"/>
-  <rect
-    x="8"
-    y="8"
-    width="240"
-    height="240"
-    rx="28"
-    fill="none"
-    stroke="#F7F3E8"
-    stroke-width="6"
-    opacity="0.52"
-  />
+  <rect x="4" y="4" width="248" height="248" rx="32" fill="#E5B94E"/>
 
-  <g
-    fill="none"
-    stroke="#E5B94E"
-    stroke-width="7"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <path d="M128 24v25"/>
-    <path d="m78 35 15 24"/>
-    <path d="m178 35-15 24"/>
-    <path d="m43 68 28 13"/>
-    <path d="m213 68-28 13"/>
-    <path d="M36 102h32"/>
-    <path d="M220 102h-32"/>
-    <path d="m51 139 26-16"/>
-    <path d="m205 139-26-16"/>
+  <g transform="translate(0 13)">
+    <g
+      fill="none"
+      stroke="#123B6D"
+      stroke-width="12"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M128 24v25"/>
+      <path d="m78 35 15 24"/>
+      <path d="m178 35-15 24"/>
+      <path d="m43 68 28 13"/>
+      <path d="m213 68-28 13"/>
+      <path d="M36 102h32"/>
+      <path d="M220 102h-32"/>
+      <path d="m51 139 26-16"/>
+      <path d="m205 139-26-16"/>
 
-    <path d="M128 120v18"/>
-    <path d="M128 132c-8 13-20 17-35 19-16 2-25 12-25 27"/>
-    <path d="M128 132c8 13 20 17 35 19 16 2 25 12 25 27"/>
-  </g>
+      <path d="M128 120v18"/>
+      <path d="M128 132c-8 13-20 17-35 19-16 2-25 12-25 27"/>
+      <path d="M128 132c8 13 20 17 35 19 16 2 25 12 25 27"/>
+    </g>
 
-  <g fill="#E5B94E" stroke="#F7F3E8" stroke-width="7">
-    <circle cx="128" cy="98" r="19"/>
-    <circle cx="68" cy="191" r="15"/>
-    <circle cx="188" cy="191" r="15"/>
-  </g>
+    <g fill="#123B6D" stroke="#F7F3E8" stroke-width="10">
+      <circle cx="128" cy="98" r="19"/>
+      <circle cx="68" cy="191" r="15"/>
+      <circle cx="188" cy="191" r="15"/>
+    </g>
 
-  <g fill="#E5B94E">
-    <circle cx="128" cy="157" r="4.5"/>
-    <circle cx="128" cy="179" r="4.5"/>
-    <circle cx="128" cy="201" r="4.5"/>
+    <g fill="#123B6D">
+      <circle cx="128" cy="157" r="6.5"/>
+      <circle cx="128" cy="179" r="6.5"/>
+      <circle cx="128" cy="201" r="6.5"/>
+    </g>
   </g>
 </svg>
