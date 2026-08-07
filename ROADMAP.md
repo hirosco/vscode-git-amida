@@ -38,6 +38,8 @@ This checkpoint is complete when users can investigate several files and always 
 - Let users choose a repository in multi-root workspaces
 - Present detached HEAD, empty repositories, and non-Git folders as explicit states
 - Cancel stale history and blob requests as selection changes
+- Release obsolete virtual diff content, image resources, and native diff-session registrations when previews are replaced or tabs close, while retaining pinned diff resources for the lifetime of their tabs
+- Verify that repeated preview navigation does not grow retained diff resources and that pinned diffs remain readable until closed
 - Test behavior in both Cursor and VS Code
 
 ## 5. Diff controls and external tools
