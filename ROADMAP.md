@@ -6,7 +6,18 @@ GitAmida's current product target is:
 
 The remaining checkpoints build on selection-scoped, endpoint-based comparison and contain only work still needed to validate and extend that baseline.
 
-## 1. Daily-use commit graph validation
+## 1. Changed-file working-tree access and copying
+
+- Add **Open File in Working Tree** to the Changed-files row context menu and open only the exact current `file.path` beneath the active repository root
+- Validate the requested row and path against current Extension Host state before opening it
+- When the path does not exist or is not a regular file, show a concise notification that it may have been moved or deleted and direct the user to **Show File History**
+- Do not search for same-named files, fall back to `oldPath`, or automatically resolve a later rename
+- Add a compact **Copy** submenu with **File Name** and repository-relative **Relative Path** actions; use the after/current `file.path` for renamed rows
+- Keep the existing click, double-click, and keyboard diff interactions unchanged instead of making Changed-files row text arbitrarily selectable
+
+This checkpoint is complete when users can open an exact working-tree file or copy its stable name and repository-relative path from Changed files without guessing file identity or disrupting diff navigation.
+
+## 2. Daily-use commit graph validation
 
 - Observe dense branch and merge histories during normal repository work
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
@@ -16,7 +27,7 @@ The remaining checkpoints build on selection-scoped, endpoint-based comparison a
 
 This checkpoint is complete when branch ancestry can be followed quickly during daily use without terminal color artifacts or excessive horizontal cost.
 
-## 2. Image comparison validation
+## 3. Image comparison validation
 
 - Validate native image comparisons for single commits, continuous ranges, explicit selections, and saved working-tree changes
 - Confirm that additions, deletions, and renames communicate their actual empty or renamed endpoints clearly enough
@@ -26,14 +37,14 @@ This checkpoint is complete when branch ancestry can be followed quickly during 
 
 This checkpoint is complete when an image selected from Changed files opens a useful comparison for single commits, Ranges, Selections, and saved working-tree changes in Cursor without changing text-diff behavior.
 
-## 3. File History investigations
+## 4. File History investigations
 
 - Verify the conditional Repository History home tab, filename-sized tabs, horizontal tab scrolling, integrated close actions, keyboard traversal, and path disambiguation with narrow Panels and several files that share a basename
 - Validate renamed, added, and deleted file identities across several simultaneous tabs before treating the checkpoint as complete
 
 This checkpoint is complete when users can investigate several files and always return to their commits in the repository-wide graph.
 
-## 4. Repository and history hardening
+## 5. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
 - Present detached HEAD, empty repositories, and non-Git folders as explicit states
@@ -42,14 +53,14 @@ This checkpoint is complete when users can investigate several files and always 
 - Verify that repeated preview navigation does not grow retained diff resources and that pinned diffs remain readable until closed
 - Test behavior in both Cursor and VS Code
 
-## 5. Diff controls and external tools
+## 6. Diff controls and external tools
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
 - Validate that the editor-title action where available and the Changed-files row context action open the same single-file text and image endpoints in the configured Git difftool for single commits, Ranges, Selections, and saved working-tree changes
 - Confirm additions, deletions, renames, missing tool configuration, and launch failures retain an understandable native-diff fallback
 
-## 6. Performance and public distribution
+## 7. Performance and public distribution
 
 - Add virtualization, operation-specific output limits, cancellation, and diagnostics
 - Verify large repositories, branch-backed and detached worktrees, and long-lived file-history tabs
