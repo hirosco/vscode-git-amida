@@ -3,8 +3,14 @@ import { basename } from "node:path";
 
 import * as vscode from "vscode";
 
-export class GitContentProvider implements vscode.TextDocumentContentProvider {
+export class GitContentProvider
+  implements vscode.TextDocumentContentProvider, vscode.Disposable
+{
   private readonly contents = new Map<string, string>();
+
+  public dispose(): void {
+    this.contents.clear();
+  }
 
   public provideTextDocumentContent(uri: vscode.Uri): string {
     const id = new URLSearchParams(uri.query).get("id");
@@ -24,11 +30,17 @@ export class GitContentProvider implements vscode.TextDocumentContentProvider {
       query: new URLSearchParams({ id }).toString(),
     });
   }
+
+  public remove(uri: vscode.Uri): boolean {
+    const id = new URLSearchParams(uri.query).get("id");
+    return id === null ? false : this.contents.delete(id);
+  }
 }
 
 interface ImageResource {
   size: number;
-  read: () => Promise<Uint8Array>;
+  controller: AbortController;
+  read: (signal: AbortSignal) => Promise<Uint8Array>;
 }
 
 export class GitImageFileSystemProvider
@@ -42,6 +54,9 @@ export class GitImageFileSystemProvider
   public readonly onDidChangeFile = this.changeEmitter.event;
 
   public dispose(): void {
+    for (const resource of this.resources.values()) {
+      resource.controller.abort();
+    }
     this.resources.clear();
     this.changeEmitter.dispose();
   }
@@ -70,7 +85,8 @@ export class GitImageFileSystemProvider
   }
 
   public async readFile(uri: vscode.Uri): Promise<Uint8Array> {
-    return this.resource(uri).read();
+    const resource = this.resource(uri);
+    return resource.read(resource.controller.signal);
   }
 
   public writeFile(): void {
@@ -89,16 +105,26 @@ export class GitImageFileSystemProvider
     path: string,
     label: string,
     size: number,
-    read: () => Promise<Uint8Array>,
+    read: (signal: AbortSignal) => Promise<Uint8Array>,
   ): vscode.Uri {
     const id = randomUUID();
-    this.resources.set(id, { size, read });
+    this.resources.set(id, { size, controller: new AbortController(), read });
     const fileName = basename(path) || "empty";
     return vscode.Uri.from({
       scheme: "git-amida-image",
       path: `/${label}/${fileName}`,
       query: new URLSearchParams({ id }).toString(),
     });
+  }
+
+  public remove(uri: vscode.Uri): boolean {
+    const id = new URLSearchParams(uri.query).get("id");
+    const resource = id === null ? undefined : this.resources.get(id);
+    if (id === null || resource === undefined) {
+      return false;
+    }
+    resource.controller.abort();
+    return this.resources.delete(id);
   }
 
   private resource(uri: vscode.Uri): ImageResource {

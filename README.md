@@ -31,15 +31,16 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 - Opens full renamed-path history from a Changed-files row, an Explorer file, or the active editor in reusable, closable File History tabs, with status-colored paths and the selected revision's commit details; the tab strip appears only while file investigations exist, a compact home tab returns to Repository History, and filename-sized tabs scroll horizontally instead of shrinking or wrapping
 - Returns from a File History revision to its selected commit in Repository History through the revision context menu, retaining the file tab and loading older repository-history pages when necessary
 - Resizes and preserves the split between Repository History and changed-file inspection across workspaces in the same editor profile
-- Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on single-click or keyboard navigation; double-click, Enter, and **Open Changes** pin the text or supported-image comparison
+- Opens single-commit, Range, and Selection comparisons in one reusable native preview diff on single-click or keyboard navigation; double-click, Enter, and **Open Changes** pin the text or supported-image comparison, while replaced previews and closed pinned tabs release their virtual content and image resources
 - Opens one current Changed-files row in the user-configured Git difftool from its context menu, and also exposes the same action from an active GitAmida native diff when the editor API identifies that tab reliably
 - Restores either available before or after endpoint of one historical Changed-files row directly to that row's current working-tree path after an explicit confirmation, while refusing unsaved, staged, unstaged, untracked, symlink, and submodule targets and leaving the index unchanged
 - Switches to another local branch from a commit's context menu or the Command Palette only after rejecting unsaved editors, dirty worktrees, in-progress Git operations, and targets occupied by another worktree
 - Compares normal commits with their first parent and root commits with Git's empty tree
 - Compares saved working-tree and historical `.jpg`, `.jpe`, `.jpeg`, `.png`, `.bmp`, `.gif`, `.ico`, `.webp`, `.avif`, and `.svg` states through the editor's native image comparison, including empty endpoints for additions and deletions
 - Keeps other binary files, submodules, and text blobs beyond the current VS Code/Cursor `diffEditor.maxFileSize` setting visible and labeled without decoding them as text
-- Runs Git queries and blob reads without a shell; the explicit restore action writes only its confirmed working-tree destination
+- Runs Git queries and blob reads without a shell, cancels superseded history and content requests, applies operation-specific time and output bounds, and records slow or failed operations in the local GitAmida Output channel; the explicit restore action writes only its confirmed working-tree destination
 - Uses the active workspace folder, or the first workspace folder when no editor is active
+- Presents no workspace, a non-Git folder, and a Git repository without commits as distinct empty states instead of generic Git failures
 
 Whitespace options and multi-root repository selection are planned but not implemented yet.
 

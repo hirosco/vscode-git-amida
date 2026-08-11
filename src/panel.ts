@@ -26,9 +26,12 @@ import { buildFileTree } from "./fileTree";
 import { buildHistoryGraph, type HistoryGraphState } from "./graph";
 import { ensureHistoryCommitLoaded } from "./historyNavigation";
 import {
+  EmptyRepositoryError,
   GitClient,
-  GitError,
+  GitCancellationError,
+  HISTORY_PAGE_SIZE,
   HistoryChangedError,
+  NotGitRepositoryError,
   type HistoryCursor,
 } from "./git";
 import type {
@@ -43,7 +46,10 @@ import type {
   RepositoryViewState,
   WorkingTreeState,
 } from "./model";
-import type { HostToWebviewMessage } from "./protocol";
+import type {
+  HostToWebviewMessage,
+  RepositoryStateKind,
+} from "./protocol";
 import {
   explicitCommitSelection,
   resolveVisibleSelection,
@@ -88,7 +94,7 @@ export class HistoryViewProvider
   private readonly selectionFiles = new Map<string, SelectionFileState>();
   private readonly commitChanges = new Map<
     string,
-    Promise<CommitFileChange[]>
+    { request: Promise<CommitFileChange[]>; signal?: AbortSignal }
   >();
   private navigationState: RepositoryNavigationState;
   private viewPreferences: RepositoryViewPreferences;
@@ -107,6 +113,16 @@ export class HistoryViewProvider
   private historyHasMore = false;
   private historyPageLoading = false;
   private historyPageRequest?: Promise<boolean>;
+  private historyAbortController?: AbortController;
+  private historyPageAbortController?: AbortController;
+  private repositoryStateAbortController?: AbortController;
+  private workingTreeAbortController?: AbortController;
+  private filesAbortController?: AbortController;
+  private diffAbortController?: AbortController;
+  private readonly fileHistoryAbortControllers = new Map<
+    string,
+    AbortController
+  >();
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -155,6 +171,7 @@ export class HistoryViewProvider
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+    this.abortPendingRequests();
   }
 
   public scheduleRefresh(
@@ -208,6 +225,9 @@ export class HistoryViewProvider
       );
       return;
     }
+    this.diffAbortController?.abort();
+    const controller = new AbortController();
+    this.diffAbortController = controller;
 
     try {
       const beforePath = file.oldPath ?? file.path;
@@ -217,10 +237,17 @@ export class HistoryViewProvider
             repository,
             file.status.startsWith("A") ? undefined : selection.headHash,
             beforePath,
+            undefined,
+            controller.signal,
           ),
           file.status.startsWith("D")
             ? Promise.resolve(Buffer.alloc(0))
-            : this.git.readWorkingFile(repository, file.path),
+            : this.git.readWorkingFile(
+                repository,
+                file.path,
+                Number.POSITIVE_INFINITY,
+                controller.signal,
+              ),
         ]);
         await this.externalDifftool.open({
           repository,
@@ -241,11 +268,15 @@ export class HistoryViewProvider
           repository,
           comparison.beforeRef,
           comparison.beforePath,
+          undefined,
+          controller.signal,
         ),
         this.git.readBlob(
           repository,
           comparison.afterRef,
           comparison.afterPath,
+          undefined,
+          controller.signal,
         ),
       ]);
       await this.externalDifftool.open({
@@ -256,6 +287,9 @@ export class HistoryViewProvider
         afterContent,
       });
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -484,6 +518,14 @@ export class HistoryViewProvider
 
   public async refresh(showLoading = true): Promise<void> {
     this.pendingRefresh = undefined;
+    this.historyAbortController?.abort();
+    this.historyPageAbortController?.abort();
+    this.repositoryStateAbortController?.abort();
+    this.workingTreeAbortController?.abort();
+    this.filesAbortController?.abort();
+    this.diffAbortController?.abort();
+    const controller = new AbortController();
+    this.historyAbortController = controller;
     const request = ++this.historyRequest;
     ++this.repositoryStateRequest;
     ++this.workingTreeRequest;
@@ -498,10 +540,15 @@ export class HistoryViewProvider
       await this.stateReady;
       const folder = this.workspaceFolder();
       if (folder === undefined) {
-        throw new GitError("Open a folder containing a Git repository first.");
+        await this.showRepositoryState("noWorkspace");
+        return;
       }
 
-      let loadedHistory = await this.git.loadHistory(folder.uri.fsPath);
+      let loadedHistory = await this.git.loadHistory(
+        folder.uri.fsPath,
+        HISTORY_PAGE_SIZE,
+        controller.signal,
+      );
       const navigationHashes = new Set(
         [
           this.navigationState.selectedHash,
@@ -518,7 +565,10 @@ export class HistoryViewProvider
         loadedHistory.hasMore &&
         [...navigationHashes].some((hash) => !loadedHashes.has(hash))
       ) {
-        const page = await this.git.loadNextHistoryPage(loadedHistory.cursor);
+        const page = await this.git.loadNextHistoryPage(
+          loadedHistory.cursor,
+          controller.signal,
+        );
         if (request !== this.historyRequest) {
           return;
         }
@@ -551,6 +601,7 @@ export class HistoryViewProvider
         history.repository.root,
         history.repository.head,
         this.textDiffMaxBytes(),
+        controller.signal,
       );
       if (request !== this.historyRequest) {
         return;
@@ -624,7 +675,18 @@ export class HistoryViewProvider
         await this.loadFiles(this.selection);
       }
     } catch (error) {
-      if (request !== this.historyRequest) {
+      if (
+        request !== this.historyRequest ||
+        isCancellation(error)
+      ) {
+        return;
+      }
+      if (error instanceof EmptyRepositoryError) {
+        await this.showRepositoryState("emptyRepository");
+        return;
+      }
+      if (error instanceof NotGitRepositoryError) {
+        await this.showRepositoryState("notRepository");
         return;
       }
       await this.post({
@@ -640,9 +702,15 @@ export class HistoryViewProvider
     if (repository === undefined || previousFingerprint === undefined) {
       return;
     }
+    this.repositoryStateAbortController?.abort();
+    const controller = new AbortController();
+    this.repositoryStateAbortController = controller;
     const request = ++this.repositoryStateRequest;
     try {
-      const nextFingerprint = await this.git.historyFingerprint(repository);
+      const nextFingerprint = await this.git.historyFingerprint(
+        repository,
+        controller.signal,
+      );
       if (request !== this.repositoryStateRequest) {
         return;
       }
@@ -652,7 +720,7 @@ export class HistoryViewProvider
         await this.refreshWorkingTree();
       }
     } catch (error) {
-      if (request !== this.repositoryStateRequest) {
+      if (request !== this.repositoryStateRequest || isCancellation(error)) {
         return;
       }
       await this.post({
@@ -725,12 +793,16 @@ export class HistoryViewProvider
     if (repository === undefined || headHash === undefined) {
       return;
     }
+    this.workingTreeAbortController?.abort();
+    const controller = new AbortController();
+    this.workingTreeAbortController = controller;
     const request = ++this.workingTreeRequest;
     try {
       const state = await this.git.workingTreeChanges(
         repository,
         headHash,
         this.textDiffMaxBytes(),
+        controller.signal,
       );
       if (request !== this.workingTreeRequest) {
         return;
@@ -773,7 +845,7 @@ export class HistoryViewProvider
         selection: this.selection,
       });
     } catch (error) {
-      if (request !== this.workingTreeRequest) {
+      if (request !== this.workingTreeRequest || isCancellation(error)) {
         return;
       }
       await this.post({
@@ -965,11 +1037,17 @@ export class HistoryViewProvider
       return false;
     }
 
+    this.historyPageAbortController?.abort();
+    const controller = new AbortController();
+    this.historyPageAbortController = controller;
     const request = this.historyRequest;
     this.historyPageLoading = true;
     await this.post({ type: "historyPageLoading" });
     try {
-      const page = await this.git.loadNextHistoryPage(cursor);
+      const page = await this.git.loadNextHistoryPage(
+        cursor,
+        controller.signal,
+      );
       if (request !== this.historyRequest || cursor !== this.historyCursor) {
         return false;
       }
@@ -997,7 +1075,7 @@ export class HistoryViewProvider
       });
       return true;
     } catch (error) {
-      if (request !== this.historyRequest) {
+      if (request !== this.historyRequest || isCancellation(error)) {
         return false;
       }
       if (error instanceof HistoryChangedError) {
@@ -1017,6 +1095,7 @@ export class HistoryViewProvider
   }
 
   private async selectAndLoad(selection: RepositorySelection): Promise<void> {
+    this.diffAbortController?.abort();
     const request = ++this.selectionRequest;
     this.selection = selection;
     this.currentFiles = [];
@@ -1045,6 +1124,9 @@ export class HistoryViewProvider
       return;
     }
 
+    this.filesAbortController?.abort();
+    const controller = new AbortController();
+    this.filesAbortController = controller;
     const request = ++this.filesRequest;
     const textDiffMaxBytes = this.textDiffMaxBytes();
     await this.post({ type: "filesLoading", selection });
@@ -1061,6 +1143,7 @@ export class HistoryViewProvider
           repository,
           selection.commitHashes,
           textDiffMaxBytes,
+          controller.signal,
         );
         files = states.map((state) => state.file);
       } else if (selection.mode === "single") {
@@ -1072,6 +1155,7 @@ export class HistoryViewProvider
           repository,
           commit,
           textDiffMaxBytes,
+          controller.signal,
         );
       } else {
         files = await this.git.changedFilesBetween(
@@ -1079,6 +1163,7 @@ export class HistoryViewProvider
           selection.baseHash,
           selection.newestHash,
           textDiffMaxBytes,
+          controller.signal,
         );
       }
       if (request !== this.filesRequest) {
@@ -1109,7 +1194,7 @@ export class HistoryViewProvider
         tree: buildFileTree(files),
       });
     } catch (error) {
-      if (request !== this.filesRequest) {
+      if (request !== this.filesRequest || isCancellation(error)) {
         return;
       }
       await this.post({
@@ -1131,6 +1216,9 @@ export class HistoryViewProvider
     ) {
       return;
     }
+    this.diffAbortController?.abort();
+    const controller = new AbortController();
+    this.diffAbortController = controller;
 
     if (selection.mode === "workingTree") {
       await this.openWorkingTreeDiff(
@@ -1138,6 +1226,7 @@ export class HistoryViewProvider
         file,
         repository,
         preview,
+        controller.signal,
       );
       return;
     }
@@ -1156,9 +1245,11 @@ export class HistoryViewProvider
       {
         preview,
         isCurrent: () =>
+          !controller.signal.aborted &&
           request === this.selectionRequest &&
           this.selection !== undefined &&
           selectionIdentity(this.selection) === diffIdentity,
+        signal: controller.signal,
       },
     );
   }
@@ -1168,6 +1259,8 @@ export class HistoryViewProvider
     if (index === -1) {
       return;
     }
+    this.fileHistoryAbortControllers.get(tabId)?.abort();
+    this.fileHistoryAbortControllers.delete(tabId);
     const wasActive = this.activeFileHistoryTabId === tabId;
     this.fileHistoryTabs.splice(index, 1);
     if (wasActive) {
@@ -1186,13 +1279,16 @@ export class HistoryViewProvider
     if (repository === undefined) {
       return;
     }
+    this.fileHistoryAbortControllers.get(tab.id)?.abort();
+    const controller = new AbortController();
+    this.fileHistoryAbortControllers.set(tab.id, controller);
     try {
-      const revisions = (await this.git.fileHistory(repository, tab.path)).map(
-        (revision) => ({
-          ...revision,
-          commit: this.commits.get(revision.commit.hash) ?? revision.commit,
-        }),
-      );
+      const revisions = (
+        await this.git.fileHistory(repository, tab.path, controller.signal)
+      ).map((revision) => ({
+        ...revision,
+        commit: this.commits.get(revision.commit.hash) ?? revision.commit,
+      }));
       if (!this.fileHistoryTabs.includes(tab)) {
         return;
       }
@@ -1226,12 +1322,16 @@ export class HistoryViewProvider
       tab.error = undefined;
       await this.postFileHistoryState();
     } catch (error) {
-      if (!this.fileHistoryTabs.includes(tab)) {
+      if (!this.fileHistoryTabs.includes(tab) || isCancellation(error)) {
         return;
       }
       tab.loading = false;
       tab.error = userMessage(error);
       await this.postFileHistoryState();
+    } finally {
+      if (this.fileHistoryAbortControllers.get(tab.id) === controller) {
+        this.fileHistoryAbortControllers.delete(tab.id);
+      }
     }
   }
 
@@ -1251,12 +1351,16 @@ export class HistoryViewProvider
     tab.selectedHash = hash;
     this.activeFileHistoryTabId = tab.id;
     await this.postFileHistoryState();
+    this.diffAbortController?.abort();
+    const controller = new AbortController();
+    this.diffAbortController = controller;
 
     try {
       const changes = await this.changesForCommit(
         repository,
         revision.commit,
         this.textDiffMaxBytes(),
+        controller.signal,
       );
       if (
         this.activeFileHistoryTabId !== tab.id ||
@@ -1291,12 +1395,17 @@ export class HistoryViewProvider
         {
           preview,
           isCurrent: () =>
+            !controller.signal.aborted &&
             this.activeFileHistoryTabId === tab.id &&
             tab.selectedHash === hash &&
             this.fileHistoryTabs.includes(tab),
+          signal: controller.signal,
         },
       );
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -1306,6 +1415,7 @@ export class HistoryViewProvider
     file: ChangedFile,
     repository: string,
     preview: boolean,
+    signal: AbortSignal,
   ): Promise<void> {
     if (file.content?.kind === "image") {
       await this.openWorkingTreeImageDiff(
@@ -1313,6 +1423,7 @@ export class HistoryViewProvider
         file,
         repository,
         preview,
+        signal,
       );
       return;
     }
@@ -1334,6 +1445,7 @@ export class HistoryViewProvider
           repository,
           file.status.startsWith("A") ? undefined : selection.headHash,
           beforePath,
+          signal,
         ),
         file.status.startsWith("D")
           ? Promise.resolve(Buffer.alloc(0))
@@ -1341,9 +1453,11 @@ export class HistoryViewProvider
               repository,
               file.path,
               textDiffMaxBytes,
+              signal,
             ),
       ]);
       if (
+        signal.aborted ||
         request !== this.selectionRequest ||
         this.selection === undefined ||
         selectionIdentity(this.selection) !== identity
@@ -1361,8 +1475,10 @@ export class HistoryViewProvider
         file.status.startsWith("A") ? undefined : selection.headHash,
         beforePath,
         beforeSize,
+        signal,
       );
       if (
+        signal.aborted ||
         request !== this.selectionRequest ||
         this.selection === undefined ||
         selectionIdentity(this.selection) !== identity
@@ -1385,15 +1501,19 @@ export class HistoryViewProvider
         "Working-Tree",
         after.toString("utf8"),
       );
-      await vscode.commands.executeCommand(
-        "vscode.diff",
+      await this.openNativeDiff(
+        repository,
+        beforePath,
+        file.path,
         left,
         right,
         `${basename(file.path)} (Working Tree)`,
-        { preview },
+        preview,
       );
-      this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -1403,6 +1523,7 @@ export class HistoryViewProvider
     file: ChangedFile,
     repository: string,
     preview: boolean,
+    signal: AbortSignal,
   ): Promise<void> {
     const identity = selectionIdentity(selection);
     const request = this.selectionRequest;
@@ -1413,12 +1534,14 @@ export class HistoryViewProvider
           repository,
           file.status.startsWith("A") ? undefined : selection.headHash,
           beforePath,
+          signal,
         ),
         file.status.startsWith("D")
           ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readWorkingImage(repository, file.path),
+          : this.git.readWorkingImage(repository, file.path, signal),
       ]);
       if (
+        signal.aborted ||
         request !== this.selectionRequest ||
         this.selection === undefined ||
         selectionIdentity(this.selection) !== identity
@@ -1429,29 +1552,39 @@ export class HistoryViewProvider
         beforePath,
         "Working-Tree-base",
         beforeSize,
-        () =>
+        (resourceSignal) =>
           this.git.readBlob(
             repository,
             file.status.startsWith("A") ? undefined : selection.headHash,
             beforePath,
             beforeSize,
+            resourceSignal,
           ),
       );
       const right = this.imageProvider.add(
         file.path,
         "Working-Tree",
         after.byteLength,
-        () => Promise.resolve(after),
+        async (resourceSignal) => {
+          if (resourceSignal.aborted) {
+            throw new GitCancellationError("Working-tree image read");
+          }
+          return after;
+        },
       );
-      await vscode.commands.executeCommand(
-        "vscode.diff",
+      await this.openNativeDiff(
+        repository,
+        beforePath,
+        file.path,
         left,
         right,
         `${basename(file.path)} (Working Tree)`,
-        { preview },
+        preview,
       );
-      this.registerDiffSession(repository, beforePath, file.path, left, right);
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -1460,7 +1593,11 @@ export class HistoryViewProvider
     repository: string,
     comparison: FileComparison,
     label: string,
-    context: { preview: boolean; isCurrent: () => boolean },
+    context: {
+      preview: boolean;
+      isCurrent: () => boolean;
+      signal: AbortSignal;
+    },
   ): Promise<void> {
     if (comparison.content?.kind === "image") {
       await this.openImageComparison(
@@ -1487,11 +1624,13 @@ export class HistoryViewProvider
           repository,
           comparison.beforeRef,
           comparison.beforePath,
+          context.signal,
         ),
         this.git.blobSize(
           repository,
           comparison.afterRef,
           comparison.afterPath,
+          context.signal,
         ),
       ]);
       if (!context.isCurrent()) {
@@ -1510,12 +1649,14 @@ export class HistoryViewProvider
           comparison.beforeRef,
           comparison.beforePath,
           beforeSize,
+          context.signal,
         ),
         this.git.readBlob(
           repository,
           comparison.afterRef,
           comparison.afterPath,
           afterSize,
+          context.signal,
         ),
       ]);
       if (!context.isCurrent()) {
@@ -1538,21 +1679,19 @@ export class HistoryViewProvider
         label,
         after.toString("utf8"),
       );
-      await vscode.commands.executeCommand(
-        "vscode.diff",
-        left,
-        right,
-        `${basename(comparison.afterPath)} (${label})`,
-        { preview: context.preview },
-      );
-      this.registerDiffSession(
+      await this.openNativeDiff(
         repository,
         comparison.beforePath,
         comparison.afterPath,
         left,
         right,
+        `${basename(comparison.afterPath)} (${label})`,
+        context.preview,
       );
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -1561,7 +1700,11 @@ export class HistoryViewProvider
     repository: string,
     comparison: FileComparison,
     label: string,
-    context: { preview: boolean; isCurrent: () => boolean },
+    context: {
+      preview: boolean;
+      isCurrent: () => boolean;
+      signal: AbortSignal;
+    },
   ): Promise<void> {
     try {
       const [beforeSize, afterSize] = await Promise.all([
@@ -1569,11 +1712,13 @@ export class HistoryViewProvider
           repository,
           comparison.beforeRef,
           comparison.beforePath,
+          context.signal,
         ),
         this.git.blobSize(
           repository,
           comparison.afterRef,
           comparison.afterPath,
+          context.signal,
         ),
       ]);
       if (!context.isCurrent()) {
@@ -1583,41 +1728,41 @@ export class HistoryViewProvider
         comparison.beforePath,
         `${label}-base`,
         beforeSize,
-        () =>
+        (resourceSignal) =>
           this.git.readBlob(
             repository,
             comparison.beforeRef,
             comparison.beforePath,
             beforeSize,
+            resourceSignal,
           ),
       );
       const right = this.imageProvider.add(
         comparison.afterPath,
         label,
         afterSize,
-        () =>
+        (resourceSignal) =>
           this.git.readBlob(
             repository,
             comparison.afterRef,
             comparison.afterPath,
             afterSize,
+            resourceSignal,
           ),
       );
-      await vscode.commands.executeCommand(
-        "vscode.diff",
-        left,
-        right,
-        `${basename(comparison.afterPath)} (${label})`,
-        { preview: context.preview },
-      );
-      this.registerDiffSession(
+      await this.openNativeDiff(
         repository,
         comparison.beforePath,
         comparison.afterPath,
         left,
         right,
+        `${basename(comparison.afterPath)} (${label})`,
+        context.preview,
       );
     } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
   }
@@ -1665,20 +1810,43 @@ export class HistoryViewProvider
     );
   }
 
-  private registerDiffSession(
+  private async openNativeDiff(
     repository: string,
     beforePath: string,
     afterPath: string,
     original: vscode.Uri,
     modified: vscode.Uri,
-  ): void {
-    this.diffSessions.register({
-      repository,
-      beforePath,
-      afterPath,
-      originalUri: original.toString(),
-      modifiedUri: modified.toString(),
-    });
+    title: string,
+    preview: boolean,
+  ): Promise<void> {
+    try {
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        original,
+        modified,
+        title,
+        { preview },
+      );
+      this.diffSessions.register({
+        repository,
+        beforePath,
+        afterPath,
+        originalUri: original.toString(),
+        modifiedUri: modified.toString(),
+      });
+    } catch (error) {
+      this.releaseDiffResource(original);
+      this.releaseDiffResource(modified);
+      throw error;
+    }
+  }
+
+  private releaseDiffResource(uri: vscode.Uri): void {
+    if (uri.scheme === "git-amida") {
+      this.contentProvider.remove(uri);
+    } else if (uri.scheme === "git-amida-image") {
+      this.imageProvider.remove(uri);
+    }
   }
 
   private unsavedEditorPaths(repository: string): string[] {
@@ -1796,6 +1964,7 @@ export class HistoryViewProvider
     repository: string,
     commitHashes: string[],
     maxTextBlobBytes: number,
+    signal?: AbortSignal,
   ): Promise<SelectionFileState[]> {
     const allChanges: CommitFileChange[] = [];
     for (let index = 0; index < commitHashes.length; index += 4) {
@@ -1809,6 +1978,7 @@ export class HistoryViewProvider
                 repository,
                 commit,
                 maxTextBlobBytes,
+                signal,
               );
         }),
       );
@@ -1821,20 +1991,22 @@ export class HistoryViewProvider
     repository: string,
     commit: Commit,
     maxTextBlobBytes: number,
+    signal?: AbortSignal,
   ): Promise<CommitFileChange[]> {
     const cacheKey = `${commit.hash}:${maxTextBlobBytes}`;
     const cached = this.commitChanges.get(cacheKey);
-    if (cached !== undefined) {
-      return cached;
+    if (cached !== undefined && cached.signal?.aborted !== true) {
+      return cached.request;
     }
     const request = this.git.commitFileChanges(
       repository,
       commit,
       maxTextBlobBytes,
+      signal,
     );
-    this.commitChanges.set(cacheKey, request);
+    this.commitChanges.set(cacheKey, { request, signal });
     void request.catch(() => {
-      if (this.commitChanges.get(cacheKey) === request) {
+      if (this.commitChanges.get(cacheKey)?.request === request) {
         this.commitChanges.delete(cacheKey);
       }
     });
@@ -1875,6 +2047,47 @@ export class HistoryViewProvider
         ? {}
         : { activeTabId: this.activeFileHistoryTabId }),
     });
+  }
+
+  private async showRepositoryState(
+    state: RepositoryStateKind,
+  ): Promise<void> {
+    for (const controller of this.fileHistoryAbortControllers.values()) {
+      controller.abort();
+    }
+    this.fileHistoryAbortControllers.clear();
+    this.repository = undefined;
+    this.headHash = undefined;
+    this.historyFingerprint = undefined;
+    this.historyCursor = undefined;
+    this.historyGraphState = undefined;
+    this.historyRows = [];
+    this.historyHasMore = false;
+    this.historyPageLoading = false;
+    this.workingTree = undefined;
+    this.selection = undefined;
+    this.currentFiles = [];
+    this.commits.clear();
+    this.selectionFiles.clear();
+    this.commitChanges.clear();
+    this.fileHistoryTabs.splice(0);
+    this.activeFileHistoryTabId = undefined;
+    this.navigationState = {};
+    await this.post({ type: "repositoryState", state });
+    await this.postFileHistoryState();
+  }
+
+  private abortPendingRequests(): void {
+    this.historyAbortController?.abort();
+    this.historyPageAbortController?.abort();
+    this.repositoryStateAbortController?.abort();
+    this.workingTreeAbortController?.abort();
+    this.filesAbortController?.abort();
+    this.diffAbortController?.abort();
+    for (const controller of this.fileHistoryAbortControllers.values()) {
+      controller.abort();
+    }
+    this.fileHistoryAbortControllers.clear();
   }
 
   private workspaceFolder(): vscode.WorkspaceFolder | undefined {
@@ -2091,6 +2304,13 @@ function userMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function isCancellation(error: unknown): boolean {
+  return (
+    error instanceof GitCancellationError ||
+    (error instanceof Error && error.name === "AbortError")
+  );
 }
 
 function isPathInside(repository: string, path: string): boolean {

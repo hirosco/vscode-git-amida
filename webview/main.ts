@@ -14,6 +14,7 @@ import type {
 } from "../src/model";
 import type {
   HostToWebviewMessage,
+  RepositoryStateKind,
   WebviewToHostMessage,
 } from "../src/protocol";
 import {
@@ -158,6 +159,9 @@ window.addEventListener("message", (event: MessageEvent<unknown>) => {
       historyPageError = undefined;
       setStatus("Loading history…");
       setEmpty(elements.history, "Loading commits…");
+      break;
+    case "repositoryState":
+      renderRepositoryState(message.state);
       break;
     case "history":
       historyHasMore = message.hasMore;
@@ -2030,6 +2034,30 @@ function setEmpty(
   paragraph.className = error ? "empty-state error" : "empty-state";
   paragraph.textContent = message;
   container.append(paragraph);
+}
+
+function renderRepositoryState(state: RepositoryStateKind): void {
+  const message =
+    state === "noWorkspace"
+      ? "Open a folder to view its Git history."
+      : state === "notRepository"
+        ? "The selected folder is not inside a Git repository."
+        : "This Git repository has no commits yet. Create its first commit, then refresh GitAmida.";
+  historyHasMore = false;
+  historyPageLoading = false;
+  historyPageError = undefined;
+  commits.clear();
+  workingTree = undefined;
+  selection = undefined;
+  currentHead = undefined;
+  currentFiles = [];
+  currentTree = [];
+  selectedFilePath = undefined;
+  elements.selectedCommit.textContent = "No selection";
+  setEmpty(elements.history, message);
+  setEmpty(elements.files, "No changed files.");
+  setEmpty(elements.details, "No commit selected.");
+  setStatus(message);
 }
 
 function setEmptyWithRetry(container: HTMLElement, message: string): void {
