@@ -85,6 +85,30 @@ node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo
 
 The generator uses only Node.js standard APIs and the Git CLI. It creates the main demo repository, a local submodule source, a branch-backed review worktree, and a detached agent-style worktree, and refuses to overwrite any existing target. After building GitAmida, run `node scripts/validate-demo-repository.mjs /absolute/path/to/git-amida-demo` to verify the fixtures through the production Git adapter. The generated repository README identifies screenshot-friendly commits; its validation guide covers graph, File History, image, binary, oversized-file, worktree, and safe-mutation scenarios.
 
+## AI parallel-worktree repository
+
+Model a plausible AI-assisted development session separately from both the normal screenshot repository and the pathological graph stress repository:
+
+```sh
+node scripts/create-ai-parallel-repository.mjs /absolute/path/to/git-amida-ai-parallel-demo
+npm run build
+node scripts/validate-ai-parallel-repository.mjs /absolute/path/to/git-amida-ai-parallel-demo
+```
+
+The generated repository retains six branch-backed agent worktrees and two detached agent worktrees, each with one to three focused commits. Its older history also contains four short agent tasks that were merged and whose branches were deleted. The result models a brief fan-out around active AI work without treating 24 sustained lanes as normal. The linked worktrees live under the sibling `<target>-agents` directory; the generator refuses to overwrite either generated location.
+
+## Dense graph stress repository
+
+Keep pathological graph-density checks separate from the screenshot-friendly comprehensive demo:
+
+```sh
+node scripts/create-graph-stress-repository.mjs /absolute/path/to/git-amida-graph-stress-demo
+npm run build
+node scripts/validate-graph-stress-repository.mjs /absolute/path/to/git-amida-graph-stress-demo
+```
+
+The generated repository progresses through 4, 8, 12, 16, and 24 simultaneous lanes, then keeps all 24 active across a long main-branch corridor before converging them at one shared root. Use it to inspect bounded graph width, compressed lane spacing, repeated theme colors, scrolling, selection, and narrow-Panel alignment without making the normal demo permanently dense.
+
 ## Product principles
 
 - **Repository history first**: Keep the repository-wide log as the stable center of navigation

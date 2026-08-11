@@ -19,6 +19,8 @@ This checkpoint is complete when users can open an exact working-tree file or co
 
 ## 2. Daily-use commit graph validation
 
+- Inspect the separate AI parallel-worktree fixture in Cursor and VS Code to decide whether the bounded graph column remains adequate for a realistic short-lived fan-out from six branch-backed and two detached agent worktrees
+- Generate the separate dense graph fixture with `scripts/create-graph-stress-repository.mjs`, validate it through the production Git adapter, and inspect the 4-, 8-, 12-, 16-, and 24-lane regions without adding pathological refs to the normal screenshot repository
 - Observe dense branch and merge histories during normal repository work
 - Tune line thickness, node size, lane spacing, or graph-column width only when a concrete readability problem appears
 - Verify all five SCM graph theme colors in light and high-contrast themes
