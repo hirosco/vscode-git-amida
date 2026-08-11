@@ -28,6 +28,11 @@ const execFileAsync = promisify(execFile);
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 const RECORD_MARKER = "\x1e";
 const MAX_BUFFER = 16 * 1024 * 1024;
+const METADATA_BUFFER = 4 * 1024 * 1024;
+const CHANGED_FILES_BUFFER = 32 * 1024 * 1024;
+const FILE_HISTORY_BUFFER = 32 * 1024 * 1024;
+const DEFAULT_TIMEOUT_MS = 15_000;
+const FILE_HISTORY_TIMEOUT_MS = 30_000;
 const HISTORY_REFS_FORMAT =
   `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
   "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00%(symref)%00";
@@ -81,6 +86,20 @@ interface WorkingFileInfo {
   binary: boolean;
 }
 
+interface GitRunOptions {
+  operation: string;
+  maxBuffer?: number;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface GitDiagnosticEvent {
+  operation: string;
+  status: "completed" | "cancelled" | "failed";
+  durationMs: number;
+  message?: string;
+}
+
 export class GitError extends Error {
   public constructor(
     message: string,
@@ -99,15 +118,63 @@ export class HistoryChangedError extends GitError {
   }
 }
 
+export class GitCancellationError extends GitError {
+  public constructor(operation: string) {
+    super(`${operation} was cancelled.`);
+    this.name = "GitCancellationError";
+  }
+}
+
+export class EmptyRepositoryError extends GitError {
+  public constructor() {
+    super("This Git repository has no commits yet.");
+    this.name = "EmptyRepositoryError";
+  }
+}
+
+export class NotGitRepositoryError extends GitError {
+  public constructor() {
+    super("The selected folder is not inside a Git repository.");
+    this.name = "NotGitRepositoryError";
+  }
+}
+
 export class GitClient {
-  public async resolveRepository(candidate: string): Promise<string> {
-    const output = await this.run(candidate, ["rev-parse", "--show-toplevel"]);
-    return output.toString("utf8").trim();
+  public constructor(
+    private readonly reportDiagnostic?: (event: GitDiagnosticEvent) => void,
+  ) {}
+
+  public async resolveRepository(
+    candidate: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    try {
+      const output = await this.run(
+        candidate,
+        ["rev-parse", "--show-toplevel"],
+        {
+          operation: "Repository discovery",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      );
+      return output.toString("utf8").trim();
+    } catch (error) {
+      if (
+        error instanceof GitError &&
+        !(error instanceof GitCancellationError) &&
+        /not a git repository/i.test(error.stderr)
+      ) {
+        throw new NotGitRepositoryError();
+      }
+      throw error;
+    }
   }
 
   public async loadHistory(
     candidate: string,
     pageSize = HISTORY_PAGE_SIZE,
+    signal?: AbortSignal,
   ): Promise<
     HistoryResult & {
       historyFingerprint: string;
@@ -116,30 +183,64 @@ export class GitClient {
     }
   > {
     validatePageSize(pageSize);
-    const root = await this.resolveRepository(candidate);
-    const worktreesOutput = await this.run(root, [
-      "worktree",
-      "list",
-      "--porcelain",
-      "-z",
-    ]);
+    const root = await this.resolveRepository(candidate, signal);
+    const headResult = await this.tryRun(
+      root,
+      ["rev-parse", "--verify", "--quiet", "HEAD"],
+      {
+        operation: "HEAD resolution",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    if (!headResult.ok) {
+      throw new EmptyRepositoryError();
+    }
+    const worktreesOutput = await this.run(
+      root,
+      ["worktree", "list", "--porcelain", "-z"],
+      {
+        operation: "Worktree discovery",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
     const worktrees = activeWorktrees(worktreesOutput);
     const worktreeHeads = uniqueWorktreeHeads(worktrees);
     const worktreesByCommit = linkedWorktreesByCommit(worktrees, root);
-    const [headOutput, branchResult, logOutput, refsOutput] = await Promise.all([
-      this.run(root, ["rev-parse", "HEAD"]),
-      this.tryRun(root, ["symbolic-ref", "--quiet", "--short", "HEAD"]),
-      this.run(root, historyLogArgs(0, pageSize, worktreeHeads)),
-      this.run(root, [
-        "for-each-ref",
-        `--format=${HISTORY_REFS_FORMAT}`,
-        "refs/heads",
-        "refs/remotes",
-        "refs/tags",
-      ]),
+    const [branchResult, logOutput, refsOutput] = await Promise.all([
+      this.tryRun(
+        root,
+        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        {
+          operation: "Branch resolution",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
+      this.run(root, historyLogArgs(0, pageSize, worktreeHeads), {
+        operation: "Repository history",
+        maxBuffer: MAX_BUFFER,
+        signal,
+      }),
+      this.run(
+        root,
+        [
+          "for-each-ref",
+          `--format=${HISTORY_REFS_FORMAT}`,
+          "refs/heads",
+          "refs/remotes",
+          "refs/tags",
+        ],
+        {
+          operation: "Repository refs",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
     ]);
 
-    const head = headOutput.toString("utf8").trim();
+    const head = headResult.output.toString("utf8").trim();
     const branch = branchResult.ok
       ? branchResult.output.toString("utf8").trim()
       : `detached at ${head}`;
@@ -191,21 +292,29 @@ export class GitClient {
 
   public async loadNextHistoryPage(
     cursor: HistoryCursor,
+    signal?: AbortSignal,
   ): Promise<HistoryPage> {
     validatePageSize(cursor.pageSize);
-    const fingerprintBefore = await this.historyFingerprint(cursor.repository);
+    const fingerprintBefore = await this.historyFingerprint(
+      cursor.repository,
+      signal,
+    );
     if (fingerprintBefore !== cursor.historyFingerprint) {
       throw new HistoryChangedError();
     }
     const output = await this.run(
       cursor.repository,
-      historyLogArgs(
-        cursor.offset,
-        cursor.pageSize,
-        cursor.worktreeHeads,
-      ),
+      historyLogArgs(cursor.offset, cursor.pageSize, cursor.worktreeHeads),
+      {
+        operation: "Repository history page",
+        maxBuffer: MAX_BUFFER,
+        signal,
+      },
     );
-    const fingerprintAfter = await this.historyFingerprint(cursor.repository);
+    const fingerprintAfter = await this.historyFingerprint(
+      cursor.repository,
+      signal,
+    );
     if (fingerprintAfter !== cursor.historyFingerprint) {
       throw new HistoryChangedError();
     }
@@ -226,24 +335,46 @@ export class GitClient {
     };
   }
 
-  public async historyFingerprint(repository: string): Promise<string> {
+  public async historyFingerprint(
+    repository: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
     const [headOutput, branchResult, refsOutput, worktreesOutput] =
       await Promise.all([
-      this.run(repository, ["rev-parse", "HEAD"]),
-      this.tryRun(repository, [
-        "symbolic-ref",
-        "--quiet",
-        "--short",
-        "HEAD",
-      ]),
-      this.run(repository, [
-        "for-each-ref",
-        `--format=${HISTORY_REFS_FORMAT}`,
-        "refs/heads",
-        "refs/remotes",
-        "refs/tags",
-      ]),
-      this.run(repository, ["worktree", "list", "--porcelain", "-z"]),
+      this.run(repository, ["rev-parse", "HEAD"], {
+        operation: "HEAD fingerprint",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      }),
+      this.tryRun(
+        repository,
+        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        {
+          operation: "Branch fingerprint",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
+      this.run(
+        repository,
+        [
+          "for-each-ref",
+          `--format=${HISTORY_REFS_FORMAT}`,
+          "refs/heads",
+          "refs/remotes",
+          "refs/tags",
+        ],
+        {
+          operation: "Refs fingerprint",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
+      this.run(repository, ["worktree", "list", "--porcelain", "-z"], {
+        operation: "Worktree fingerprint",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      }),
     ]);
     return createHistoryFingerprint(
       headOutput.toString("utf8").trim(),
@@ -259,12 +390,14 @@ export class GitClient {
     repository: string,
     commit: Commit,
     maxTextBlobBytes = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
   ): Promise<ChangedFile[]> {
     return this.changedFilesBetween(
       repository,
       commit.parents[0],
       commit.hash,
       maxTextBlobBytes,
+      signal,
     );
   }
 
@@ -272,36 +405,61 @@ export class GitClient {
     repository: string,
     headHash: string,
     maxTextBlobBytes = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
   ): Promise<WorkingTreeState> {
     const [rawOutput, numStatOutput, untrackedOutput] = await Promise.all([
-      this.run(repository, [
-        "diff",
-        "--raw",
-        "--no-abbrev",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-z",
-        "-M",
-        headHash,
-        "--",
-      ]),
-      this.run(repository, [
-        "diff",
-        "--numstat",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-z",
-        "-M",
-        headHash,
-        "--",
-      ]),
-      this.run(repository, [
-        "ls-files",
-        "--others",
-        "--exclude-standard",
-        "-z",
-        "--",
-      ]),
+      this.run(
+        repository,
+        [
+          "diff",
+          "--raw",
+          "--no-abbrev",
+          "--no-ext-diff",
+          "--no-textconv",
+          "-z",
+          "-M",
+          headHash,
+          "--",
+        ],
+        {
+          operation: "Working-tree paths",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
+      this.run(
+        repository,
+        [
+          "diff",
+          "--numstat",
+          "--no-ext-diff",
+          "--no-textconv",
+          "-z",
+          "-M",
+          headHash,
+          "--",
+        ],
+        {
+          operation: "Working-tree statistics",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
+      this.run(
+        repository,
+        [
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "-z",
+          "--",
+        ],
+        {
+          operation: "Untracked-file discovery",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
     ]);
     const trackedEntries = parseRawDiff(rawOutput);
     const untrackedPaths = parseNulPaths(untrackedOutput);
@@ -320,6 +478,7 @@ export class GitClient {
       this.loadObjectInfo(
         repository,
         entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+        signal,
       ),
       loadWorkingFileInfo(repository, entries, new Set(untrackedPaths)),
     ]);
@@ -349,12 +508,14 @@ export class GitClient {
     base: string | undefined,
     tip: string,
     maxTextBlobBytes = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
   ): Promise<ChangedFile[]> {
     const entries = await this.changedEntriesBetween(
       repository,
       base,
       tip,
       maxTextBlobBytes,
+      signal,
     );
     return entries.map(changedFileFromEntry);
   }
@@ -363,6 +524,7 @@ export class GitClient {
     repository: string,
     commit: Commit,
     maxTextBlobBytes = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
   ): Promise<CommitFileChange[]> {
     const parentHash = commit.parents[0];
     const entries = await this.changedEntriesBetween(
@@ -370,6 +532,7 @@ export class GitClient {
       parentHash,
       commit.hash,
       maxTextBlobBytes,
+      signal,
     );
     return entries.map((entry) => ({
       ...changedFileFromEntry(entry),
@@ -383,22 +546,32 @@ export class GitClient {
   public async fileHistory(
     repository: string,
     path: string,
+    signal?: AbortSignal,
   ): Promise<FileRevision[]> {
-    const output = await this.run(repository, [
-      "log",
-      "--all",
-      "--follow",
-      "--find-renames",
-      "--date-order",
-      "--color=never",
-      "--no-decorate",
-      "--diff-merges=first-parent",
-      `--format=${COMMIT_LOG_FORMAT}`,
-      "--name-status",
-      "-z",
-      "--",
-      path,
-    ]);
+    const output = await this.run(
+      repository,
+      [
+        "log",
+        "--all",
+        "--follow",
+        "--find-renames",
+        "--date-order",
+        "--color=never",
+        "--no-decorate",
+        "--diff-merges=first-parent",
+        `--format=${COMMIT_LOG_FORMAT}`,
+        "--name-status",
+        "-z",
+        "--",
+        path,
+      ],
+      {
+        operation: "File history",
+        maxBuffer: FILE_HISTORY_BUFFER,
+        timeoutMs: FILE_HISTORY_TIMEOUT_MS,
+        signal,
+      },
+    );
     return parseFileHistory(output);
   }
 
@@ -407,38 +580,56 @@ export class GitClient {
     base: string | undefined,
     tip: string,
     maxTextBlobBytes: number,
+    signal?: AbortSignal,
   ): Promise<RawDiffEntry[]> {
     const baseRef = base ?? EMPTY_TREE;
     const [rawOutput, numStatOutput] = await Promise.all([
-      this.run(repository, [
-        "diff",
-        "--raw",
-        "--no-abbrev",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-z",
-        "-M",
-        baseRef,
-        tip,
-        "--",
-      ]),
-      this.run(repository, [
-        "diff",
-        "--numstat",
-        "--no-ext-diff",
-        "--no-textconv",
-        "-z",
-        "-M",
-        baseRef,
-        tip,
-        "--",
-      ]),
+      this.run(
+        repository,
+        [
+          "diff",
+          "--raw",
+          "--no-abbrev",
+          "--no-ext-diff",
+          "--no-textconv",
+          "-z",
+          "-M",
+          baseRef,
+          tip,
+          "--",
+        ],
+        {
+          operation: "Changed-file paths",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
+      this.run(
+        repository,
+        [
+          "diff",
+          "--numstat",
+          "--no-ext-diff",
+          "--no-textconv",
+          "-z",
+          "-M",
+          baseRef,
+          tip,
+          "--",
+        ],
+        {
+          operation: "Changed-file statistics",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
     ]);
     const entries = parseRawDiff(rawOutput);
     const binaryPaths = parseBinaryPaths(numStatOutput);
     const objectInfo = await this.loadObjectInfo(
       repository,
       entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      signal,
     );
 
     return entries.map((entry) => ({
@@ -457,15 +648,22 @@ export class GitClient {
     ref: string | undefined,
     path: string,
     knownSize?: number,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
     if (ref === undefined) {
       return Buffer.alloc(0);
     }
-    const size = knownSize ?? (await this.blobSize(repository, ref, path));
+    const size =
+      knownSize ?? (await this.blobSize(repository, ref, path, signal));
     return this.run(
       repository,
       ["cat-file", "blob", `${ref}:${path}`],
-      Math.max(MAX_BUFFER, size),
+      {
+        operation: "Blob read",
+        maxBuffer: Math.max(MAX_BUFFER, size + 1),
+        timeoutMs: FILE_HISTORY_TIMEOUT_MS,
+        signal,
+      },
     );
   }
 
@@ -473,15 +671,20 @@ export class GitClient {
     repository: string,
     ref: string | undefined,
     path: string,
+    signal?: AbortSignal,
   ): Promise<number> {
     if (ref === undefined) {
       return 0;
     }
-    const output = await this.run(repository, [
-      "cat-file",
-      "-s",
-      `${ref}:${path}`,
-    ]);
+    const output = await this.run(
+      repository,
+      ["cat-file", "-s", `${ref}:${path}`],
+      {
+        operation: "Blob size",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
     const size = Number(output.toString("utf8").trim());
     if (!Number.isSafeInteger(size) || size < 0) {
       throw new GitError(`Git returned an invalid blob size for ${path}.`);
@@ -493,9 +696,12 @@ export class GitClient {
     repository: string,
     path: string,
     maxBytes = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
+    throwIfAborted(signal, "Working-tree file read");
     const absolutePath = resolveWorkingPath(repository, path);
     const stats = await lstat(absolutePath);
+    throwIfAborted(signal, "Working-tree file read");
     if (stats.isSymbolicLink()) {
       return Buffer.from(await readlink(absolutePath));
     }
@@ -507,24 +713,32 @@ export class GitClient {
         `Working tree file exceeds the current text-diff limit: ${path}`,
       );
     }
-    return readFile(absolutePath);
+    return signal === undefined
+      ? readFile(absolutePath)
+      : readFile(absolutePath, { signal });
   }
 
   public async readWorkingImage(
     repository: string,
     path: string,
+    signal?: AbortSignal,
   ): Promise<Buffer> {
+    throwIfAborted(signal, "Working-tree image read");
     const absolutePath = resolveWorkingPath(repository, path);
     const stats = await lstat(absolutePath);
+    throwIfAborted(signal, "Working-tree image read");
     if (!stats.isFile()) {
       throw new GitError(`Working tree path is not a regular file: ${path}`);
     }
-    return readFile(absolutePath);
+    return signal === undefined
+      ? readFile(absolutePath)
+      : readFile(absolutePath, { signal });
   }
 
   private async loadObjectInfo(
     repository: string,
     objectHashes: string[],
+    signal?: AbortSignal,
   ): Promise<Map<string, ObjectInfo>> {
     const hashes = [...new Set(objectHashes.filter(isObjectHash))];
     if (hashes.length === 0) {
@@ -534,6 +748,11 @@ export class GitClient {
       repository,
       ["cat-file", "--batch-check=%(objectname) %(objecttype) %(objectsize)"],
       `${hashes.join("\n")}\n`,
+      {
+        operation: "Object metadata",
+        maxBuffer: CHANGED_FILES_BUFFER,
+        signal,
+      },
     );
     return parseObjectInfo(output);
   }
@@ -541,11 +760,15 @@ export class GitClient {
   private async tryRun(
     directory: string,
     args: string[],
+    options: GitRunOptions = { operation: "Git query" },
   ): Promise<{ ok: true; output: Buffer } | { ok: false }> {
     try {
-      return { ok: true, output: await this.run(directory, args) };
+      return { ok: true, output: await this.run(directory, args, options) };
     } catch (error) {
-      if (error instanceof GitError) {
+      if (
+        error instanceof GitError &&
+        !(error instanceof GitCancellationError)
+      ) {
         return { ok: false };
       }
       throw error;
@@ -555,30 +778,38 @@ export class GitClient {
   private async run(
     directory: string,
     args: string[],
-    maxBuffer = MAX_BUFFER,
+    options: GitRunOptions = { operation: "Git query" },
   ): Promise<Buffer> {
     const gitArgs = commandArgs(directory, args);
+    const maxBuffer = options.maxBuffer ?? MAX_BUFFER;
+    const timeout = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const startedAt = Date.now();
 
     try {
+      throwIfAborted(options.signal, options.operation);
       const { stdout } = await execFileAsync("git", gitArgs, {
         encoding: "buffer",
         maxBuffer,
-        timeout: 15_000,
+        timeout,
+        signal: options.signal,
         env: commandEnvironment(),
+      });
+      this.diagnostic({
+        operation: options.operation,
+        status: "completed",
+        durationMs: Date.now() - startedAt,
       });
       return stdout;
     } catch (error) {
-      const details = error as NodeJS.ErrnoException & {
-        code?: string | number;
-        stderr?: Buffer | string;
-      };
-      const stderr = Buffer.isBuffer(details.stderr)
-        ? details.stderr.toString("utf8").trim()
-        : String(details.stderr ?? "").trim();
-      const exitCode =
-        typeof details.code === "number" ? details.code : undefined;
-      const reason = stderr || details.message || "Git command failed.";
-      throw new GitError(reason, stderr, exitCode);
+      const failure = gitRunError(error, undefined, options);
+      this.diagnostic({
+        operation: options.operation,
+        status:
+          failure instanceof GitCancellationError ? "cancelled" : "failed",
+        durationMs: Date.now() - startedAt,
+        message: failure.message,
+      });
+      throw failure;
     }
   }
 
@@ -586,40 +817,132 @@ export class GitClient {
     directory: string,
     args: string[],
     input: string,
+    options: GitRunOptions = { operation: "Git query" },
   ): Promise<Buffer> {
     return new Promise((resolve, reject) => {
-      const child = execFile(
-        "git",
-        commandArgs(directory, args),
-        {
-          encoding: "buffer",
-          maxBuffer: MAX_BUFFER,
-          timeout: 15_000,
-          env: commandEnvironment(),
-        },
-        (error, stdout, stderr) => {
-          if (error === null) {
-            resolve(stdout);
-            return;
-          }
-          const details = error as NodeJS.ErrnoException & {
-            code?: string | number;
-          };
-          const stderrText = Buffer.isBuffer(stderr)
-            ? stderr.toString("utf8").trim()
-            : String(stderr ?? "").trim();
-          const exitCode =
-            typeof details.code === "number" ? details.code : undefined;
-          const reason = stderrText || details.message || "Git command failed.";
-          reject(new GitError(reason, stderrText, exitCode));
-        },
-      );
-      child.stdin?.once("error", (error) => {
-        reject(new GitError(error.message));
-      });
-      child.stdin?.end(input);
+      const startedAt = Date.now();
+      let settled = false;
+      const finish = (error: unknown, stdout?: Buffer, stderr?: Buffer): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (error === undefined && stdout !== undefined) {
+          this.diagnostic({
+            operation: options.operation,
+            status: "completed",
+            durationMs: Date.now() - startedAt,
+          });
+          resolve(stdout);
+          return;
+        }
+        const failure = gitRunError(error, stderr, options);
+        this.diagnostic({
+          operation: options.operation,
+          status:
+            failure instanceof GitCancellationError ? "cancelled" : "failed",
+          durationMs: Date.now() - startedAt,
+          message: failure.message,
+        });
+        reject(failure);
+      };
+
+      try {
+        throwIfAborted(options.signal, options.operation);
+        const child = execFile(
+          "git",
+          commandArgs(directory, args),
+          {
+            encoding: "buffer",
+            maxBuffer: options.maxBuffer ?? MAX_BUFFER,
+            timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+            signal: options.signal,
+            env: commandEnvironment(),
+          },
+          (error, stdout, stderr) => {
+            finish(error ?? undefined, stdout, stderr);
+          },
+        );
+        child.stdin?.once("error", (error) => {
+          finish(error);
+        });
+        child.stdin?.end(input);
+      } catch (error) {
+        finish(error);
+      }
     });
   }
+
+  private diagnostic(event: GitDiagnosticEvent): void {
+    try {
+      this.reportDiagnostic?.(event);
+    } catch {
+      // Diagnostics must never change Git operation behavior.
+    }
+  }
+}
+
+function gitRunError(
+  error: unknown,
+  callbackStderr: Buffer | string | undefined,
+  options: GitRunOptions,
+): GitError {
+  const details = error as NodeJS.ErrnoException & {
+    code?: string | number;
+    killed?: boolean;
+    signal?: string;
+    stderr?: Buffer | string;
+  };
+  if (
+    options.signal?.aborted === true ||
+    details.name === "AbortError" ||
+    details.code === "ABORT_ERR"
+  ) {
+    return new GitCancellationError(options.operation);
+  }
+
+  const stderrValue = callbackStderr ?? details.stderr;
+  const stderr = Buffer.isBuffer(stderrValue)
+    ? stderrValue.toString("utf8").trim()
+    : String(stderrValue ?? "").trim();
+  const exitCode = typeof details.code === "number" ? details.code : undefined;
+  if (details.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+    return new GitError(
+      `${options.operation} exceeded its ${formatMiB(options.maxBuffer ?? MAX_BUFFER)} output limit.`,
+      stderr,
+      exitCode,
+    );
+  }
+  if (details.killed === true && details.signal !== undefined) {
+    const seconds = Math.round(
+      (options.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000,
+    );
+    return new GitError(
+      `${options.operation} exceeded its ${seconds}-second time limit.`,
+      stderr,
+      exitCode,
+    );
+  }
+
+  const reason = stderr || details.message || "Git command failed.";
+  return new GitError(
+    `${options.operation} failed: ${reason}`,
+    stderr,
+    exitCode,
+  );
+}
+
+function throwIfAborted(
+  signal: AbortSignal | undefined,
+  operation: string,
+): void {
+  if (signal?.aborted === true) {
+    throw new GitCancellationError(operation);
+  }
+}
+
+function formatMiB(bytes: number): string {
+  return `${Math.ceil(bytes / (1024 * 1024))} MiB`;
 }
 
 function commandArgs(directory: string, args: string[]): string[] {
@@ -642,6 +965,8 @@ function commandEnvironment(): NodeJS.ProcessEnv {
     ...process.env,
     GIT_PAGER: "cat",
     GIT_EXTERNAL_DIFF: "",
+    LANG: "C",
+    LC_ALL: "C",
   };
 }
 

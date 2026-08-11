@@ -15,8 +15,11 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 import {
+  EmptyRepositoryError,
   GitClient,
+  GitCancellationError,
   HistoryChangedError,
+  NotGitRepositoryError,
   parseBinaryPaths,
   parseFileHistory,
   parseHistory,
@@ -33,6 +36,41 @@ import {
 import { buildSelectionFiles } from "../src/selectionFiles";
 
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+test("GitClient distinguishes empty and non-Git folders", async (context) => {
+  const emptyRepository = mkdtempSync(join(tmpdir(), "git-amida-empty-test-"));
+  const plainFolder = mkdtempSync(join(tmpdir(), "git-amida-plain-test-"));
+  context.after(() => {
+    rmSync(emptyRepository, { recursive: true, force: true });
+    rmSync(plainFolder, { recursive: true, force: true });
+  });
+  git(emptyRepository, "init", "-q");
+
+  const client = new GitClient();
+  await assert.rejects(
+    client.loadHistory(emptyRepository),
+    EmptyRepositoryError,
+  );
+  await assert.rejects(
+    client.resolveRepository(plainFolder),
+    NotGitRepositoryError,
+  );
+});
+
+test("GitClient reports an aborted Git request as cancellation", async () => {
+  const diagnostics: string[] = [];
+  const client = new GitClient((event) => {
+    diagnostics.push(`${event.operation}:${event.status}`);
+  });
+  const controller = new AbortController();
+  controller.abort();
+
+  await assert.rejects(
+    client.resolveRepository(process.cwd(), controller.signal),
+    GitCancellationError,
+  );
+  assert.deepEqual(diagnostics, ["Repository discovery:cancelled"]);
+});
 
 test("parseHistory reads commit records without terminal graph text", () => {
   const output = [

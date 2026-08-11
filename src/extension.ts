@@ -13,7 +13,18 @@ import { observeGitRepositories } from "./gitEvents";
 import { HistoryViewProvider } from "./panel";
 
 export function activate(context: vscode.ExtensionContext): void {
-  const git = new GitClient();
+  const diagnosticOutput = vscode.window.createOutputChannel("GitAmida");
+  const git = new GitClient((event) => {
+    if (
+      (event.status === "completed" && event.durationMs < 1_000) ||
+      (event.status === "cancelled" && event.durationMs < 250)
+    ) {
+      return;
+    }
+    diagnosticOutput.appendLine(
+      `${event.operation}: ${event.status} in ${event.durationMs} ms${event.message === undefined ? "" : ` — ${event.message}`}`,
+    );
+  });
   const branchMutations = new BranchMutationService();
   const contentProvider = new GitContentProvider();
   const imageProvider = new GitImageFileSystemProvider();
@@ -28,7 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
   const unregisterDiffSessionListener =
-    diffSessions.onDidRegister(updateActiveDiffContext);
+    diffSessions.onDidChange(updateActiveDiffContext);
   const historyProvider = new HistoryViewProvider(
     context.extensionUri,
     git,
@@ -43,6 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    diagnosticOutput,
     vscode.workspace.registerTextDocumentContentProvider(
       "git-amida",
       contentProvider,
@@ -188,10 +200,17 @@ export function activate(context: vscode.ExtensionContext): void {
         historyProvider.scheduleRefresh("history");
       }
     }),
-    vscode.window.tabGroups.onDidChangeTabs(updateActiveDiffContext),
+    vscode.window.tabGroups.onDidChangeTabs((event) => {
+      for (const tab of event.closed) {
+        releaseDiffTab(tab, diffSessions, contentProvider, imageProvider);
+      }
+      updateActiveDiffContext();
+    }),
     vscode.window.tabGroups.onDidChangeTabGroups(updateActiveDiffContext),
     new vscode.Disposable(unregisterDiffSessionListener),
+    contentProvider,
     imageProvider,
+    diffSessions,
     externalDifftool,
     historyProvider,
   );
@@ -271,6 +290,36 @@ function activeDiffSession(
   return session === undefined
     ? undefined
     : { original: input.original, modified: input.modified, session };
+}
+
+function releaseDiffTab(
+  tab: vscode.Tab,
+  diffSessions: NativeDiffSessionRegistry,
+  contentProvider: GitContentProvider,
+  imageProvider: GitImageFileSystemProvider,
+): void {
+  const input = tab.input;
+  const session =
+    input instanceof vscode.TabInputTextDiff
+      ? diffSessions.remove(
+          input.original.toString(),
+          input.modified.toString(),
+        )
+      : input instanceof vscode.TabInputCustom &&
+          input.viewType === "imagePreview.previewEditor"
+        ? diffSessions.removeByUri(input.uri.toString())
+        : undefined;
+  if (session === undefined) {
+    return;
+  }
+  for (const value of [session.originalUri, session.modifiedUri]) {
+    const uri = vscode.Uri.parse(value);
+    if (uri.scheme === "git-amida") {
+      contentProvider.remove(uri);
+    } else if (uri.scheme === "git-amida-image") {
+      imageProvider.remove(uri);
+    }
+  }
 }
 
 async function readDiffContent(uri: vscode.Uri): Promise<Uint8Array> {

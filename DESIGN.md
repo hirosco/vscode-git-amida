@@ -25,6 +25,8 @@ Detailed text and supported image comparisons open in the editor's native diff v
 
 Do not spend permanent Webview height on repository metadata that is already implied by a single-root workspace and repeated at HEAD. Use the editor-native View title for commands. When multi-root selection is implemented, add a compact repository chooser only when more than one repository is available.
 
+Treat a detached HEAD as a normal readable repository state. When no workspace is open, the selected folder is not in a Git repository, or the repository has no commits yet, replace Git failure output with a distinct non-error empty state that explains what is missing. Keep manual Refresh available so an empty repository can become usable immediately after its first commit.
+
 ## Repository History
 
 ### Commit list
@@ -171,6 +173,8 @@ The virtual-document path follows the current VS Code or Cursor `diffEditor.maxF
 
 Each native diff is registered with its repository, before and after paths, and both opaque editor URIs when it opens. The editor-title external-tool action reads those exact displayed endpoints instead of consulting the current Repository History selection again, so later navigation cannot change the meaning of an already open Range or Selection diff. Cursor's stable Tab API can report no active tab for a native image diff, so each Changed-files row also provides a context-menu fallback. That action validates the path against the Extension Host's currently loaded files and resolves only that file's current single-commit, Range, Selection, or saved working-tree endpoints; it never launches an aggregate or trusts endpoint refs from the Webview. GitAmida writes the two endpoint copies into a private temporary directory and invokes `git difftool --no-index` with an argument array only after the user explicitly requests it. This preserves additions, deletions, renames, working-tree snapshots, image bytes, and unrelated Selection endpoints without asking the external tool to reproduce GitAmida's selection semantics. The configured tool may outlive the launching process, so endpoint copies remain until the Extension Host session ends. Missing or failed tool configuration leaves the native diff open as the fallback.
 
+Virtual text, image, and native-diff registrations follow their editor tab lifetime. Replacing a preview or closing a pinned tab releases both endpoint resources and cancels any image blob read still owned by that tab. A pinned diff retains its resources until its own tab closes, independent of later Repository History or File History navigation.
+
 ## File revision restoration
 
 Restoration is a separate working-tree mutation boundary, not an export or an extension of the native diff editor. A historical Changed-files row exposes each endpoint that actually contains a file. The Extension Host resolves that endpoint from its current trusted comparison state, shows its commit and path together with the row's current destination path, and requires a modal confirmation. An absent endpoint is not an instruction to delete anything.
@@ -272,6 +276,8 @@ Invoke the locally installed Git CLI from the Extension Host instead of parsing 
 - Use NUL-delimited output for paths
 - Apply operation-specific history, output, and time limits
 - Treat Git output and Webview messages as untrusted input
+
+Pass cancellation from Repository History refreshes, paging, selection changes, File History tabs, and native-diff resource lifetimes into the child Git process. A superseded request is normal control flow: stop its process and do not replace the current UI with an error. Record failed operations, cancellations that take noticeable time, and slow successful operations in the local GitAmida Output channel without sending telemetry or repository data elsewhere. User-facing limit failures identify the operation and whether its time or output bound was exceeded.
 
 Load repository history in 100-commit pages, requesting one extra record to determine whether more history exists without a separate count query. Use local branches, remote-tracking branches, tags, and every valid worktree HEAD as the revision set; duplicate HEADs are harmless and detached worktree commits remain connected to their real ancestry. The trusted Extension Host retains a cursor with the offset, ref and worktree metadata, and repository-history fingerprint together with separate graph boundary state; none of it crosses into the Webview. Recheck HEAD, branch, refs, and registered worktree HEADs before and after each later page so a moving repository cannot create a skipped or duplicated interval. A changed fingerprint discards that page and reloads from the newest history.
 

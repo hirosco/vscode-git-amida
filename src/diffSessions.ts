@@ -18,9 +18,7 @@ export class NativeDiffSessionRegistry {
     );
     this.sessionsByUri.set(session.originalUri, session);
     this.sessionsByUri.set(session.modifiedUri, session);
-    for (const listener of this.listeners) {
-      listener();
-    }
+    this.notify();
   }
 
   public get(
@@ -34,9 +32,51 @@ export class NativeDiffSessionRegistry {
     return this.sessionsByUri.get(uri);
   }
 
-  public onDidRegister(listener: () => void): () => void {
+  public remove(
+    originalUri: string,
+    modifiedUri: string,
+  ): NativeDiffSession | undefined {
+    const session = this.get(originalUri, modifiedUri);
+    if (session !== undefined) {
+      this.removeSession(session);
+    }
+    return session;
+  }
+
+  public removeByUri(uri: string): NativeDiffSession | undefined {
+    const session = this.getByUri(uri);
+    if (session !== undefined) {
+      this.removeSession(session);
+    }
+    return session;
+  }
+
+  public onDidChange(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  }
+
+  public dispose(): void {
+    this.sessions.clear();
+    this.sessionsByUri.clear();
+    this.listeners.clear();
+  }
+
+  private removeSession(session: NativeDiffSession): void {
+    this.sessions.delete(sessionKey(session.originalUri, session.modifiedUri));
+    if (this.sessionsByUri.get(session.originalUri) === session) {
+      this.sessionsByUri.delete(session.originalUri);
+    }
+    if (this.sessionsByUri.get(session.modifiedUri) === session) {
+      this.sessionsByUri.delete(session.modifiedUri);
+    }
+    this.notify();
+  }
+
+  private notify(): void {
+    for (const listener of this.listeners) {
+      listener();
+    }
   }
 }
 

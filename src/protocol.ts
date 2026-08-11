@@ -9,8 +9,14 @@ import type {
   WorkingTreeState,
 } from "./model";
 
+export type RepositoryStateKind =
+  | "noWorkspace"
+  | "notRepository"
+  | "emptyRepository";
+
 export type HostToWebviewMessage =
   | { type: "historyLoading" }
+  | { type: "repositoryState"; state: RepositoryStateKind }
   | (HistoryResult & {
       type: "history";
       selection?: RepositorySelection;

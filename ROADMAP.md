@@ -47,9 +47,6 @@ This checkpoint is complete when users can investigate several files and always 
 ## 5. Repository and history hardening
 
 - Let users choose a repository in multi-root workspaces
-- Present detached HEAD, empty repositories, and non-Git folders as explicit states
-- Cancel stale history and blob requests as selection changes
-- Release obsolete virtual diff content, image resources, and native diff-session registrations when previews are replaced or tabs close, while retaining pinned diff resources for the lifetime of their tabs
 - Verify that repeated preview navigation does not grow retained diff resources and that pinned diffs remain readable until closed
 - Test behavior in both Cursor and VS Code
 
@@ -62,7 +59,7 @@ This checkpoint is complete when users can investigate several files and always 
 
 ## 7. Performance and public distribution
 
-- Add virtualization, operation-specific output limits, cancellation, and diagnostics
+- Add history-row virtualization only if large-repository validation shows that cumulative DOM rendering remains a material cost after paging and request cancellation
 - Verify large repositories, branch-backed and detached worktrees, and long-lived file-history tabs
 - Regenerate the separate synthetic repository with `scripts/create-demo-repository.mjs`, then run end-to-end validation of its complex branches, merges, renames, deletions, binary and image files, long history, local submodule, branch-backed worktree, and detached agent worktree in Cursor and VS Code before distribution
 - Define supported editor versions and platforms
