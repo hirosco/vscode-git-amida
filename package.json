@@ -1,18 +1,39 @@
 {
   "name": "git-amida",
   "displayName": "GitAmida",
-  "description": "Review Git history and open commit diffs without hiding the history panel.",
+  "description": "Navigate repository and file history while opening exact Git changes in native diffs.",
   "icon": "media/git-amida-marketplace.png",
   "version": "0.0.1",
   "private": true,
   "publisher": "hirosco",
-  "license": "UNLICENSED",
+  "license": "SEE LICENSE IN LICENSE",
+  "author": {
+    "name": "Hiroshi Kudo",
+    "url": "https://hirosco.dev"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/hirosco/vscode-git-amida.git"
   },
+  "homepage": "https://github.com/hirosco/vscode-git-amida#readme",
+  "bugs": {
+    "url": "https://github.com/hirosco/vscode-git-amida/issues"
+  },
   "engines": {
     "vscode": "^1.100.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "GitAmida runs the Git executable and can perform explicitly requested repository and file mutations."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "GitAmida requires a local file-system checkout and the Git executable in the Extension Host."
+    }
   },
   "extensionDependencies": [
     "vscode.git"
@@ -21,12 +42,31 @@
     "SCM Providers",
     "Visualization"
   ],
+  "keywords": [
+    "git",
+    "history",
+    "commit",
+    "diff",
+    "file history",
+    "repository",
+    "source control",
+    "worktree",
+    "cursor"
+  ],
+  "galleryBanner": {
+    "color": "#E9BD4D",
+    "theme": "light"
+  },
+  "preview": true,
+  "pricing": "Free",
+  "qna": false,
   "main": "./dist/src/extension.js",
   "files": [
     "dist/src/**/*.js",
     "dist/webview/**/*.js",
     "media/**",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "contributes": {
     "colors": [
@@ -231,7 +271,7 @@
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.webview.json",
     "test": "npm run build && node --test dist/test/*.test.js",
     "package:inspect": "vsce ls --no-dependencies",
-    "package:vsix": "vsce package --no-dependencies --skip-license"
+    "package:vsix": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "24.8.1",
