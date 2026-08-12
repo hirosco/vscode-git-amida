@@ -56,14 +56,15 @@ This checkpoint is complete when users can investigate several files and always 
 
 - Expose the editor's supported side-by-side and inline diff presentation
 - Add explicit whitespace modes and context controls where the VS Code API can represent them reliably
-- Validate that the editor-title action where available and the Changed-files row context action open the same single-file text and image endpoints in the configured Git difftool for single commits, Ranges, Selections, and saved working-tree changes
-- Confirm additions, deletions, renames, missing tool configuration, and launch failures retain an understandable native-diff fallback
+- Validate that the editor-title action where available and the Changed-files row context action open the same single-file text, image, and binary endpoints in the configured Git difftool for single commits, Ranges, Selections, and saved working-tree changes
+- Confirm additions, deletions, renames, unsupported binary formats, missing tool configuration, and launch failures retain an understandable native-diff fallback
 
 ## 7. Performance and public distribution
 
 - Add history-row virtualization only if large-repository validation shows that cumulative DOM rendering remains a material cost after paging and request cancellation
 - Verify large repositories, branch-backed and detached worktrees, and long-lived file-history tabs
 - Regenerate the separate synthetic repository with `scripts/create-demo-repository.mjs`, then run end-to-end validation of its complex branches, merges, renames, deletions, binary and image files, long history, local submodule, branch-backed worktree, and detached agent worktree in Cursor and VS Code before distribution
+- Refresh the `@vscode/vsce` packaging toolchain and its transitive lockfile so the full development dependency audit has no high-severity findings before public distribution
 - Make the GitHub repository public so Marketplace resource and documentation links resolve for users, capture Marketplace screenshots from the validated synthetic repository, and confirm access to the `hirosco` Marketplace publisher before publishing version 0.0.1
 
 Telemetry is not planned. Evaluate early versions through direct use and concrete reports of interaction problems.
