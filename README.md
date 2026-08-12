@@ -44,6 +44,15 @@ GitAmida focuses on understanding history rather than becoming a general-purpose
 
 Whitespace options and multi-root repository selection are planned but not implemented yet.
 
+## Compatibility and requirements
+
+- VS Code 1.100.0 or later, or a compatible Cursor desktop build
+- A file-system workspace with the Git CLI available as `git` in the Extension Host environment
+- A trusted workspace; GitAmida is disabled in Restricted Mode because it invokes Git and exposes explicitly confirmed branch-switching and file-restoration operations
+- Local desktop workspaces on macOS are the currently validated environment
+
+Windows, Linux, and VS Code Remote Development are expected to work with a suitable Git installation but are not yet part of the validated 0.0.x support matrix. Virtual workspaces and VS Code for the Web are not supported. In a multi-root workspace, GitAmida currently uses the active editor's workspace folder, or the first folder when no editor is active; an explicit repository chooser remains planned.
+
 ## Try it in Cursor
 
 Development uses Node.js 24 and npm 11.16 through mise. Extension users do not need to install Node.js because the compiled extension runs in the editor's Extension Host.
@@ -73,7 +82,7 @@ cursor --install-extension git-amida-0.0.1.vsix --force
 
 Use `code --install-extension git-amida-0.0.1.vsix --force` for VS Code when its CLI is available. Reload the editor window after installing or replacing the same local version. Generated `*.vsix` files are local artifacts and remain ignored by Git.
 
-This command deliberately skips a license-file requirement only for local evaluation while the package is marked `UNLICENSED`. Define the public license and use a reviewed publication workflow before distributing GitAmida.
+The generated VSIX includes the project license and the Marketplace README. Review its exact contents with `npm run package:inspect` before installation or publication.
 
 ## Comprehensive validation repository
 
@@ -125,3 +134,13 @@ The generated repository progresses through 4, 8, 12, 16, and 24 simultaneous la
 - [DESIGN.md](./DESIGN.md): Current architecture and reasons behind non-obvious decisions
 - [ROADMAP.md](./ROADMAP.md): Upcoming work and its validation order
 - [AGENTS.md](./AGENTS.md): Development conventions and instructions for AI agents
+
+## Privacy
+
+GitAmida reads repository contents and metadata, including commit authorship, locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. Git commands and diff preparation run in the Extension Host environment. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
+
+## License and independence
+
+GitAmida is available under the [MIT License](./LICENSE). It is an independent project and is not affiliated with or endorsed by Microsoft, GitHub, or Anysphere.
+
+Report defects and compatibility problems through [GitHub Issues](https://github.com/hirosco/vscode-git-amida/issues).
