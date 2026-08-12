@@ -32,6 +32,21 @@ export class NativeDiffSessionRegistry {
     this.notify();
   }
 
+  public async registerForOpen(
+    session: NativeDiffSession,
+    open: () => Promise<void>,
+  ): Promise<void> {
+    this.register(session);
+    try {
+      await open();
+    } catch (error) {
+      if (this.get(session.originalUri, session.modifiedUri) === session) {
+        this.removeSession(session);
+      }
+      throw error;
+    }
+  }
+
   public get(
     originalUri: string,
     modifiedUri: string,

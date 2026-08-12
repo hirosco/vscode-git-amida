@@ -1826,19 +1826,21 @@ export class HistoryViewProvider
     preview: boolean,
   ): Promise<void> {
     try {
-      await vscode.commands.executeCommand(
-        "vscode.diff",
-        original,
-        modified,
-        title,
-        { preview },
-      );
-      this.diffSessions.register({
+      const session = {
         repository,
         beforePath,
         afterPath,
         originalUri: original.toString(),
         modifiedUri: modified.toString(),
+      };
+      await this.diffSessions.registerForOpen(session, async () => {
+        await vscode.commands.executeCommand(
+          "vscode.diff",
+          original,
+          modified,
+          title,
+          { preview },
+        );
       });
     } catch (error) {
       this.releaseDiffResource(original);

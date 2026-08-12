@@ -37,12 +37,21 @@ export function activate(context: vscode.ExtensionContext): void {
   const externalDifftool = new ExternalDifftoolService();
   const fileRestorer = new FileRestoreService();
   const pendingDiffReleases = new Set<ReturnType<typeof setTimeout>>();
+  let activeDiffContextUpdate = Promise.resolve();
   const updateActiveDiffContext = (): void => {
-    void vscode.commands.executeCommand(
-      "setContext",
-      "gitAmida.activeDiff",
-      activeDiffSession(diffSessions) !== undefined,
-    );
+    activeDiffContextUpdate = activeDiffContextUpdate
+      .then(async () => {
+        await vscode.commands.executeCommand(
+          "setContext",
+          "gitAmida.activeDiff",
+          activeDiffSession(diffSessions) !== undefined,
+        );
+      })
+      .catch((error: unknown) => {
+        diagnosticOutput.appendLine(
+          `active diff context: failed — ${userMessage(error)}`,
+        );
+      });
   };
   const unregisterDiffSessionListener =
     diffSessions.onDidChange(updateActiveDiffContext);

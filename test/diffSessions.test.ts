@@ -61,6 +61,54 @@ test("NativeDiffSessionRegistry releases a comparison by either URI", () => {
   assert.equal(changes, 2);
 });
 
+test("NativeDiffSessionRegistry registers a comparison before opening it", async () => {
+  const registry = new NativeDiffSessionRegistry();
+  const session = {
+    repository: "/repository",
+    beforePath: "before.txt",
+    afterPath: "after.txt",
+    originalUri: "git-amida:/base/before.txt",
+    modifiedUri: "git-amida:/tip/after.txt",
+  };
+
+  await registry.registerForOpen(session, async () => {
+    assert.equal(
+      registry.get(session.originalUri, session.modifiedUri),
+      session,
+    );
+  });
+
+  assert.equal(
+    registry.get(session.originalUri, session.modifiedUri),
+    session,
+  );
+});
+
+test("NativeDiffSessionRegistry rolls back a failed editor open", async () => {
+  const registry = new NativeDiffSessionRegistry();
+  const session = {
+    repository: "/repository",
+    beforePath: "before.txt",
+    afterPath: "after.txt",
+    originalUri: "git-amida:/base/before.txt",
+    modifiedUri: "git-amida:/tip/after.txt",
+  };
+  const failure = new Error("open failed");
+
+  await assert.rejects(
+    registry.registerForOpen(session, async () => {
+      throw failure;
+    }),
+    failure,
+  );
+  assert.equal(
+    registry.get(session.originalUri, session.modifiedUri),
+    undefined,
+  );
+  assert.equal(registry.getByUri(session.originalUri), undefined);
+  assert.equal(registry.getByUri(session.modifiedUri), undefined);
+});
+
 test("binary fallback replacement keeps the same native diff session open", () => {
   const registry = new NativeDiffSessionRegistry();
   const session = {
