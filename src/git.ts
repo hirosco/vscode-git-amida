@@ -718,15 +718,15 @@ export class GitClient {
       : readFile(absolutePath, { signal });
   }
 
-  public async readWorkingImage(
+  public async readWorkingBlob(
     repository: string,
     path: string,
     signal?: AbortSignal,
   ): Promise<Buffer> {
-    throwIfAborted(signal, "Working-tree image read");
+    throwIfAborted(signal, "Working-tree blob read");
     const absolutePath = resolveWorkingPath(repository, path);
     const stats = await lstat(absolutePath);
-    throwIfAborted(signal, "Working-tree image read");
+    throwIfAborted(signal, "Working-tree blob read");
     if (!stats.isFile()) {
       throw new GitError(`Working tree path is not a regular file: ${path}`);
     }

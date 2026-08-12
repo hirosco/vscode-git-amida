@@ -952,7 +952,7 @@ test("GitClient reads image bytes beyond the normal Git output buffer", async (c
   const changedImage = createBmp(4096, 1367, 0x66);
   writeFileSync(join(repository, "large.bmp"), changedImage);
   assert.equal(
-    (await client.readWorkingImage(repository, "large.bmp")).byteLength,
+    (await client.readWorkingBlob(repository, "large.bmp")).byteLength,
     changedImage.byteLength,
   );
   assert.equal(

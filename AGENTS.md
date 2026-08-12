@@ -66,7 +66,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
 - Put theme-safe Tree expand-all and collapse-all icons beside the Path column heading, with accessible labels and tooltips.
 - Use bundled, theme-colored content-kind icons for files and folders in the Webview; do not parse or copy external File Icon Themes.
-- Color changed-file paths with the same Git decoration token as their displayed status. Use the bundled icon to distinguish supported images without adding a redundant visible content label; keep labels for unsupported binary, oversized, and submodule content separate from Git status.
+- Color changed-file paths with the same Git decoration token as their displayed status. Use bundled icons to distinguish supported images and other binary content without adding redundant visible content labels; keep labels for oversized and submodule content separate from Git status.
 - Suppress default editing context-menu items on non-editable rows without GitAmida actions, including working-tree and Tree-folder rows. Retain normal text-copy behavior in selectable details content.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
@@ -148,7 +148,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Insert repository data with `textContent` or explicit DOM nodes; do not interpolate it into HTML or assign it to `innerHTML`.
 - Validate Webview messages and ignore unknown fields and actions.
 - Use VS Code theme tokens and accessibility semantics.
-- Use `TextDocumentContentProvider` for read-only historical text, a dedicated read-only `FileSystemProvider` for supported image bytes, and `vscode.diff` for both comparison types.
+- Use `TextDocumentContentProvider` for read-only historical text, a dedicated read-only `FileSystemProvider` for image and binary bytes, and `vscode.diff` for every native comparison.
 - Use the same native preview model for Changed files and File History revisions: single-click and keyboard navigation reuse a preview diff; double-click and Enter pin it. Treat the explicit Changed-files **Open Changes** context action as a pinned open.
 - Put the active-file File History action in the editor title and the manual Refresh action in the native GitAmida View title, using standard theme icons and keyboard-accessible commands.
 - Prefix actions exposed outside the GitAmida Panel with `GitAmida:` so their provider is identifiable. When the same action also appears inside the Panel, use a hidden short-label alias that delegates to the shared command.

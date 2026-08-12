@@ -13,8 +13,8 @@ test("NativeDiffSessionRegistry keeps comparisons tied to both editor URIs", () 
     repository: "/repository",
     beforePath: "old/image.png",
     afterPath: "new/image.png",
-    originalUri: "git-amida-image:/base/image.png?id=before",
-    modifiedUri: "git-amida-image:/tip/image.png?id=after",
+    originalUri: "git-amida-blob:/base/image.png?id=before",
+    modifiedUri: "git-amida-blob:/tip/image.png?id=after",
   };
 
   registry.register(session);
@@ -32,7 +32,7 @@ test("NativeDiffSessionRegistry keeps comparisons tied to both editor URIs", () 
   );
   assert.equal(registry.getByUri(session.originalUri), session);
   assert.equal(registry.getByUri(session.modifiedUri), session);
-  assert.equal(registry.getByUri("git-amida-image:/other.png"), undefined);
+  assert.equal(registry.getByUri("git-amida-blob:/other.png"), undefined);
 });
 
 test("NativeDiffSessionRegistry releases a comparison by either URI", () => {
@@ -45,8 +45,8 @@ test("NativeDiffSessionRegistry releases a comparison by either URI", () => {
     repository: "/repository",
     beforePath: "old/image.png",
     afterPath: "new/image.png",
-    originalUri: "git-amida-image:/base/image.png?id=before",
-    modifiedUri: "git-amida-image:/tip/image.png?id=after",
+    originalUri: "git-amida-blob:/base/image.png?id=before",
+    modifiedUri: "git-amida-blob:/tip/image.png?id=after",
   };
 
   registry.register(session);

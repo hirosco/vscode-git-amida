@@ -8,8 +8,8 @@ import {
   BranchSwitchError,
 } from "./branchSwitcher";
 import {
+  GitBlobFileSystemProvider,
   GitContentProvider,
-  GitImageFileSystemProvider,
 } from "./contentProvider";
 import { NativeDiffSessionRegistry } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
@@ -129,7 +129,7 @@ export class HistoryViewProvider
     private readonly git: GitClient,
     private readonly branchMutations: BranchMutationService,
     private readonly contentProvider: GitContentProvider,
-    private readonly imageProvider: GitImageFileSystemProvider,
+    private readonly blobProvider: GitBlobFileSystemProvider,
     private readonly diffSessions: NativeDiffSessionRegistry,
     private readonly externalDifftool: ExternalDifftoolService,
     private readonly fileRestorer: FileRestoreService,
@@ -1417,8 +1417,11 @@ export class HistoryViewProvider
     preview: boolean,
     signal: AbortSignal,
   ): Promise<void> {
-    if (file.content?.kind === "image") {
-      await this.openWorkingTreeImageDiff(
+    if (
+      file.content?.kind === "image" ||
+      file.content?.kind === "binary"
+    ) {
+      await this.openWorkingTreeBlobDiff(
         selection,
         file,
         repository,
@@ -1518,7 +1521,7 @@ export class HistoryViewProvider
     }
   }
 
-  private async openWorkingTreeImageDiff(
+  private async openWorkingTreeBlobDiff(
     selection: Extract<RepositorySelection, { mode: "workingTree" }>,
     file: ChangedFile,
     repository: string,
@@ -1538,7 +1541,7 @@ export class HistoryViewProvider
         ),
         file.status.startsWith("D")
           ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readWorkingImage(repository, file.path, signal),
+          : this.git.readWorkingBlob(repository, file.path, signal),
       ]);
       if (
         signal.aborted ||
@@ -1548,7 +1551,7 @@ export class HistoryViewProvider
       ) {
         return;
       }
-      const left = this.imageProvider.add(
+      const left = this.blobProvider.add(
         beforePath,
         "Working-Tree-base",
         beforeSize,
@@ -1561,13 +1564,13 @@ export class HistoryViewProvider
             resourceSignal,
           ),
       );
-      const right = this.imageProvider.add(
+      const right = this.blobProvider.add(
         file.path,
         "Working-Tree",
         after.byteLength,
         async (resourceSignal) => {
           if (resourceSignal.aborted) {
-            throw new GitCancellationError("Working-tree image read");
+            throw new GitCancellationError("Working-tree blob read");
           }
           return after;
         },
@@ -1599,8 +1602,11 @@ export class HistoryViewProvider
       signal: AbortSignal;
     },
   ): Promise<void> {
-    if (comparison.content?.kind === "image") {
-      await this.openImageComparison(
+    if (
+      comparison.content?.kind === "image" ||
+      comparison.content?.kind === "binary"
+    ) {
+      await this.openBlobComparison(
         repository,
         comparison,
         label,
@@ -1696,7 +1702,7 @@ export class HistoryViewProvider
     }
   }
 
-  private async openImageComparison(
+  private async openBlobComparison(
     repository: string,
     comparison: FileComparison,
     label: string,
@@ -1724,7 +1730,7 @@ export class HistoryViewProvider
       if (!context.isCurrent()) {
         return;
       }
-      const left = this.imageProvider.add(
+      const left = this.blobProvider.add(
         comparison.beforePath,
         `${label}-base`,
         beforeSize,
@@ -1737,7 +1743,7 @@ export class HistoryViewProvider
             resourceSignal,
           ),
       );
-      const right = this.imageProvider.add(
+      const right = this.blobProvider.add(
         comparison.afterPath,
         label,
         afterSize,
@@ -1844,8 +1850,8 @@ export class HistoryViewProvider
   private releaseDiffResource(uri: vscode.Uri): void {
     if (uri.scheme === "git-amida") {
       this.contentProvider.remove(uri);
-    } else if (uri.scheme === "git-amida-image") {
-      this.imageProvider.remove(uri);
+    } else if (uri.scheme === "git-amida-blob") {
+      this.blobProvider.remove(uri);
     }
   }
 
@@ -2274,7 +2280,7 @@ function fileContentMessage(
     case "image":
       return undefined;
     case "binary":
-      return "GitAmida: This is a binary file, so a text diff cannot be opened.";
+      return undefined;
     case "submodule":
       return "GitAmida: This path is a Git submodule. Its commit change is listed, but submodule comparison is not available yet.";
     case "oversized": {

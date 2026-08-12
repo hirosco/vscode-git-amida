@@ -2,8 +2,8 @@ import * as vscode from "vscode";
 
 import { BranchMutationService } from "./branchSwitcher";
 import {
+  GitBlobFileSystemProvider,
   GitContentProvider,
-  GitImageFileSystemProvider,
 } from "./contentProvider";
 import { NativeDiffSessionRegistry } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
@@ -27,7 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   });
   const branchMutations = new BranchMutationService();
   const contentProvider = new GitContentProvider();
-  const imageProvider = new GitImageFileSystemProvider();
+  const blobProvider = new GitBlobFileSystemProvider();
   const diffSessions = new NativeDiffSessionRegistry();
   const externalDifftool = new ExternalDifftoolService();
   const fileRestorer = new FileRestoreService();
@@ -45,7 +45,7 @@ export function activate(context: vscode.ExtensionContext): void {
     git,
     branchMutations,
     contentProvider,
-    imageProvider,
+    blobProvider,
     diffSessions,
     externalDifftool,
     fileRestorer,
@@ -60,8 +60,8 @@ export function activate(context: vscode.ExtensionContext): void {
       contentProvider,
     ),
     vscode.workspace.registerFileSystemProvider(
-      "git-amida-image",
-      imageProvider,
+      "git-amida-blob",
+      blobProvider,
       { isReadonly: true, isCaseSensitive: true },
     ),
     vscode.window.registerWebviewViewProvider(
@@ -202,14 +202,14 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.tabGroups.onDidChangeTabs((event) => {
       for (const tab of event.closed) {
-        releaseDiffTab(tab, diffSessions, contentProvider, imageProvider);
+        releaseDiffTab(tab, diffSessions, contentProvider, blobProvider);
       }
       updateActiveDiffContext();
     }),
     vscode.window.tabGroups.onDidChangeTabGroups(updateActiveDiffContext),
     new vscode.Disposable(unregisterDiffSessionListener),
     contentProvider,
-    imageProvider,
+    blobProvider,
     diffSessions,
     externalDifftool,
     historyProvider,
@@ -296,7 +296,7 @@ function releaseDiffTab(
   tab: vscode.Tab,
   diffSessions: NativeDiffSessionRegistry,
   contentProvider: GitContentProvider,
-  imageProvider: GitImageFileSystemProvider,
+  blobProvider: GitBlobFileSystemProvider,
 ): void {
   const input = tab.input;
   const session =
@@ -316,14 +316,14 @@ function releaseDiffTab(
     const uri = vscode.Uri.parse(value);
     if (uri.scheme === "git-amida") {
       contentProvider.remove(uri);
-    } else if (uri.scheme === "git-amida-image") {
-      imageProvider.remove(uri);
+    } else if (uri.scheme === "git-amida-blob") {
+      blobProvider.remove(uri);
     }
   }
 }
 
 async function readDiffContent(uri: vscode.Uri): Promise<Uint8Array> {
-  if (uri.scheme === "git-amida-image") {
+  if (uri.scheme === "git-amida-blob") {
     return vscode.workspace.fs.readFile(uri);
   }
   if (uri.scheme === "git-amida") {
