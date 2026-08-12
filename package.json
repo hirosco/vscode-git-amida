@@ -185,7 +185,7 @@
         },
         {
           "command": "gitAmida.openInDifftool",
-          "when": "gitAmida.activeDiff",
+          "when": "resourceScheme =~ /^git-amida$|^git-amida-blob$/",
           "group": "navigation@10"
         }
       ],

@@ -17,6 +17,8 @@ import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
 import { HistoryViewProvider } from "./panel";
 
+const DIFF_TAB_REPLACEMENT_GRACE_MS = 1_000;
+
 export function activate(context: vscode.ExtensionContext): void {
   const diagnosticOutput = vscode.window.createOutputChannel("GitAmida");
   const git = new GitClient((event) => {
@@ -37,24 +39,6 @@ export function activate(context: vscode.ExtensionContext): void {
   const externalDifftool = new ExternalDifftoolService();
   const fileRestorer = new FileRestoreService();
   const pendingDiffReleases = new Set<ReturnType<typeof setTimeout>>();
-  let activeDiffContextUpdate = Promise.resolve();
-  const updateActiveDiffContext = (): void => {
-    activeDiffContextUpdate = activeDiffContextUpdate
-      .then(async () => {
-        await vscode.commands.executeCommand(
-          "setContext",
-          "gitAmida.activeDiff",
-          activeDiffSession(diffSessions) !== undefined,
-        );
-      })
-      .catch((error: unknown) => {
-        diagnosticOutput.appendLine(
-          `active diff context: failed — ${userMessage(error)}`,
-        );
-      });
-  };
-  const unregisterDiffSessionListener =
-    diffSessions.onDidChange(updateActiveDiffContext);
   const historyProvider = new HistoryViewProvider(
     context.extensionUri,
     git,
@@ -145,7 +129,9 @@ export function activate(context: vscode.ExtensionContext): void {
         await historyProvider.openFileInDifftool(filePath);
         return;
       }
-      const activeDiff = activeDiffSession(diffSessions);
+      const activeDiff =
+        diffSessionForResource(contextResourceUri(contextValue), diffSessions) ??
+        activeDiffSession(diffSessions);
       if (activeDiff === undefined) {
         await vscode.window.showInformationMessage(
           "GitAmida: Open a GitAmida diff before using an external diff tool.",
@@ -223,13 +209,9 @@ export function activate(context: vscode.ExtensionContext): void {
           diffSessions,
           contentProvider,
           blobProvider,
-          updateActiveDiffContext,
         );
       }
-      updateActiveDiffContext();
     }),
-    vscode.window.tabGroups.onDidChangeTabGroups(updateActiveDiffContext),
-    new vscode.Disposable(unregisterDiffSessionListener),
     new vscode.Disposable(() => {
       for (const timer of pendingDiffReleases) {
         clearTimeout(timer);
@@ -242,7 +224,6 @@ export function activate(context: vscode.ExtensionContext): void {
     externalDifftool,
     historyProvider,
   );
-  updateActiveDiffContext();
   void observeGitRepositories(
     context.subscriptions,
     (repository, scope) => {
@@ -307,13 +288,29 @@ function activeDiffSession(
       };
 }
 
+function diffSessionForResource(
+  resource: vscode.Uri | undefined,
+  diffSessions: NativeDiffSessionRegistry,
+): ReturnType<typeof activeDiffSession> {
+  const session =
+    resource === undefined
+      ? undefined
+      : diffSessions.getByUri(resource.toString());
+  return session === undefined
+    ? undefined
+    : {
+        original: vscode.Uri.parse(session.originalUri),
+        modified: vscode.Uri.parse(session.modifiedUri),
+        session,
+      };
+}
+
 function scheduleDiffTabRelease(
   tab: vscode.Tab,
   pending: Set<ReturnType<typeof setTimeout>>,
   diffSessions: NativeDiffSessionRegistry,
   contentProvider: GitContentProvider,
   blobProvider: GitBlobFileSystemProvider,
-  updateActiveDiffContext: () => void,
 ): void {
   const identity = diffTabIdentity(tab);
   const session =
@@ -337,8 +334,7 @@ function scheduleDiffTabRelease(
         blobProvider,
       );
     }
-    updateActiveDiffContext();
-  }, 0);
+  }, DIFF_TAB_REPLACEMENT_GRACE_MS);
   pending.add(timer);
 }
 

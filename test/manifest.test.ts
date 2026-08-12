@@ -116,7 +116,7 @@ test("native diffs identify GitAmida while Changed Files keeps a short action", 
   });
   assert.deepEqual(editorAction, {
     command: "gitAmida.openInDifftool",
-    when: "gitAmida.activeDiff",
+    when: "resourceScheme =~ /^git-amida$|^git-amida-blob$/",
     group: "navigation@10",
   });
   assert.deepEqual(contextAction, {
