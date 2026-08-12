@@ -2289,11 +2289,17 @@ function fileStatusShortLabel(file: ChangedFile): string {
       return `${count} changes`;
     }
     const changeStatus = file.selection.changes[0]?.status ?? file.status;
-    return file.content === undefined || file.content.kind === "image"
+    return file.content === undefined ||
+      file.content.kind === "image" ||
+      file.content.kind === "binary"
       ? statusLabel(changeStatus)
       : `${changeStatus[0] ?? "X"} · ${contentLabel(file, true)}`;
   }
-  if (file.content === undefined || file.content.kind === "image") {
+  if (
+    file.content === undefined ||
+    file.content.kind === "image" ||
+    file.content.kind === "binary"
+  ) {
     return statusLabel(file.status);
   }
   return `${file.status[0] ?? "X"} · ${contentLabel(file, true)}`;

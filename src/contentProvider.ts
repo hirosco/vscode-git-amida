@@ -37,16 +37,16 @@ export class GitContentProvider
   }
 }
 
-interface ImageResource {
+interface BlobResource {
   size: number;
   controller: AbortController;
   read: (signal: AbortSignal) => Promise<Uint8Array>;
 }
 
-export class GitImageFileSystemProvider
+export class GitBlobFileSystemProvider
   implements vscode.FileSystemProvider, vscode.Disposable
 {
-  private readonly resources = new Map<string, ImageResource>();
+  private readonly resources = new Map<string, BlobResource>();
   private readonly changeEmitter = new vscode.EventEmitter<
     vscode.FileChangeEvent[]
   >();
@@ -111,7 +111,7 @@ export class GitImageFileSystemProvider
     this.resources.set(id, { size, controller: new AbortController(), read });
     const fileName = basename(path) || "empty";
     return vscode.Uri.from({
-      scheme: "git-amida-image",
+      scheme: "git-amida-blob",
       path: `/${label}/${fileName}`,
       query: new URLSearchParams({ id }).toString(),
     });
@@ -127,7 +127,7 @@ export class GitImageFileSystemProvider
     return this.resources.delete(id);
   }
 
-  private resource(uri: vscode.Uri): ImageResource {
+  private resource(uri: vscode.Uri): BlobResource {
     const id = new URLSearchParams(uri.query).get("id");
     const resource = id === null ? undefined : this.resources.get(id);
     if (resource === undefined) {
