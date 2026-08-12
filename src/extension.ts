@@ -5,7 +5,12 @@ import {
   GitBlobFileSystemProvider,
   GitContentProvider,
 } from "./contentProvider";
-import { NativeDiffSessionRegistry } from "./diffSessions";
+import {
+  isNativeDiffSessionOpen,
+  type NativeDiffSession,
+  type NativeDiffTabIdentity,
+  NativeDiffSessionRegistry,
+} from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
 import { FileRestoreService } from "./fileRestorer";
 import { GitClient } from "./git";
@@ -31,6 +36,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const diffSessions = new NativeDiffSessionRegistry();
   const externalDifftool = new ExternalDifftoolService();
   const fileRestorer = new FileRestoreService();
+  const pendingDiffReleases = new Set<ReturnType<typeof setTimeout>>();
   const updateActiveDiffContext = (): void => {
     void vscode.commands.executeCommand(
       "setContext",
@@ -202,12 +208,25 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.window.tabGroups.onDidChangeTabs((event) => {
       for (const tab of event.closed) {
-        releaseDiffTab(tab, diffSessions, contentProvider, blobProvider);
+        scheduleDiffTabRelease(
+          tab,
+          pendingDiffReleases,
+          diffSessions,
+          contentProvider,
+          blobProvider,
+          updateActiveDiffContext,
+        );
       }
       updateActiveDiffContext();
     }),
     vscode.window.tabGroups.onDidChangeTabGroups(updateActiveDiffContext),
     new vscode.Disposable(unregisterDiffSessionListener),
+    new vscode.Disposable(() => {
+      for (const timer of pendingDiffReleases) {
+        clearTimeout(timer);
+      }
+      pendingDiffReleases.clear();
+    }),
     contentProvider,
     blobProvider,
     diffSessions,
@@ -266,53 +285,91 @@ function activeDiffSession(
       >;
     }
   | undefined {
-  const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
-  if (!(input instanceof vscode.TabInputTextDiff)) {
-    if (
-      input instanceof vscode.TabInputCustom &&
-      input.viewType === "imagePreview.previewEditor"
-    ) {
-      const session = diffSessions.getByUri(input.uri.toString());
-      if (session !== undefined) {
-        return {
-          original: vscode.Uri.parse(session.originalUri),
-          modified: vscode.Uri.parse(session.modifiedUri),
-          session,
-        };
-      }
-    }
-    return undefined;
-  }
-  const session = diffSessions.get(
-    input.original.toString(),
-    input.modified.toString(),
-  );
+  const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  const identity = tab === undefined ? undefined : diffTabIdentity(tab);
+  const session =
+    identity === undefined ? undefined : diffSessions.getForTab(identity);
   return session === undefined
     ? undefined
-    : { original: input.original, modified: input.modified, session };
+    : {
+        original: vscode.Uri.parse(session.originalUri),
+        modified: vscode.Uri.parse(session.modifiedUri),
+        session,
+      };
 }
 
-function releaseDiffTab(
+function scheduleDiffTabRelease(
   tab: vscode.Tab,
+  pending: Set<ReturnType<typeof setTimeout>>,
+  diffSessions: NativeDiffSessionRegistry,
+  contentProvider: GitContentProvider,
+  blobProvider: GitBlobFileSystemProvider,
+  updateActiveDiffContext: () => void,
+): void {
+  const identity = diffTabIdentity(tab);
+  const session =
+    identity === undefined ? undefined : diffSessions.getForTab(identity);
+  if (session === undefined) {
+    return;
+  }
+  const timer = setTimeout(() => {
+    pending.delete(timer);
+    const openTabs = vscode.window.tabGroups.all.flatMap((group) =>
+      group.tabs.flatMap((candidate) => {
+        const openIdentity = diffTabIdentity(candidate);
+        return openIdentity === undefined ? [] : [openIdentity];
+      }),
+    );
+    if (!isNativeDiffSessionOpen(session, openTabs)) {
+      releaseDiffSession(
+        session,
+        diffSessions,
+        contentProvider,
+        blobProvider,
+      );
+    }
+    updateActiveDiffContext();
+  }, 0);
+  pending.add(timer);
+}
+
+function diffTabIdentity(tab: vscode.Tab): NativeDiffTabIdentity | undefined {
+  const input = tab.input;
+  if (input instanceof vscode.TabInputTextDiff) {
+    return {
+      kind: "diff",
+      originalUri: input.original.toString(),
+      modifiedUri: input.modified.toString(),
+    };
+  }
+  if (
+    input instanceof vscode.TabInputCustom &&
+    input.viewType === "imagePreview.previewEditor"
+  ) {
+    return { kind: "resource", uri: input.uri.toString() };
+  }
+  return undefined;
+}
+
+function releaseDiffSession(
+  session: NativeDiffSession,
   diffSessions: NativeDiffSessionRegistry,
   contentProvider: GitContentProvider,
   blobProvider: GitBlobFileSystemProvider,
 ): void {
-  const input = tab.input;
-  const session =
-    input instanceof vscode.TabInputTextDiff
-      ? diffSessions.remove(
-          input.original.toString(),
-          input.modified.toString(),
-        )
-      : input instanceof vscode.TabInputCustom &&
-          input.viewType === "imagePreview.previewEditor"
-        ? diffSessions.removeByUri(input.uri.toString())
-        : undefined;
-  if (session === undefined) {
+  if (
+    diffSessions.get(session.originalUri, session.modifiedUri) !== session
+  ) {
     return;
   }
-  for (const value of [session.originalUri, session.modifiedUri]) {
+  const released = diffSessions.remove(
+    session.originalUri,
+    session.modifiedUri,
+  );
+  if (released === undefined) {
+    return;
+  }
+  for (const value of [released.originalUri, released.modifiedUri]) {
     const uri = vscode.Uri.parse(value);
     if (uri.scheme === "git-amida") {
       contentProvider.remove(uri);

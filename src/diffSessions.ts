@@ -6,6 +6,17 @@ export interface NativeDiffSession {
   modifiedUri: string;
 }
 
+export type NativeDiffTabIdentity =
+  | {
+      kind: "diff";
+      originalUri: string;
+      modifiedUri: string;
+    }
+  | {
+      kind: "resource";
+      uri: string;
+    };
+
 export class NativeDiffSessionRegistry {
   private readonly sessions = new Map<string, NativeDiffSession>();
   private readonly sessionsByUri = new Map<string, NativeDiffSession>();
@@ -30,6 +41,14 @@ export class NativeDiffSessionRegistry {
 
   public getByUri(uri: string): NativeDiffSession | undefined {
     return this.sessionsByUri.get(uri);
+  }
+
+  public getForTab(
+    tab: NativeDiffTabIdentity,
+  ): NativeDiffSession | undefined {
+    return tab.kind === "diff"
+      ? this.get(tab.originalUri, tab.modifiedUri)
+      : this.getByUri(tab.uri);
   }
 
   public remove(
@@ -82,4 +101,16 @@ export class NativeDiffSessionRegistry {
 
 function sessionKey(originalUri: string, modifiedUri: string): string {
   return JSON.stringify([originalUri, modifiedUri]);
+}
+
+export function isNativeDiffSessionOpen(
+  session: NativeDiffSession,
+  tabs: readonly NativeDiffTabIdentity[],
+): boolean {
+  return tabs.some((tab) =>
+    tab.kind === "diff"
+      ? tab.originalUri === session.originalUri &&
+        tab.modifiedUri === session.modifiedUri
+      : tab.uri === session.originalUri || tab.uri === session.modifiedUri,
+  );
 }
