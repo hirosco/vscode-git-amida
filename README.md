@@ -1,8 +1,8 @@
 # GitAmida
 
-GitAmida is a Git history navigator for Cursor and VS Code. It keeps repository history visible in the bottom Panel while opening detailed file comparisons in the editor's native diff view.
+> Follow the line through your Git history.
 
-> Follow changes from repository history to file history and back without losing context.
+GitAmida keeps repository and file history connected in the bottom Panel while opening exact changes in the native diff editor in Cursor and VS Code.
 
 ## Highlights
 

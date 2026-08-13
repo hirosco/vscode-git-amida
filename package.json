@@ -1,7 +1,7 @@
 {
   "name": "git-amida",
   "displayName": "GitAmida",
-  "description": "Navigate repository and file history while opening exact Git changes in native diffs.",
+  "description": "Navigate Git history, commit graphs, and file history with exact changes in native diffs.",
   "icon": "media/git-amida-marketplace.png",
   "version": "0.0.1",
   "private": true,
