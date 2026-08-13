@@ -14,6 +14,20 @@ GitAmida is a Git history navigator for Cursor and VS Code. It keeps repository 
 - Restores one historical file version or switches to a named local branch only after explicit safety checks and confirmation
 - Keeps repository navigation and open File History tabs transient to the current editor session
 
+## Screenshots
+
+**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
+
+![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
+
+**Selected commits** — Review one explainable file comparison across a continuous range or explicit commit selection.
+
+![GitAmida showing three selected commits, their changed files, and a native text diff](./assets/marketplace/selected-commits-diff.png)
+
+**File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
+
+![GitAmida File History tabs with a native image comparison](./assets/marketplace/file-history-image-diff.png)
+
 ## Getting started
 
 1. Open a local Git workspace in Cursor or VS Code.
