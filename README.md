@@ -54,13 +54,10 @@ GitAmida is a Git history navigator for Cursor and VS Code. It keeps repository 
 
 GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
 
-## Documentation and support
+## Support
 
-- [Design and comparison semantics](./DESIGN.md)
-- [Roadmap](./ROADMAP.md)
-- [Development conventions](./AGENTS.md)
-- [Report an issue](https://github.com/hirosco/vscode-git-amida/issues)
+[Report a problem or request a feature](https://github.com/hirosco/vscode-git-amida/issues).
 
-## License and independence
+## License
 
 GitAmida is available under the [MIT License](./LICENSE). It is an independent project and is not affiliated with or endorsed by Microsoft, GitHub, or Anysphere.
