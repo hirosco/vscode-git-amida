@@ -6,6 +6,8 @@ GitAmida's current product target is:
 
 The remaining checkpoints build on selection-scoped, endpoint-based comparison and contain only work still needed to validate and extend that baseline.
 
+This roadmap reflects current priorities rather than release commitments and may change as validation and user feedback reveal better directions.
+
 ## 1. Changed-file working-tree access and copying
 
 - Add **Open File in Working Tree** to the Changed-files row context menu and open only the exact current `file.path` beneath the active repository root
@@ -64,6 +66,6 @@ This checkpoint is complete when users can investigate several files and always 
 - Add history-row virtualization only if large-repository validation shows that cumulative DOM rendering remains a material cost after paging and request cancellation
 - Verify large repositories, branch-backed and detached worktrees, and long-lived file-history tabs
 - Regenerate the separate synthetic repository with `scripts/create-demo-repository.mjs`, then run end-to-end validation of its complex branches, merges, renames, deletions, binary and image files, long history, local submodule, branch-backed worktree, and detached agent worktree in Cursor and VS Code before distribution
-- Make the GitHub repository public so Marketplace resource and documentation links resolve, confirm the README images and support links from the public repository, complete Open VSX namespace verification, and publish version `0.0.1` to both registries
+- Confirm the README images and support links from the public repository, complete Open VSX namespace verification, and publish version `0.0.1` to both registries
 
 Telemetry is not planned. Evaluate early versions through direct use and concrete reports of interaction problems.

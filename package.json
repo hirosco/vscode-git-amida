@@ -63,6 +63,7 @@
     "dist/webview/**/*.js",
     "media/**",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "contributes": {
