@@ -1,7 +1,7 @@
 {
   "name": "git-amida",
   "displayName": "GitAmida",
-  "description": "Navigate Git history, commit graphs, and file history with exact changes in native diffs.",
+  "description": "Browse the commit graph and file history in the Panel, and open changes in native diffs.",
   "icon": "media/git-amida-marketplace.png",
   "version": "0.0.1",
   "private": true,
@@ -44,13 +44,10 @@
   ],
   "keywords": [
     "git",
-    "history",
-    "commit",
-    "diff",
+    "git history",
+    "commit graph",
     "file history",
-    "repository",
-    "source control",
-    "worktree",
+    "diff",
     "cursor"
   ],
   "galleryBanner": {
