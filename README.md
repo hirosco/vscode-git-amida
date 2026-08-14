@@ -45,7 +45,7 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 
 ## Current limitations
 
-- macOS is the currently validated environment; Windows, Linux, and VS Code Remote Development are expected to work but are not yet in the validated 0.0.x support matrix
+- Validated on macOS, with basic smoke testing on Windows. Linux and VS Code Remote Development are expected to work but have not yet been validated
 - Virtual workspaces and VS Code for the Web are not supported
 - In a multi-root workspace, GitAmida uses the active editor's workspace folder, or the first folder when no editor is active
 - Text blobs above the current `diffEditor.maxFileSize` setting and submodules remain visible but do not open as native comparisons

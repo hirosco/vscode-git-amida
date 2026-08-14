@@ -2,6 +2,14 @@
 
 All notable changes to GitAmida will be documented in this file.
 
+## 0.0.2 - 2026-08-15
+
+### Changed
+
+- Removed the Marketplace Preview designation after macOS validation and basic Windows smoke testing
+- Clarified the current platform validation status
+- Pointed the Marketplace homepage to the repository root
+
 ## 0.0.1 - 2026-08-15
 
 Initial public preview.

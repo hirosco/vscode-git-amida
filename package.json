@@ -3,7 +3,7 @@
   "displayName": "GitAmida",
   "description": "Browse the commit graph and file history in the Panel, and open changes in native diffs.",
   "icon": "media/git-amida-marketplace.png",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "publisher": "hirosco",
   "license": "SEE LICENSE IN LICENSE",
@@ -15,7 +15,7 @@
     "type": "git",
     "url": "https://github.com/hirosco/vscode-git-amida.git"
   },
-  "homepage": "https://github.com/hirosco/vscode-git-amida#readme",
+  "homepage": "https://github.com/hirosco/vscode-git-amida",
   "bugs": {
     "url": "https://github.com/hirosco/vscode-git-amida/issues"
   },
@@ -54,7 +54,6 @@
     "color": "#E9BD4D",
     "theme": "light"
   },
-  "preview": true,
   "pricing": "Free",
   "qna": false,
   "main": "./dist/src/extension.js",
