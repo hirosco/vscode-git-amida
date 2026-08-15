@@ -13,9 +13,11 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
 - Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
-- Opens several independent File History tabs and returns from a revision to its commit in Repository History
+- Opens several independent File History tabs, marks Large, Submodule, and LFS revisions, and returns from a revision to its commit in Repository History
 - Previews text and supported image changes in the native editor, with the editor's standard fallback for other binary files
+- Resolves historical Git LFS content for native diffs and external difftools, fetching only missing selected endpoints with cancellable progress
 - Reopens one comparison in the configured Git difftool using exact before and after endpoint copies
+- Opens the current working-tree file or copies its file name or repository-relative path from Changed files
 - Restores one historical file version or switches to a named local branch only after explicit safety checks and confirmation
 - Keeps repository navigation and open File History tabs transient to the current editor session
 
@@ -40,12 +42,13 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 3. Select a commit or **Uncommitted changes** to inspect its files and details.
 4. Shift-select a visible interval, or use Cmd/Ctrl+click to include individual commits.
 5. Select a changed file to preview its comparison; press Enter, double-click, or choose **Open Changes** to pin it.
-6. Use the Changed-files context menu for File History, an external difftool, or safe file restoration.
+6. Use the Changed-files context menu for File History, the current working-tree file, path copying, an external difftool, or safe file restoration.
 
 ## Requirements
 
 - VS Code 1.100.0 or later, or a compatible Cursor desktop build
 - A file-system workspace with the Git CLI available as `git` in the Extension Host environment
+- Git LFS when a selected historical LFS object is not already available in the repository's local LFS storage
 - A trusted workspace; GitAmida is disabled in Restricted Mode because it invokes Git and offers explicitly requested repository and file mutations
 
 ## Current limitations
@@ -53,11 +56,12 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 - Validated on macOS, with basic smoke testing on Windows. Linux and VS Code Remote Development are expected to work but have not yet been validated
 - Virtual workspaces and VS Code for the Web are not supported
 - In a multi-root workspace, GitAmida uses the active editor's workspace folder, or the first folder when no editor is active
+- To inspect files inside a nested repository such as a submodule, open that repository as its own workspace; the parent repository still shows its submodule pointer history
 - Text blobs above the current `diffEditor.maxFileSize` setting and submodules remain visible but do not open as native comparisons
 
 ## Privacy
 
-GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
+GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. When selected historical Git LFS content is missing locally, GitAmida fetches only those exact endpoints from the repository's configured LFS remote with cancellable progress. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
 
 ## Support
 

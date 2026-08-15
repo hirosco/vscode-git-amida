@@ -2,6 +2,18 @@
 
 All notable changes to GitAmida will be documented in this file.
 
+## 0.0.3 - 2026-08-16
+
+### Added
+
+- Changed-files actions to open the current working-tree file and copy its file name or repository-relative path
+- Historical Git LFS content resolution for native diffs and external difftools, with exact missing endpoints fetched through cancellable progress without changing the working tree or index
+- Compact `Large`, `Submodule`, and `LFS` path tags in Changed files and File History
+
+### Changed
+
+- Replaced abbreviated Git status labels with complete wording separate from content metadata
+
 ## 0.0.2 - 2026-08-15
 
 ### Changed
