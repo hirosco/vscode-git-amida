@@ -4,6 +4,11 @@
 
 GitAmida keeps repository and file history connected in the bottom Panel while opening exact changes in the native diff editor in Cursor and VS Code.
 
+## Install
+
+- **VS Code:** [Install GitAmida from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=hirosco.git-amida)
+- **Cursor and other Open VSX clients:** Search Extensions for `GitAmida`, or [open the Open VSX listing](https://open-vsx.org/extension/hirosco/git-amida)
+
 ## Highlights
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
