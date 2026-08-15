@@ -68,6 +68,10 @@ import {
   mergeViewPreferences,
   restoreViewState,
 } from "./viewState";
+import {
+  resolveWorkingTreeFile,
+  WorkingTreeFileError,
+} from "./workingTreeFile";
 
 const LEGACY_VIEW_STATE_KEY = "gitAmida.repositoryViewState";
 const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
@@ -395,6 +399,76 @@ export class HistoryViewProvider
       return;
     }
     await this.openDiff(requestedPath, false);
+  }
+
+  public async openChangedFileInWorkingTree(path?: string): Promise<void> {
+    await this.stateReady;
+    const file = this.changedFileForAction(path);
+    const repository = this.repository;
+    if (file === undefined || repository === undefined) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a changed file before opening it in the working tree.",
+      );
+      return;
+    }
+
+    try {
+      const absolutePath = await resolveWorkingTreeFile(repository, file.path);
+      await vscode.commands.executeCommand(
+        "vscode.open",
+        vscode.Uri.file(absolutePath),
+      );
+    } catch (error) {
+      if (error instanceof WorkingTreeFileError) {
+        const action = await vscode.window.showInformationMessage(
+          `GitAmida: "${file.path}" is not an available regular working-tree file. It may have been moved or deleted.`,
+          "Show File History",
+        );
+        if (action === "Show File History") {
+          await this.openFileHistoryPath(
+            file.path,
+            this.fileHistoryInitialHash(file),
+          );
+        }
+        return;
+      }
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  public async copyChangedFileName(path?: string): Promise<void> {
+    const file = await this.changedFileForClipboard(path);
+    if (file !== undefined) {
+      await vscode.env.clipboard.writeText(basename(file.path));
+    }
+  }
+
+  public async copyChangedFileRelativePath(path?: string): Promise<void> {
+    const file = await this.changedFileForClipboard(path);
+    if (file !== undefined) {
+      await vscode.env.clipboard.writeText(file.path);
+    }
+  }
+
+  private async changedFileForClipboard(
+    path?: string,
+  ): Promise<ChangedFile | undefined> {
+    await this.stateReady;
+    const file = this.changedFileForAction(path);
+    if (file === undefined || this.repository === undefined) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Select a changed file before copying its path.",
+      );
+      return undefined;
+    }
+    return file;
+  }
+
+  private changedFileForAction(path?: string): ChangedFile | undefined {
+    const requestedPath = path ?? this.navigationState.selectedFilePath;
+    return requestedPath === undefined
+      ? undefined
+      : this.findFile(requestedPath);
   }
 
   private async openFileHistoryPath(

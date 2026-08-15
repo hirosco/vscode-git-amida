@@ -121,6 +121,30 @@ export function activate(context: vscode.ExtensionContext): void {
         );
       },
     ),
+    vscode.commands.registerCommand(
+      "gitAmida.openChangedFileInWorkingTree",
+      async (contextValue?: unknown) => {
+        await historyProvider.openChangedFileInWorkingTree(
+          contextFilePath(contextValue),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.copyChangedFileName",
+      async (contextValue?: unknown) => {
+        await historyProvider.copyChangedFileName(
+          contextFilePath(contextValue),
+        );
+      },
+    ),
+    vscode.commands.registerCommand(
+      "gitAmida.copyChangedFileRelativePath",
+      async (contextValue?: unknown) => {
+        await historyProvider.copyChangedFileRelativePath(
+          contextFilePath(contextValue),
+        );
+      },
+    ),
     vscode.commands.registerCommand("gitAmida.openInDifftool", async (
       contextValue?: unknown,
     ) => {

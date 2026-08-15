@@ -131,6 +131,21 @@
         "icon": "$(diff)"
       },
       {
+        "command": "gitAmida.openChangedFileInWorkingTree",
+        "title": "Open File in Working Tree",
+        "category": "GitAmida"
+      },
+      {
+        "command": "gitAmida.copyChangedFileName",
+        "title": "Copy File Name",
+        "category": "GitAmida"
+      },
+      {
+        "command": "gitAmida.copyChangedFileRelativePath",
+        "title": "Copy Relative Path",
+        "category": "GitAmida"
+      },
+      {
         "command": "gitAmida.switchBranch",
         "title": "Switch Branch…",
         "category": "GitAmida",
@@ -151,6 +166,10 @@
       {
         "id": "gitAmida.restoreFile",
         "label": "Restore Working Tree File"
+      },
+      {
+        "id": "gitAmida.copyFile",
+        "label": "Copy"
       }
     ],
     "viewsContainers": {
@@ -202,17 +221,27 @@
         {
           "command": "gitAmida.openFileHistoryFromChangedFile",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
-          "group": "navigation@2"
+          "group": "navigation@3"
         },
         {
           "command": "gitAmida.openInDifftoolFromChangedFile",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
-          "group": "navigation@3"
+          "group": "navigation@4"
+        },
+        {
+          "command": "gitAmida.openChangedFileInWorkingTree",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "group": "navigation@2"
+        },
+        {
+          "submenu": "gitAmida.copyFile",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "group": "navigation@5"
         },
         {
           "submenu": "gitAmida.restoreFile",
           "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile' && gitAmidaCanRestoreFile",
-          "group": "navigation@4"
+          "group": "navigation@6"
         },
         {
           "command": "gitAmida.switchBranch",
@@ -242,8 +271,30 @@
           "when": "false"
         },
         {
+          "command": "gitAmida.openChangedFileInWorkingTree",
+          "when": "false"
+        },
+        {
+          "command": "gitAmida.copyChangedFileName",
+          "when": "false"
+        },
+        {
+          "command": "gitAmida.copyChangedFileRelativePath",
+          "when": "false"
+        },
+        {
           "command": "gitAmida.showInRepositoryHistory",
           "when": "false"
+        }
+      ],
+      "gitAmida.copyFile": [
+        {
+          "command": "gitAmida.copyChangedFileName",
+          "group": "navigation@1"
+        },
+        {
+          "command": "gitAmida.copyChangedFileRelativePath",
+          "group": "navigation@2"
         }
       ],
       "gitAmida.restoreFile": [

@@ -4,7 +4,8 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 interface MenuContribution {
-  command: string;
+  command?: string;
+  submenu?: string;
   group?: string;
   when?: string;
 }
@@ -25,6 +26,7 @@ interface ExtensionManifest {
   contributes: {
     colors: ColorContribution[];
     commands: CommandContribution[];
+    submenus: { id: string; label: string }[];
     menus: Record<string, MenuContribution[]>;
   };
 }
@@ -122,12 +124,71 @@ test("native diffs identify GitAmida while Changed Files keeps a short action", 
   assert.deepEqual(contextAction, {
     command: "gitAmida.openInDifftoolFromChangedFile",
     when: "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
-    group: "navigation@3",
+    group: "navigation@4",
   });
   assert.deepEqual(paletteAction, {
     command: "gitAmida.openInDifftoolFromChangedFile",
     when: "false",
   });
+});
+
+test("Changed files expose working-tree open and copy actions only in context", () => {
+  const contextMenu = manifest.contributes.menus["webview/context"] ?? [];
+  const commandPalette = manifest.contributes.menus.commandPalette ?? [];
+  const copyMenu = manifest.contributes.menus["gitAmida.copyFile"];
+
+  assert.deepEqual(
+    manifest.contributes.commands.find(
+      ({ command }) => command === "gitAmida.openChangedFileInWorkingTree",
+    ),
+    {
+      command: "gitAmida.openChangedFileInWorkingTree",
+      title: "Open File in Working Tree",
+      category: "GitAmida",
+    },
+  );
+  assert.deepEqual(
+    contextMenu.find(
+      ({ command }) => command === "gitAmida.openChangedFileInWorkingTree",
+    ),
+    {
+      command: "gitAmida.openChangedFileInWorkingTree",
+      when: "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+      group: "navigation@2",
+    },
+  );
+  assert.deepEqual(
+    manifest.contributes.submenus.find(({ id }) => id === "gitAmida.copyFile"),
+    { id: "gitAmida.copyFile", label: "Copy" },
+  );
+  assert.deepEqual(
+    contextMenu.find(({ submenu }) => submenu === "gitAmida.copyFile"),
+    {
+      submenu: "gitAmida.copyFile",
+      when: "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+      group: "navigation@5",
+    },
+  );
+  assert.deepEqual(copyMenu, [
+    {
+      command: "gitAmida.copyChangedFileName",
+      group: "navigation@1",
+    },
+    {
+      command: "gitAmida.copyChangedFileRelativePath",
+      group: "navigation@2",
+    },
+  ]);
+  for (const command of [
+    "gitAmida.openChangedFileInWorkingTree",
+    "gitAmida.copyChangedFileName",
+    "gitAmida.copyChangedFileRelativePath",
+  ]) {
+    assert.deepEqual(
+      commandPalette.find((entry) => entry.command === command),
+      { command, when: "false" },
+    );
+  }
 });
 
 test("File History revisions expose only the context reveal action", () => {
