@@ -495,6 +495,10 @@ h2 {
   overflow: hidden;
 }
 
+.file-path-cell .path {
+  flex: 1 1 auto;
+}
+
 .file-tag {
   flex: 0 0 auto;
   padding: 0 5px;
@@ -506,7 +510,8 @@ h2 {
   white-space: nowrap;
 }
 
-.file-row.selected .file-tag {
+.file-row.selected .file-tag,
+.file-revision-row.selected .file-tag {
   border-color: color-mix(in srgb, var(--vscode-list-activeSelectionForeground) 55%, transparent);
   color: var(--vscode-list-activeSelectionForeground);
 }

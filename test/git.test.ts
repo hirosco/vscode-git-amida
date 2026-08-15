@@ -196,10 +196,10 @@ test("parseFileHistory preserves revision paths and rename metadata", () => {
   const output = Buffer.from(
     "\x1enew\x00new1234\x00old\x00Author\x00author@example.invalid\x00" +
       "2026-08-02T10:00:00+09:00\x002026-08-02T11:00:00+09:00\x00rename\x00Explain the rename.\n\nKeep both paths visible.\n\x00\x00\n" +
-      "R100\x00old name.png\x00new name.png\x00" +
+      ":100644 100644 1111111 2222222 R100\x00old name.png\x00new name.png\x00" +
       "\x1eold\x00old1234\x00\x00Author\x00author@example.invalid\x00" +
       "2026-08-01T10:00:00+09:00\x002026-08-01T10:00:00+09:00\x00add\x00\x00\n" +
-      "A\x00old name.png\x00",
+      ":000000 100644 0000000 1111111 A\x00old name.png\x00",
   );
 
   assert.deepEqual(parseFileHistory(output), [
@@ -312,6 +312,65 @@ test("GitClient follows renamed file history", async (context) => {
       },
     ],
   );
+});
+
+test("GitClient classifies file history endpoint metadata in batches", async (context) => {
+  const repository = mkdtempSync(
+    join(tmpdir(), "git-amida-file-history-metadata-test-"),
+  );
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+
+  writeFileSync(join(repository, "seed.txt"), "seed\n");
+  git(repository, "add", "--", "seed.txt");
+  git(repository, "commit", "-q", "-m", "seed");
+  const seed = git(repository, "rev-parse", "HEAD").trim();
+
+  writeFileSync(join(repository, "large.txt"), "larger than limit\n");
+  writeFileSync(join(repository, "tracked-lfs.dat"), gitLfsPointer("3", 2048));
+  git(repository, "add", "--", "large.txt", "tracked-lfs.dat");
+  git(
+    repository,
+    "update-index",
+    "--add",
+    "--cacheinfo",
+    "160000",
+    seed,
+    "vendor/module",
+  );
+  git(repository, "commit", "-q", "-m", "add metadata files");
+  unlinkSync(join(repository, "tracked-lfs.dat"));
+  git(repository, "add", "--", "tracked-lfs.dat");
+  git(repository, "commit", "-q", "-m", "delete lfs file");
+
+  const client = new GitClient();
+  const lfsRevisions = await client.fileHistory(repository, "tracked-lfs.dat");
+  assert.deepEqual(
+    lfsRevisions.map((revision) => ({
+      subject: revision.commit.subject,
+      status: revision.status[0],
+      lfs: revision.lfs,
+    })),
+    [
+      { subject: "delete lfs file", status: "D", lfs: true },
+      { subject: "add metadata files", status: "A", lfs: true },
+    ],
+  );
+
+  const largeRevision = (
+    await client.fileHistory(repository, "large.txt", 5)
+  )[0];
+  assert.deepEqual(largeRevision?.content, {
+    kind: "oversized",
+    size: Buffer.byteLength("larger than limit\n"),
+  });
+
+  const submoduleRevision = (
+    await client.fileHistory(repository, "vendor/module")
+  )[0];
+  assert.deepEqual(submoduleRevision?.content, { kind: "submodule" });
 });
 
 test("parseNulPaths preserves spaces and non-ASCII paths", () => {

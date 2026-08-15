@@ -1393,7 +1393,12 @@ export class HistoryViewProvider
     this.fileHistoryAbortControllers.set(tab.id, controller);
     try {
       const revisions = (
-        await this.git.fileHistory(repository, tab.path, controller.signal)
+        await this.git.fileHistory(
+          repository,
+          tab.path,
+          this.textDiffMaxBytes(),
+          controller.signal,
+        )
       ).map((revision) => ({
         ...revision,
         commit: this.commits.get(revision.commit.hash) ?? revision.commit,

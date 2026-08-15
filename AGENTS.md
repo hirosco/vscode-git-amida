@@ -87,6 +87,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Deduplicate tabs by repository identity and file identity.
 - Preserve selected revision and scroll state per tab.
 - Color each revision path and status with the matching Git decoration token, while keeping commit subjects and dates neutral.
+- Show the same neutral outline `Large`, `Submodule`, and `LFS` path tags used by Changed files. Derive them from each revision's actual before and after Git endpoints in batched object queries rather than attributes or one Git process per row.
 - Show the selected revision's commit metadata in a resizable details column without duplicating Changed files.
 - Keep File History tabs on one row, size them to their filename up to a readable maximum, scroll them horizontally when needed, and integrate each close action into its tab surface. Do not duplicate horizontal navigation with a separate tab-list selector.
 - Keep open File History tabs and their navigation transient to the current Extension Host session; do not restore them after an editor restart or window reload.

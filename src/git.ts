@@ -98,6 +98,13 @@ interface WorkingFileInfo {
   binary: boolean;
 }
 
+interface FileRevisionEntry extends FileRevision {
+  oldMode: string;
+  newMode: string;
+  oldObject: string;
+  newObject: string;
+}
+
 interface GitRunOptions {
   operation: string;
   maxBuffer?: number;
@@ -585,6 +592,7 @@ export class GitClient {
   public async fileHistory(
     repository: string,
     path: string,
+    maxTextBlobBytes = Number.POSITIVE_INFINITY,
     signal?: AbortSignal,
   ): Promise<FileRevision[]> {
     const output = await this.run(
@@ -599,7 +607,8 @@ export class GitClient {
         "--no-decorate",
         "--diff-merges=first-parent",
         `--format=${COMMIT_LOG_FORMAT}`,
-        "--name-status",
+        "--raw",
+        "--no-abbrev",
         "-z",
         "--",
         path,
@@ -611,7 +620,35 @@ export class GitClient {
         signal,
       },
     );
-    return parseFileHistory(output);
+    const entries = parseFileHistoryEntries(output);
+    const objectInfo = await this.loadObjectInfo(
+      repository,
+      entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      signal,
+    );
+    const lfsObjects = await this.loadGitLfsObjectHashes(
+      repository,
+      entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      objectInfo,
+      signal,
+    );
+    return entries.map((entry) => {
+      const { commit, ...rawEntry } = entry;
+      const classifiedEntry = withGitLfsEndpoints(rawEntry, lfsObjects);
+      const content = classifyChangedFile(
+        classifiedEntry,
+        new Set(),
+        objectInfo,
+        maxTextBlobBytes,
+      );
+      return {
+        commit,
+        ...changedFileFromEntry({
+          ...classifiedEntry,
+          ...(content === undefined ? {} : { content }),
+        }),
+      };
+    });
   }
 
   private async changedEntriesBetween(
@@ -1455,7 +1492,16 @@ function linkedWorktreesByCommit(
 }
 
 export function parseFileHistory(output: Buffer): FileRevision[] {
-  const revisions: FileRevision[] = [];
+  return parseFileHistoryEntries(output).map((revision) => ({
+    commit: revision.commit,
+    status: revision.status,
+    path: revision.path,
+    ...(revision.oldPath === undefined ? {} : { oldPath: revision.oldPath }),
+  }));
+}
+
+function parseFileHistoryEntries(output: Buffer): FileRevisionEntry[] {
+  const revisions: FileRevisionEntry[] = [];
   for (const rawRecord of output.toString("utf8").split(RECORD_MARKER)) {
     if (rawRecord.length === 0) {
       continue;
@@ -1487,27 +1533,9 @@ export function parseFileHistory(output: Buffer): FileRevision[] {
       ...commitBody(body),
       refs: [],
     };
-    for (let index = 9; index < fields.length; ) {
-      const status = (fields[index++] ?? "").replace(/^\r?\n+/, "");
-      if (!/^[A-Z][0-9]*$/.test(status)) {
-        continue;
-      }
-      const firstPath = fields[index++];
-      if (firstPath === undefined || firstPath.length === 0) {
-        break;
-      }
-      const renamed = status.startsWith("R") || status.startsWith("C");
-      const path = renamed ? fields[index++] : firstPath;
-      if (path === undefined || path.length === 0) {
-        break;
-      }
-      revisions.push({
-        commit,
-        status,
-        path,
-        ...(renamed ? { oldPath: firstPath } : {}),
-      });
-      break;
+    const entry = parseRawDiffFields(fields, 9)[0];
+    if (entry !== undefined) {
+      revisions.push({ commit, ...entry });
     }
   }
   return revisions;
@@ -1586,13 +1614,19 @@ function compareRefs(left: CommitRef, right: CommitRef): number {
 }
 
 export function parseRawDiff(output: Buffer): RawDiffEntry[] {
-  const fields = output.toString("utf8").split("\x00");
+  return parseRawDiffFields(output.toString("utf8").split("\x00"));
+}
+
+function parseRawDiffFields(
+  fields: readonly string[],
+  startIndex = 0,
+): RawDiffEntry[] {
   const entries: RawDiffEntry[] = [];
 
-  for (let index = 0; index < fields.length; ) {
-    const header = fields[index++];
+  for (let index = startIndex; index < fields.length; ) {
+    const header = (fields[index++] ?? "").replace(/^\r?\n+/, "");
     if (!header) {
-      break;
+      continue;
     }
     const match =
       /^:([0-7]{6}) ([0-7]{6}) ([0-9a-f]+) ([0-9a-f]+) ([A-Z][0-9]*)$/.exec(

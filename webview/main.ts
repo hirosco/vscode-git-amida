@@ -434,7 +434,7 @@ function renderFileRevisions(tab: FileHistoryTab): void {
     row.classList.toggle("selected", selected);
     row.setAttribute("aria-selected", String(selected));
     const path = fileDisplayPath(revision);
-    const status = statusLabel(revision.status);
+    const status = fileStatusLabel(revision);
     const description =
       `${revision.commit.subject || "(no subject)"} · ${revision.commit.hash} · ` +
       `${path} · ${status} · Authored ${formatFullDate(revision.commit.authoredAt)}`;
@@ -446,11 +446,16 @@ function renderFileRevisions(tab: FileHistoryTab): void {
       span("file-revision-hash", revision.commit.shortHash),
     );
     const statusClass = `status-${revision.status[0] ?? "X"}`;
+    const pathCell = span("file-path-cell", "");
+    pathCell.append(
+      span(`path ${statusClass}`, path),
+      ...createFileTags(revision),
+    );
     row.append(
       commitCell,
-      span(`path ${statusClass}`, path),
+      pathCell,
       span("date", formatRowDate(revision.commit.authoredAt)),
-      span(`status ${statusClass}`, status),
+      span(`status ${statusClass}`, statusLabel(revision.status)),
     );
     row.addEventListener("click", () => {
       if (fileRevisionPreviewTimer !== undefined) {
