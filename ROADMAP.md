@@ -66,6 +66,6 @@ This checkpoint is complete when users can investigate several files and always 
 - Add history-row virtualization only if large-repository validation shows that cumulative DOM rendering remains a material cost after paging and request cancellation
 - Verify large repositories, branch-backed and detached worktrees, and long-lived file-history tabs
 - Regenerate the separate synthetic repository with `scripts/create-demo-repository.mjs`, then run end-to-end validation of its complex branches, merges, renames, deletions, binary and image files, long history, local submodule, branch-backed worktree, and detached agent worktree in Cursor and VS Code before distribution
-- Complete Open VSX namespace verification and publish the current release to Open VSX
+- Complete Open VSX namespace verification for the published extension
 
 Telemetry is not planned. Evaluate early versions through direct use and concrete reports of interaction problems.
