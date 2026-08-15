@@ -23,6 +23,14 @@ import type {
   WorkingTreeState,
 } from "./model";
 import { parseGitWorktrees, type GitWorktree } from "./worktrees";
+import {
+  findLocalGitLfsObject,
+  gitLfsFetchArgs,
+  type GitLfsPointer,
+  MAX_GIT_LFS_POINTER_BYTES,
+  parseGitLfsPointer,
+  readLocalGitLfsObject,
+} from "./gitLfs";
 
 const execFileAsync = promisify(execFile);
 const EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
@@ -33,6 +41,7 @@ const CHANGED_FILES_BUFFER = 32 * 1024 * 1024;
 const FILE_HISTORY_BUFFER = 32 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const FILE_HISTORY_TIMEOUT_MS = 30_000;
+const GIT_LFS_FETCH_TIMEOUT_MS = 2 * 60_000;
 const HISTORY_REFS_FORMAT =
   `${RECORD_MARKER}%(objectname)%00%(*objectname)%00%(refname)%00` +
   "%(HEAD)%00%(upstream:short)%00%(upstream:trackshort)%00%(symref)%00";
@@ -100,6 +109,12 @@ export interface GitDiagnosticEvent {
   message?: string;
 }
 
+export interface HistoricalBlobInfo {
+  rawSize: number;
+  size: number;
+  lfs?: GitLfsPointer & { available: boolean };
+}
+
 export class GitError extends Error {
   public constructor(
     message: string,
@@ -122,6 +137,18 @@ export class GitCancellationError extends GitError {
   public constructor(operation: string) {
     super(`${operation} was cancelled.`);
     this.name = "GitCancellationError";
+  }
+}
+
+export class GitLfsObjectMissingError extends GitError {
+  public constructor(
+    path: string,
+    public readonly pointer: GitLfsPointer,
+  ) {
+    super(
+      `Git LFS content for "${path}" is not available locally. Download it and try again.`,
+    );
+    this.name = "GitLfsObjectMissingError";
   }
 }
 
@@ -692,6 +719,98 @@ export class GitClient {
     return size;
   }
 
+  public async inspectHistoricalBlob(
+    repository: string,
+    ref: string | undefined,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<HistoricalBlobInfo> {
+    if (ref === undefined) {
+      return { rawSize: 0, size: 0 };
+    }
+    const rawSize = await this.blobSize(repository, ref, path, signal);
+    if (rawSize > MAX_GIT_LFS_POINTER_BYTES) {
+      return { rawSize, size: rawSize };
+    }
+    const pointer = parseGitLfsPointer(
+      await this.readBlob(repository, ref, path, rawSize, signal),
+    );
+    if (pointer === undefined) {
+      return { rawSize, size: rawSize };
+    }
+    const storage = await this.gitLfsStorageDirectory(repository, signal);
+    const objectPath = await findLocalGitLfsObject(storage, pointer);
+    return {
+      rawSize,
+      size: pointer.size,
+      lfs: { ...pointer, available: objectPath !== undefined },
+    };
+  }
+
+  public async readHistoricalBlob(
+    repository: string,
+    ref: string | undefined,
+    path: string,
+    knownInfo?: HistoricalBlobInfo,
+    signal?: AbortSignal,
+  ): Promise<Buffer> {
+    const info = knownInfo ??
+      (await this.inspectHistoricalBlob(repository, ref, path, signal));
+    if (info.lfs === undefined) {
+      return this.readBlob(repository, ref, path, info.rawSize, signal);
+    }
+    const storage = await this.gitLfsStorageDirectory(repository, signal);
+    const content = await readLocalGitLfsObject(storage, info.lfs, signal);
+    if (content === undefined) {
+      throw new GitLfsObjectMissingError(path, info.lfs);
+    }
+    return content;
+  }
+
+  public async fetchHistoricalGitLfsBlob(
+    repository: string,
+    ref: string,
+    path: string,
+    pointer: GitLfsPointer,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const storage = await this.gitLfsStorageDirectory(repository, signal);
+    if ((await findLocalGitLfsObject(storage, pointer)) !== undefined) {
+      return;
+    }
+    await this.assertSafeGitLfsTransferConfiguration(repository, signal);
+    const remote = await this.defaultGitLfsRemote(repository, signal);
+    try {
+      await this.run(
+        repository,
+        gitLfsFetchArgs(remote, ref, path),
+        {
+          operation: "Git LFS object download",
+          maxBuffer: METADATA_BUFFER,
+          timeoutMs: GIT_LFS_FETCH_TIMEOUT_MS,
+          signal,
+        },
+      );
+    } catch (error) {
+      if (
+        error instanceof GitError &&
+        /(?:git: 'lfs' is not a git command|git-lfs[^\n]*(?:not found|not recognized))/i.test(
+          `${error.message}\n${error.stderr}`,
+        )
+      ) {
+        throw new GitError(
+          "Git LFS is required to download this historical file. Install Git LFS and try again.",
+          error.stderr,
+          error.exitCode,
+        );
+      }
+      throw error;
+    }
+    if ((await findLocalGitLfsObject(storage, pointer)) === undefined) {
+      throw new GitLfsObjectMissingError(path, pointer);
+    }
+  }
+
   public async readWorkingFile(
     repository: string,
     path: string,
@@ -757,6 +876,161 @@ export class GitClient {
     return parseObjectInfo(output);
   }
 
+  private async gitLfsStorageDirectory(
+    repository: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const commonDirectory = (
+      await this.run(repository, ["rev-parse", "--git-common-dir"], {
+        operation: "Git storage discovery",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      })
+    ).toString("utf8").trim();
+    const absoluteCommonDirectory = isAbsolute(commonDirectory)
+      ? resolve(commonDirectory)
+      : resolve(repository, commonDirectory);
+    const configured = await this.optionalRun(
+      repository,
+      ["config", "--path", "--get", "lfs.storage"],
+      {
+        operation: "Git LFS storage lookup",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    if (configured !== undefined) {
+      const value = configured.toString("utf8").trim();
+      if (value !== "") {
+        return isAbsolute(value)
+          ? resolve(value)
+          : resolve(absoluteCommonDirectory, value);
+      }
+    }
+    return resolve(absoluteCommonDirectory, "lfs");
+  }
+
+  private async defaultGitLfsRemote(
+    repository: string,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const remotes = new Set(
+      (
+        await this.run(repository, ["remote"], {
+          operation: "Git remote lookup",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        })
+      )
+        .toString("utf8")
+        .split("\n")
+        .map((remote) => remote.trim())
+        .filter((remote) => remote !== ""),
+    );
+    const headRef = await this.tryRun(
+      repository,
+      ["symbolic-ref", "--quiet", "HEAD"],
+      {
+        operation: "Git branch lookup",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    if (headRef.ok) {
+      const upstream = await this.tryRun(
+        repository,
+        [
+          "for-each-ref",
+          "--format=%(upstream:remotename)",
+          headRef.output.toString("utf8").trim(),
+        ],
+        {
+          operation: "Git tracking remote lookup",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      );
+      if (upstream.ok) {
+        const remote = upstream.output.toString("utf8").trim();
+        if (remote !== "." && remotes.has(remote)) {
+          return remote;
+        }
+      }
+    }
+    const configured = await this.optionalRun(
+      repository,
+      ["config", "--get", "remote.lfsdefault"],
+      {
+        operation: "Git LFS remote lookup",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    if (configured !== undefined) {
+      const remote = configured.toString("utf8").trim();
+      if (remote !== "") {
+        if (!remotes.has(remote)) {
+          throw new GitError(
+            `The configured Git LFS remote "${remote}" does not exist.`,
+          );
+        }
+        return remote;
+      }
+    }
+    if (remotes.has("origin")) {
+      return "origin";
+    }
+    if (remotes.size === 1) {
+      return [...remotes][0] ?? "";
+    }
+    if (remotes.size === 0) {
+      throw new GitError(
+        "A Git remote is required to download historical Git LFS content.",
+      );
+    }
+    throw new GitError(
+      "Git LFS has multiple possible remotes. Configure remote.lfsdefault and try again.",
+    );
+  }
+
+  private async assertSafeGitLfsTransferConfiguration(
+    repository: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    const [customTransfers, standaloneTransfer] = await Promise.all([
+      this.optionalRun(
+        repository,
+        [
+          "config",
+          "--get-regexp",
+          "^lfs\\.customtransfer\\..*\\.(path|args)$",
+        ],
+        {
+          operation: "Git LFS transfer configuration lookup",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
+      this.optionalRun(
+        repository,
+        ["config", "--get", "lfs.standalonetransferagent"],
+        {
+          operation: "Git LFS transfer configuration lookup",
+          maxBuffer: METADATA_BUFFER,
+          signal,
+        },
+      ),
+    ]);
+    if (
+      (customTransfers !== undefined && customTransfers.toString("utf8").trim() !== "") ||
+      (standaloneTransfer !== undefined && standaloneTransfer.toString("utf8").trim() !== "")
+    ) {
+      throw new GitError(
+        "GitAmida does not execute custom Git LFS transfer commands. Fetch this object with Git LFS outside GitAmida and try again.",
+      );
+    }
+  }
+
   private async tryRun(
     directory: string,
     args: string[],
@@ -770,6 +1044,25 @@ export class GitClient {
         !(error instanceof GitCancellationError)
       ) {
         return { ok: false };
+      }
+      throw error;
+    }
+  }
+
+  private async optionalRun(
+    directory: string,
+    args: string[],
+    options: GitRunOptions = { operation: "Git query" },
+  ): Promise<Buffer | undefined> {
+    try {
+      return await this.run(directory, args, options);
+    } catch (error) {
+      if (
+        error instanceof GitError &&
+        !(error instanceof GitCancellationError) &&
+        error.exitCode === 1
+      ) {
+        return undefined;
       }
       throw error;
     }

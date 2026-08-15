@@ -32,6 +32,7 @@ import {
   HISTORY_PAGE_SIZE,
   HistoryChangedError,
   NotGitRepositoryError,
+  type HistoricalBlobInfo,
   type HistoryCursor,
 } from "./git";
 import type {
@@ -78,6 +79,11 @@ const NAVIGATION_STATE_KEY = "gitAmida.repositoryNavigationState";
 const VIEW_PREFERENCES_KEY = "gitAmida.repositoryViewPreferences";
 const DEFAULT_DIFF_MAX_FILE_SIZE_MB = 50;
 type RefreshScope = "workingTree" | "history" | "detect";
+
+interface HistoricalEndpoint {
+  ref: string | undefined;
+  path: string;
+}
 
 export class HistoryViewProvider
   implements vscode.WebviewViewProvider, vscode.Disposable
@@ -236,12 +242,24 @@ export class HistoryViewProvider
     try {
       const beforePath = file.oldPath ?? file.path;
       if (selection.mode === "workingTree") {
+        const beforeRef = file.status.startsWith("A")
+          ? undefined
+          : selection.headHash;
+        const blobs = await this.prepareHistoricalBlobs(
+          repository,
+          [{ ref: beforeRef, path: beforePath }],
+          controller.signal,
+        );
+        if (blobs === undefined) {
+          return;
+        }
+        const beforeInfo = historicalBlobInfo(blobs, beforeRef, beforePath);
         const [beforeContent, afterContent] = await Promise.all([
-          this.git.readBlob(
+          this.git.readHistoricalBlob(
             repository,
-            file.status.startsWith("A") ? undefined : selection.headHash,
+            beforeRef,
             beforePath,
-            undefined,
+            beforeInfo,
             controller.signal,
           ),
           file.status.startsWith("D")
@@ -267,19 +285,36 @@ export class HistoryViewProvider
       if (comparison === undefined) {
         return;
       }
+      const endpoints = historicalComparisonEndpoints(comparison);
+      const blobs = await this.prepareHistoricalBlobs(
+        repository,
+        endpoints,
+        controller.signal,
+      );
+      if (blobs === undefined) {
+        return;
+      }
       const [beforeContent, afterContent] = await Promise.all([
-        this.git.readBlob(
+        this.git.readHistoricalBlob(
           repository,
           comparison.beforeRef,
           comparison.beforePath,
-          undefined,
+          historicalBlobInfo(
+            blobs,
+            comparison.beforeRef,
+            comparison.beforePath,
+          ),
           controller.signal,
         ),
-        this.git.readBlob(
+        this.git.readHistoricalBlob(
           repository,
           comparison.afterRef,
           comparison.afterPath,
-          undefined,
+          historicalBlobInfo(
+            blobs,
+            comparison.afterRef,
+            comparison.afterPath,
+          ),
           controller.signal,
         ),
       ]);
@@ -1491,19 +1526,6 @@ export class HistoryViewProvider
     preview: boolean,
     signal: AbortSignal,
   ): Promise<void> {
-    if (
-      file.content?.kind === "image" ||
-      file.content?.kind === "binary"
-    ) {
-      await this.openWorkingTreeBlobDiff(
-        selection,
-        file,
-        repository,
-        preview,
-        signal,
-      );
-      return;
-    }
     const textDiffMaxBytes = this.textDiffMaxBytes();
     const unsupportedMessage = fileContentMessage(
       file.content,
@@ -1516,23 +1538,52 @@ export class HistoryViewProvider
     const identity = selectionIdentity(selection);
     const request = this.selectionRequest;
     const beforePath = file.oldPath ?? file.path;
+    const beforeRef = file.status.startsWith("A")
+      ? undefined
+      : selection.headHash;
+    let beforeInfo: HistoricalBlobInfo;
     try {
-      const [beforeSize, after] = await Promise.all([
-        this.git.blobSize(
-          repository,
-          file.status.startsWith("A") ? undefined : selection.headHash,
-          beforePath,
-          signal,
-        ),
-        file.status.startsWith("D")
-          ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readWorkingFile(
-              repository,
-              file.path,
-              textDiffMaxBytes,
-              signal,
-            ),
-      ]);
+      const blobs = await this.prepareHistoricalBlobs(
+        repository,
+        [{ ref: beforeRef, path: beforePath }],
+        signal,
+      );
+      if (blobs === undefined) {
+        return;
+      }
+      beforeInfo = historicalBlobInfo(blobs, beforeRef, beforePath);
+    } catch (error) {
+      if (isCancellation(error)) {
+        return;
+      }
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+      return;
+    }
+    if (
+      file.content?.kind === "image" ||
+      file.content?.kind === "binary" ||
+      beforeInfo.lfs !== undefined
+    ) {
+      await this.openWorkingTreeBlobDiff(
+        selection,
+        file,
+        repository,
+        preview,
+        signal,
+        beforeInfo,
+      );
+      return;
+    }
+    try {
+      const beforeSize = beforeInfo.size;
+      const after = file.status.startsWith("D")
+        ? Buffer.alloc(0)
+        : await this.git.readWorkingFile(
+            repository,
+            file.path,
+            textDiffMaxBytes,
+            signal,
+          );
       if (
         signal.aborted ||
         request !== this.selectionRequest ||
@@ -1547,11 +1598,11 @@ export class HistoryViewProvider
         );
         return;
       }
-      const before = await this.git.readBlob(
+      const before = await this.git.readHistoricalBlob(
         repository,
-        file.status.startsWith("A") ? undefined : selection.headHash,
+        beforeRef,
         beforePath,
-        beforeSize,
+        beforeInfo,
         signal,
       );
       if (
@@ -1601,22 +1652,18 @@ export class HistoryViewProvider
     repository: string,
     preview: boolean,
     signal: AbortSignal,
+    beforeInfo: HistoricalBlobInfo,
   ): Promise<void> {
     const identity = selectionIdentity(selection);
     const request = this.selectionRequest;
     const beforePath = file.oldPath ?? file.path;
+    const beforeRef = file.status.startsWith("A")
+      ? undefined
+      : selection.headHash;
     try {
-      const [beforeSize, after] = await Promise.all([
-        this.git.blobSize(
-          repository,
-          file.status.startsWith("A") ? undefined : selection.headHash,
-          beforePath,
-          signal,
-        ),
-        file.status.startsWith("D")
-          ? Promise.resolve(Buffer.alloc(0))
-          : this.git.readWorkingBlob(repository, file.path, signal),
-      ]);
+      const after = file.status.startsWith("D")
+        ? Buffer.alloc(0)
+        : await this.git.readWorkingBlob(repository, file.path, signal);
       if (
         signal.aborted ||
         request !== this.selectionRequest ||
@@ -1628,13 +1675,13 @@ export class HistoryViewProvider
       const left = this.blobProvider.add(
         beforePath,
         "Working-Tree-base",
-        beforeSize,
+        beforeInfo.size,
         (resourceSignal) =>
-          this.git.readBlob(
+          this.git.readHistoricalBlob(
             repository,
-            file.status.startsWith("A") ? undefined : selection.headHash,
+            beforeRef,
             beforePath,
-            beforeSize,
+            beforeInfo,
             resourceSignal,
           ),
       );
@@ -1676,18 +1723,6 @@ export class HistoryViewProvider
       signal: AbortSignal;
     },
   ): Promise<void> {
-    if (
-      comparison.content?.kind === "image" ||
-      comparison.content?.kind === "binary"
-    ) {
-      await this.openBlobComparison(
-        repository,
-        comparison,
-        label,
-        context,
-      );
-      return;
-    }
     const textDiffMaxBytes = this.textDiffMaxBytes();
     const unsupportedMessage = fileContentMessage(
       comparison.content,
@@ -1699,20 +1734,42 @@ export class HistoryViewProvider
     }
 
     try {
-      const [beforeSize, afterSize] = await Promise.all([
-        this.git.blobSize(
+      const blobs = await this.prepareHistoricalBlobs(
+        repository,
+        historicalComparisonEndpoints(comparison),
+        context.signal,
+      );
+      if (blobs === undefined || !context.isCurrent()) {
+        return;
+      }
+      const beforeInfo = historicalBlobInfo(
+        blobs,
+        comparison.beforeRef,
+        comparison.beforePath,
+      );
+      const afterInfo = historicalBlobInfo(
+        blobs,
+        comparison.afterRef,
+        comparison.afterPath,
+      );
+      if (
+        comparison.content?.kind === "image" ||
+        comparison.content?.kind === "binary" ||
+        beforeInfo.lfs !== undefined ||
+        afterInfo.lfs !== undefined
+      ) {
+        await this.openBlobComparison(
           repository,
-          comparison.beforeRef,
-          comparison.beforePath,
-          context.signal,
-        ),
-        this.git.blobSize(
-          repository,
-          comparison.afterRef,
-          comparison.afterPath,
-          context.signal,
-        ),
-      ]);
+          comparison,
+          label,
+          context,
+          beforeInfo,
+          afterInfo,
+        );
+        return;
+      }
+      const beforeSize = beforeInfo.size;
+      const afterSize = afterInfo.size;
       if (!context.isCurrent()) {
         return;
       }
@@ -1724,18 +1781,18 @@ export class HistoryViewProvider
         return;
       }
       const [before, after] = await Promise.all([
-        this.git.readBlob(
+        this.git.readHistoricalBlob(
           repository,
           comparison.beforeRef,
           comparison.beforePath,
-          beforeSize,
+          beforeInfo,
           context.signal,
         ),
-        this.git.readBlob(
+        this.git.readHistoricalBlob(
           repository,
           comparison.afterRef,
           comparison.afterPath,
-          afterSize,
+          afterInfo,
           context.signal,
         ),
       ]);
@@ -1785,48 +1842,36 @@ export class HistoryViewProvider
       isCurrent: () => boolean;
       signal: AbortSignal;
     },
+    beforeInfo: HistoricalBlobInfo,
+    afterInfo: HistoricalBlobInfo,
   ): Promise<void> {
     try {
-      const [beforeSize, afterSize] = await Promise.all([
-        this.git.blobSize(
-          repository,
-          comparison.beforeRef,
-          comparison.beforePath,
-          context.signal,
-        ),
-        this.git.blobSize(
-          repository,
-          comparison.afterRef,
-          comparison.afterPath,
-          context.signal,
-        ),
-      ]);
       if (!context.isCurrent()) {
         return;
       }
       const left = this.blobProvider.add(
         comparison.beforePath,
         `${label}-base`,
-        beforeSize,
+        beforeInfo.size,
         (resourceSignal) =>
-          this.git.readBlob(
+          this.git.readHistoricalBlob(
             repository,
             comparison.beforeRef,
             comparison.beforePath,
-            beforeSize,
+            beforeInfo,
             resourceSignal,
           ),
       );
       const right = this.blobProvider.add(
         comparison.afterPath,
         label,
-        afterSize,
+        afterInfo.size,
         (resourceSignal) =>
-          this.git.readBlob(
+          this.git.readHistoricalBlob(
             repository,
             comparison.afterRef,
             comparison.afterPath,
-            afterSize,
+            afterInfo,
             resourceSignal,
           ),
       );
@@ -1845,6 +1890,95 @@ export class HistoryViewProvider
       }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
     }
+  }
+
+  private async prepareHistoricalBlobs(
+    repository: string,
+    endpoints: HistoricalEndpoint[],
+    signal: AbortSignal,
+  ): Promise<Map<string, HistoricalBlobInfo> | undefined> {
+    const uniqueEndpoints = new Map<string, HistoricalEndpoint>();
+    for (const endpoint of endpoints) {
+      uniqueEndpoints.set(
+        historicalEndpointKey(endpoint.ref, endpoint.path),
+        endpoint,
+      );
+    }
+    const inspected = await Promise.all(
+      [...uniqueEndpoints.values()].map(async (endpoint) => [
+        historicalEndpointKey(endpoint.ref, endpoint.path),
+        await this.git.inspectHistoricalBlob(
+          repository,
+          endpoint.ref,
+          endpoint.path,
+          signal,
+        ),
+      ] as const),
+    );
+    const blobs = new Map(inspected);
+    const missingByOid = new Map<
+      string,
+      { endpoint: HistoricalEndpoint; info: HistoricalBlobInfo }
+    >();
+    for (const endpoint of uniqueEndpoints.values()) {
+      const info = historicalBlobInfo(blobs, endpoint.ref, endpoint.path);
+      if (info.lfs !== undefined && !info.lfs.available) {
+        missingByOid.set(info.lfs.oid, { endpoint, info });
+      }
+    }
+    if (missingByOid.size === 0) {
+      return blobs;
+    }
+
+    const totalBytes = [...missingByOid.values()].reduce(
+      (total, { info }) => total + (info.lfs?.size ?? 0),
+      0,
+    );
+    const count = missingByOid.size;
+    const action = await vscode.window.showInformationMessage(
+      `GitAmida: Download ${count} Git LFS ${count === 1 ? "object" : "objects"} (${formatBytes(totalBytes)}) to open this comparison?`,
+      {
+        modal: true,
+        detail:
+          "Only the selected historical file version(s) will be fetched. The working tree and Git index will not be changed.",
+      },
+      "Download and Open",
+    );
+    if (action !== "Download and Open" || signal.aborted) {
+      return undefined;
+    }
+
+    for (const { endpoint, info } of missingByOid.values()) {
+      if (signal.aborted) {
+        return undefined;
+      }
+      if (endpoint.ref === undefined || info.lfs === undefined) {
+        throw new Error("The selected Git LFS endpoint is no longer valid.");
+      }
+      await this.git.fetchHistoricalGitLfsBlob(
+        repository,
+        endpoint.ref,
+        endpoint.path,
+        info.lfs,
+        signal,
+      );
+    }
+
+    for (const endpoint of uniqueEndpoints.values()) {
+      const info = await this.git.inspectHistoricalBlob(
+        repository,
+        endpoint.ref,
+        endpoint.path,
+        signal,
+      );
+      if (info.lfs !== undefined && !info.lfs.available) {
+        throw new Error(
+          `Git LFS content for "${endpoint.path}" is still unavailable after download.`,
+        );
+      }
+      blobs.set(historicalEndpointKey(endpoint.ref, endpoint.path), info);
+    }
+    return blobs;
   }
 
   private findFile(path: string): ChangedFile | undefined {
@@ -2386,6 +2520,31 @@ function userMessage(error: unknown): string {
     return error.message;
   }
   return String(error);
+}
+
+function historicalComparisonEndpoints(
+  comparison: FileComparison,
+): HistoricalEndpoint[] {
+  return [
+    { ref: comparison.beforeRef, path: comparison.beforePath },
+    { ref: comparison.afterRef, path: comparison.afterPath },
+  ];
+}
+
+function historicalBlobInfo(
+  blobs: ReadonlyMap<string, HistoricalBlobInfo>,
+  ref: string | undefined,
+  path: string,
+): HistoricalBlobInfo {
+  const info = blobs.get(historicalEndpointKey(ref, path));
+  if (info === undefined) {
+    throw new Error("Historical file metadata is unavailable.");
+  }
+  return info;
+}
+
+function historicalEndpointKey(ref: string | undefined, path: string): string {
+  return JSON.stringify([ref ?? null, path]);
 }
 
 function isCancellation(error: unknown): boolean {
