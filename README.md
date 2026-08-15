@@ -6,8 +6,8 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 
 ## Install
 
-- **VS Code:** [Install GitAmida from the Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=hirosco.git-amida)
-- **Cursor and other Open VSX clients:** Search Extensions for `GitAmida`, or [open the Open VSX listing](https://open-vsx.org/extension/hirosco/git-amida)
+- **Cursor:** Search Extensions for `GitAmida`, or [open the Open VSX listing](https://open-vsx.org/extension/hirosco/git-amida)
+- **VS Code:** Search Extensions for `GitAmida`, or [open the Visual Studio Marketplace listing](https://marketplace.visualstudio.com/items?itemName=hirosco.git-amida)
 
 ## Highlights
 
