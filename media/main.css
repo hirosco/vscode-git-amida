@@ -495,6 +495,22 @@ h2 {
   overflow: hidden;
 }
 
+.file-tag {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--vscode-descriptionForeground) 50%, transparent);
+  border-radius: 999px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 9px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.file-row.selected .file-tag {
+  border-color: color-mix(in srgb, var(--vscode-list-activeSelectionForeground) 55%, transparent);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
 .list {
   min-height: 0;
   overflow: auto;

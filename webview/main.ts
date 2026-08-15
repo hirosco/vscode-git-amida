@@ -1306,10 +1306,11 @@ function createFileRow(
   pathCell.append(
     createFileIcon(file),
     span(`path ${statusClass}`, label),
+    ...createFileTags(file),
   );
   button.append(
     pathCell,
-    span(`status ${statusClass}`, fileStatusShortLabel(file)),
+    span(`status ${statusClass}`, fileStatusDisplayLabel(file)),
   );
   button.addEventListener("click", () => selectFileAndPreview(file.path));
   button.addEventListener("dblclick", () => pinFileDiff(file.path));
@@ -2263,46 +2264,66 @@ function statusLabel(status: string): string {
 }
 
 function fileStatusLabel(file: ChangedFile): string {
+  const labels: string[] = [];
   if (file.selection !== undefined) {
     const count = file.selection.changes.length;
     if (count === 1) {
       const changeStatus =
         file.selection.changes[0]?.status ?? file.status;
-      const status = statusLabel(changeStatus);
-      return file.content === undefined
-        ? `${status} · 1 selected commit`
-        : `${status} · ${contentLabel(file)} · 1 selected commit`;
+      labels.push(statusLabel(changeStatus), "1 selected commit");
+    } else {
+      labels.push(`${count} selected commits`, "endpoint diff");
     }
-    return `${count} selected commits · endpoint diff`;
+  } else {
+    labels.push(statusLabel(file.status));
   }
-  const status = statusLabel(file.status);
-  if (file.content === undefined) {
-    return status;
+  if (file.content !== undefined) {
+    labels.push(contentLabel(file));
   }
-  return `${status} · ${contentLabel(file)}`;
+  if (file.lfs === true) {
+    labels.push("Git LFS");
+  }
+  return labels.join(" · ");
 }
 
-function fileStatusShortLabel(file: ChangedFile): string {
+function fileStatusDisplayLabel(file: ChangedFile): string {
   if (file.selection !== undefined) {
     const count = file.selection.changes.length;
     if (count > 1) {
       return `${count} changes`;
     }
     const changeStatus = file.selection.changes[0]?.status ?? file.status;
-    return file.content === undefined ||
-      file.content.kind === "image" ||
-      file.content.kind === "binary"
-      ? statusLabel(changeStatus)
-      : `${changeStatus[0] ?? "X"} · ${contentLabel(file, true)}`;
+    return statusLabel(changeStatus);
   }
-  if (
-    file.content === undefined ||
-    file.content.kind === "image" ||
-    file.content.kind === "binary"
-  ) {
-    return statusLabel(file.status);
+  return statusLabel(file.status);
+}
+
+function createFileTags(file: ChangedFile): HTMLElement[] {
+  const tags: HTMLElement[] = [];
+  if (file.content?.kind === "submodule") {
+    tags.push(fileTag("Submodule", "Git submodule"));
+  } else if (file.content?.kind === "oversized") {
+    const size = file.content.size;
+    tags.push(
+      fileTag(
+        "Large",
+        size === undefined
+          ? "Exceeds the current native text diff limit"
+          : `${formatBytes(size)} exceeds the current native text diff limit`,
+      ),
+    );
   }
-  return `${file.status[0] ?? "X"} · ${contentLabel(file, true)}`;
+  if (file.lfs === true) {
+    tags.push(fileTag("LFS", "Stored with Git LFS"));
+  }
+  return tags;
+}
+
+function fileTag(label: string, title: string): HTMLElement {
+  const tag = span("file-tag", label);
+  tag.title = title;
+  tag.setAttribute("aria-hidden", "true");
+  return tag;
 }
 
 function contentLabel(file: ChangedFile, short = false): string {

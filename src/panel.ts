@@ -1930,38 +1930,59 @@ export class HistoryViewProvider
       return blobs;
     }
 
-    const totalBytes = [...missingByOid.values()].reduce(
-      (total, { info }) => total + (info.lfs?.size ?? 0),
-      0,
-    );
     const count = missingByOid.size;
-    const action = await vscode.window.showInformationMessage(
-      `GitAmida: Download ${count} Git LFS ${count === 1 ? "object" : "objects"} (${formatBytes(totalBytes)}) to open this comparison?`,
+    const downloaded = await vscode.window.withProgress(
       {
-        modal: true,
-        detail:
-          "Only the selected historical file version(s) will be fetched. The working tree and Git index will not be changed.",
+        location: vscode.ProgressLocation.Notification,
+        title: "GitAmida: Downloading Git LFS content…",
+        cancellable: true,
       },
-      "Download and Open",
+      async (progress, token) => {
+        const controller = new AbortController();
+        const cancel = (): void => controller.abort();
+        if (signal.aborted || token.isCancellationRequested) {
+          controller.abort();
+        }
+        signal.addEventListener("abort", cancel, { once: true });
+        const cancellation = token.onCancellationRequested(cancel);
+        try {
+          let completed = 0;
+          for (const { endpoint, info } of missingByOid.values()) {
+            if (controller.signal.aborted) {
+              return false;
+            }
+            progress.report({
+              message:
+                count === 1
+                  ? basename(endpoint.path)
+                  : `${completed + 1} of ${count} objects`,
+            });
+            if (endpoint.ref === undefined || info.lfs === undefined) {
+              throw new Error("The selected Git LFS endpoint is no longer valid.");
+            }
+            await this.git.fetchHistoricalGitLfsBlob(
+              repository,
+              endpoint.ref,
+              endpoint.path,
+              info.lfs,
+              controller.signal,
+            );
+            completed += 1;
+          }
+          return true;
+        } catch (error) {
+          if (controller.signal.aborted || isCancellation(error)) {
+            return false;
+          }
+          throw error;
+        } finally {
+          signal.removeEventListener("abort", cancel);
+          cancellation.dispose();
+        }
+      },
     );
-    if (action !== "Download and Open" || signal.aborted) {
+    if (!downloaded || signal.aborted) {
       return undefined;
-    }
-
-    for (const { endpoint, info } of missingByOid.values()) {
-      if (signal.aborted) {
-        return undefined;
-      }
-      if (endpoint.ref === undefined || info.lfs === undefined) {
-        throw new Error("The selected Git LFS endpoint is no longer valid.");
-      }
-      await this.git.fetchHistoricalGitLfsBlob(
-        repository,
-        endpoint.ref,
-        endpoint.path,
-        info.lfs,
-        signal,
-      );
     }
 
     for (const endpoint of uniqueEndpoints.values()) {

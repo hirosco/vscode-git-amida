@@ -66,7 +66,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Keep Flat and Tree file presentation as explicit user-selectable modes.
 - Put theme-safe Tree expand-all and collapse-all icons beside the Path column heading, with accessible labels and tooltips.
 - Use bundled, theme-colored content-kind icons for files and folders in the Webview; do not parse or copy external File Icon Themes.
-- Color changed-file paths with the same Git decoration token as their displayed status. Use bundled icons to distinguish supported images and other binary content without adding redundant visible content labels; keep labels for oversized and submodule content separate from Git status.
+- Color changed-file paths with the same Git decoration token as their displayed status. Keep the Status column limited to complete Git status wording. Use bundled icons to distinguish supported images and other binary content without adding redundant visible content labels; show oversized, submodule, and Git LFS metadata as compact outlined tags beside the path instead of combining them with Git status.
 - Suppress default editing context-menu items on non-editable rows without GitAmida actions, including working-tree and Tree-folder rows. Retain normal text-copy behavior in selectable details content.
 - Start Tree mode fully expanded after each file load and do not persist folder expansion state.
 - Make the full commit hash easy to copy; do not provide arbitrary commit switching.
@@ -156,6 +156,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Match the built-in image preview formats (`jpg`, `jpe`, `jpeg`, `png`, `bmp`, `gif`, `ico`, `webp`, `avif`, and `svg`) and keep other binary content and unsupported encodings explicit rather than coercing them into a diff.
 - Use the current `diffEditor.maxFileSize` value for text comparison instead of imposing a narrower GitAmida-specific limit, and refresh content classification when that setting changes.
 - Do not impose a GitAmida-specific image-size limit narrower than the native preview. Size the Git blob read for the actual object while retaining bounded output for other Git operations.
+- Mark canonical Git LFS pointers in Changed files independently from content-kind icons. When selected historical LFS content is unavailable locally, download only the required endpoint objects automatically inside cancellable native progress; do not show a preflight confirmation or apply a size threshold.
 - Debounce built-in Git repository events. Refresh only working-tree state when HEAD, refs, and registered worktree HEADs are stable, and reload history when their fingerprint changes.
 - Recheck the repository history fingerprint when the retained View becomes visible so missed background events cannot leave stale history.
 - Schedule working-tree refresh directly after file-document saves and continue debounced refreshes while the retained View is hidden.

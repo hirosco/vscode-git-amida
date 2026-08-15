@@ -393,6 +393,7 @@ test("GitClient loads saved tracked and untracked working tree changes", async (
   writeFileSync(join(repository, "staged.txt"), "base\n");
   writeFileSync(join(repository, "deleted.txt"), "delete me\n");
   writeFileSync(join(repository, "old name.txt"), "rename me\n");
+  writeFileSync(join(repository, "tracked-lfs.dat"), gitLfsPointer("1", 18));
   git(repository, "add", "--", ".");
   git(repository, "commit", "-q", "-m", "base");
   const headHash = git(repository, "rev-parse", "HEAD").trim();
@@ -408,6 +409,7 @@ test("GitClient loads saved tracked and untracked working tree changes", async (
   git(repository, "add", "--", "old name.txt", "renamed name.txt");
   writeFileSync(join(repository, "日本語 space.txt"), "untracked\n");
   writeFileSync(join(repository, "untracked.bin"), Buffer.from([0, 1, 2]));
+  writeFileSync(join(repository, "tracked-lfs.dat"), "resolved lfs data\n");
 
   const client = new GitClient();
   const state = await client.workingTreeChanges(repository, headHash);
@@ -419,6 +421,7 @@ test("GitClient loads saved tracked and untracked working tree changes", async (
   assert.match(files.get("renamed name.txt")?.status ?? "", /^R/);
   assert.equal(files.get("renamed name.txt")?.oldPath, "old name.txt");
   assert.equal(files.get("日本語 space.txt")?.status, "A");
+  assert.equal(files.get("tracked-lfs.dat")?.lfs, true);
   assert.deepEqual(files.get("untracked.bin")?.content, {
     kind: "binary",
     size: 3,
@@ -854,6 +857,7 @@ test("GitClient classifies changed content before opening a diff", async (contex
     join(repository, "large.txt"),
     Buffer.alloc(textDiffLimit + 1, "a"),
   );
+  writeFileSync(join(repository, "tracked-lfs.dat"), gitLfsPointer("2", 1234));
   git(
     repository,
     "add",
@@ -865,6 +869,7 @@ test("GitClient classifies changed content before opening a diff", async (contex
     "legacy.heic",
     "legacy.tiff",
     "large.txt",
+    "tracked-lfs.dat",
   );
   git(
     repository,
@@ -919,6 +924,11 @@ test("GitClient classifies changed content before opening a diff", async (contex
     status: "A",
     path: "large.txt",
     content: { kind: "oversized", size: textDiffLimit + 1 },
+  });
+  assert.deepEqual(byPath.get("tracked-lfs.dat"), {
+    status: "A",
+    path: "tracked-lfs.dat",
+    lfs: true,
   });
   assert.deepEqual(byPath.get("vendor/module"), {
     status: "A",
@@ -1467,6 +1477,15 @@ function createBmp(width: number, height: number, shade: number): Buffer {
   image.writeUInt32LE(pixelSize, 34);
   image.fill(shade, headerSize);
   return image;
+}
+
+function gitLfsPointer(oidDigit: string, size: number): string {
+  return [
+    "version https://git-lfs.github.com/spec/v1",
+    `oid sha256:${oidDigit.repeat(64)}`,
+    `size ${size}`,
+    "",
+  ].join("\n");
 }
 
 function git(repository: string, ...args: string[]): string {

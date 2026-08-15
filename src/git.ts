@@ -25,6 +25,7 @@ import type {
 import { parseGitWorktrees, type GitWorktree } from "./worktrees";
 import {
   findLocalGitLfsObject,
+  GitLfsError,
   gitLfsFetchArgs,
   type GitLfsPointer,
   MAX_GIT_LFS_POINTER_BYTES,
@@ -83,6 +84,8 @@ export interface RawDiffEntry extends ChangedFile {
   newMode: string;
   oldObject: string;
   newObject: string;
+  oldLfs?: boolean;
+  newLfs?: boolean;
 }
 
 interface ObjectInfo {
@@ -509,17 +512,24 @@ export class GitClient {
       ),
       loadWorkingFileInfo(repository, entries, new Set(untrackedPaths)),
     ]);
+    const lfsObjects = await this.loadGitLfsObjectHashes(
+      repository,
+      entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      objectInfo,
+      signal,
+    );
     const binaryPaths = parseBinaryPaths(numStatOutput);
     const files = entries.map((entry) => {
+      const classifiedEntry = withGitLfsEndpoints(entry, lfsObjects);
       const content = classifyWorkingTreeFile(
-        entry,
+        classifiedEntry,
         binaryPaths,
         objectInfo,
         workingFileInfo,
         maxTextBlobBytes,
       );
       return {
-        ...changedFileFromEntry(entry),
+        ...changedFileFromEntry(classifiedEntry),
         ...(content === undefined ? {} : { content }),
       };
     });
@@ -567,6 +577,8 @@ export class GitClient {
       ...(parentHash === undefined ? {} : { parentHash }),
       oldObject: entry.oldObject,
       newObject: entry.newObject,
+      ...(entry.oldLfs === true ? { oldLfs: true } : {}),
+      ...(entry.newLfs === true ? { newLfs: true } : {}),
     }));
   }
 
@@ -658,9 +670,15 @@ export class GitClient {
       entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
       signal,
     );
+    const lfsObjects = await this.loadGitLfsObjectHashes(
+      repository,
+      entries.flatMap((entry) => [entry.oldObject, entry.newObject]),
+      objectInfo,
+      signal,
+    );
 
     return entries.map((entry) => ({
-      ...entry,
+      ...withGitLfsEndpoints(entry, lfsObjects),
       content: classifyChangedFile(
         entry,
         binaryPaths,
@@ -874,6 +892,36 @@ export class GitClient {
       },
     );
     return parseObjectInfo(output);
+  }
+
+  private async loadGitLfsObjectHashes(
+    repository: string,
+    objectHashes: string[],
+    objectInfo: ReadonlyMap<string, ObjectInfo>,
+    signal?: AbortSignal,
+  ): Promise<Set<string>> {
+    const hashes = [...new Set(objectHashes)].filter((hash) => {
+      const info = objectInfo.get(hash);
+      return (
+        isObjectHash(hash) &&
+        info?.type === "blob" &&
+        info.size <= MAX_GIT_LFS_POINTER_BYTES
+      );
+    });
+    if (hashes.length === 0) {
+      return new Set();
+    }
+    const output = await this.runWithInput(
+      repository,
+      ["cat-file", "--batch"],
+      `${hashes.join("\n")}\n`,
+      {
+        operation: "Git LFS pointer inspection",
+        maxBuffer: CHANGED_FILES_BUFFER,
+        signal,
+      },
+    );
+    return parseGitLfsObjectHashes(output, hashes, objectInfo);
   }
 
   private async gitLfsStorageDirectory(
@@ -1775,7 +1823,68 @@ function changedFileFromEntry(entry: RawDiffEntry): ChangedFile {
     path: entry.path,
     ...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
     ...(entry.content === undefined ? {} : { content: entry.content }),
+    ...(entry.oldLfs === true || entry.newLfs === true ? { lfs: true } : {}),
   };
+}
+
+function withGitLfsEndpoints(
+  entry: RawDiffEntry,
+  lfsObjects: ReadonlySet<string>,
+): RawDiffEntry {
+  return {
+    ...entry,
+    ...(lfsObjects.has(entry.oldObject) ? { oldLfs: true } : {}),
+    ...(lfsObjects.has(entry.newObject) ? { newLfs: true } : {}),
+  };
+}
+
+function parseGitLfsObjectHashes(
+  output: Buffer,
+  hashes: readonly string[],
+  objectInfo: ReadonlyMap<string, ObjectInfo>,
+): Set<string> {
+  const lfsObjects = new Set<string>();
+  let offset = 0;
+  for (const expectedHash of hashes) {
+    const lineEnd = output.indexOf(0x0a, offset);
+    if (lineEnd < 0) {
+      throw new GitError("Git returned incomplete object content metadata.");
+    }
+    const header = output.subarray(offset, lineEnd).toString("utf8");
+    const match = /^([0-9a-f]+) ([a-z]+) ([0-9]+)$/.exec(header);
+    const expected = objectInfo.get(expectedHash);
+    const size = Number(match?.[3]);
+    if (
+      match?.[1] !== expectedHash ||
+      match[2] !== "blob" ||
+      expected?.type !== "blob" ||
+      !Number.isSafeInteger(size) ||
+      size !== expected.size
+    ) {
+      throw new GitError("Git returned unexpected object content metadata.");
+    }
+    const contentStart = lineEnd + 1;
+    const contentEnd = contentStart + size;
+    if (contentEnd >= output.length || output[contentEnd] !== 0x0a) {
+      throw new GitError("Git returned incomplete object content.");
+    }
+    try {
+      if (parseGitLfsPointer(output.subarray(contentStart, contentEnd)) !== undefined) {
+        lfsObjects.add(expectedHash);
+      }
+    } catch (error) {
+      if (!(error instanceof GitLfsError)) {
+        throw error;
+      }
+      // Unsupported or malformed pointers remain inspectable as ordinary files.
+      // Opening that exact endpoint still reports the specific Git LFS error.
+    }
+    offset = contentEnd + 1;
+  }
+  if (offset !== output.length) {
+    throw new GitError("Git returned trailing object content.");
+  }
+  return lfsObjects;
 }
 
 function isObjectHash(value: string): boolean {

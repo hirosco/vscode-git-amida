@@ -13,6 +13,7 @@ export interface FileComparison {
   afterPath: string;
   status: string;
   content?: ChangedFileContent;
+  lfs?: boolean;
 }
 
 export interface SelectionFileState {
@@ -48,6 +49,7 @@ export function resolveFileComparison(
     afterPath: file.path,
     status: file.status,
     ...(file.content === undefined ? {} : { content: file.content }),
+    ...(file.lfs === true ? { lfs: true } : {}),
   };
 }
 
@@ -98,6 +100,7 @@ export function buildSelectionFiles(
       ...(comparison.content === undefined
         ? {}
         : { content: comparison.content }),
+      ...(comparison.lfs === true ? { lfs: true } : {}),
       selection: {
         changes: group.map((change) => ({
           commitHash: change.commitHash,
@@ -158,6 +161,9 @@ function compareEndpoints(
       afterPath,
     ),
     ...(content === undefined ? {} : { content }),
+    ...(oldest.oldLfs === true || newest.newLfs === true
+      ? { lfs: true }
+      : {}),
   };
 }
 

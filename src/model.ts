@@ -62,6 +62,7 @@ export interface ChangedFile {
   path: string;
   oldPath?: string;
   content?: ChangedFileContent;
+  lfs?: boolean;
   selection?: SelectionFileSummary;
 }
 
@@ -86,6 +87,8 @@ export interface CommitFileChange extends ChangedFile {
   parentHash?: string;
   oldObject: string;
   newObject: string;
+  oldLfs?: boolean;
+  newLfs?: boolean;
 }
 
 export interface FileRevision extends ChangedFile {

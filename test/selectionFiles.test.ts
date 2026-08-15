@@ -172,6 +172,37 @@ test("buildSelectionFiles preserves image content for multiple selected changes"
   });
 });
 
+test("buildSelectionFiles marks Git LFS only when a comparison endpoint is a pointer", () => {
+  const endpointFiles = buildSelectionFiles(
+    [
+      {
+        ...change("new", "middle", "M", "asset.dat", "old", "new"),
+        newLfs: true,
+      },
+      change("old", "root", "M", "asset.dat", "root", "old"),
+    ],
+    ["new", "old"],
+  );
+  assert.equal(endpointFiles[0]?.file.lfs, true);
+  assert.equal(endpointFiles[0]?.comparison.lfs, true);
+
+  const intermediateFiles = buildSelectionFiles(
+    [
+      {
+        ...change("new", "middle", "M", "asset.dat", "pointer", "plain"),
+        oldLfs: true,
+      },
+      {
+        ...change("old", "root", "M", "asset.dat", "plain", "pointer"),
+        newLfs: true,
+      },
+    ],
+    ["new", "old"],
+  );
+  assert.equal(intermediateFiles[0]?.file.lfs, undefined);
+  assert.equal(intermediateFiles[0]?.comparison.lfs, undefined);
+});
+
 test("buildSelectionFiles follows endpoint paths through selected renames", () => {
   const rename = change("rename", "base", "R100", "new.txt", "old", "same");
   rename.oldPath = "old.txt";

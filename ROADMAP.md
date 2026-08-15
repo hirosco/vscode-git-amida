@@ -13,7 +13,7 @@ This work should make common follow-up actions available without changing existi
 ## Historical Git LFS content
 
 - Resolve Git LFS pointers at selected historical endpoints for native diffs and external difftools
-- Prefer already available local LFS objects and request explicit user action before any network download
+- Prefer already available local LFS objects and automatically fetch missing selected endpoints with cancellable progress
 - Fetch only the selected file and revision without changing the working tree or index
 
 Repository-wide LFS downloads, image editing, and automatic write-back are outside this scope.
