@@ -16,25 +16,21 @@ A commit graph needs width. A wide sidebar takes that space from your editor. Gi
 ## Highlights
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
-- Identifies in-progress merges, rebases, cherry-picks, and reverts; counts unresolved index paths from any source, including stash application; and opens supported content conflicts in the host editor's native resolution flow
 - Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
-- Opens several independent File History tabs, marks Large, Submodule, and LFS revisions, and returns from a revision to its commit in Repository History
-- Previews text and supported image changes in the native editor, with the editor's standard fallback for other binary files
-- Resolves historical Git LFS content for native diffs and external difftools, fetching only missing selected endpoints with cancellable progress
-- Reopens one comparison in the configured Git difftool using exact before and after endpoint copies
-- Opens the current working-tree file or copies its file name or repository-relative path from Changed files
-- Restores one historical file version or switches to a named local branch only after explicit safety checks and confirmation
-- Keeps repository navigation and open File History tabs transient to the current editor session
+- Keeps several File History investigations open and returns any revision to its commit in Repository History
+- Previews supported text and image changes in the native editor, resolving only the selected historical Git LFS content when needed
+- Surfaces conflicts from merges, rebases, cherry-picks, reverts, and stash application, then hands supported files to the host editor's native resolution flow
+- Keeps optional tools and mutations explicit: external diff and merge tools, safety-checked file restoration, and named branch switching
 
 ## More screenshots
-
-**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
-
-![GitAmida showing an in-progress merge, two unresolved files, and VS Code's native conflict editor](./assets/marketplace/conflict-resolution.png)
 
 **File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
 
 ![GitAmida File History tabs with a native image comparison](./assets/marketplace/file-history-image-diff.png)
+
+**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
+
+![GitAmida showing an in-progress merge, two unresolved files, and VS Code's native conflict editor](./assets/marketplace/conflict-resolution.png)
 
 ## Getting started
 
@@ -47,9 +43,7 @@ A commit graph needs width. A wide sidebar takes that space from your editor. Gi
 
 ## Conflict workflow
 
-When Git has unresolved index entries, GitAmida keeps **Uncommitted changes (N)** above the history, adds the conflict count, and separates **Merge Changes** from ordinary **Changes**. Reliable Git markers identify an in-progress merge, rebase, cherry-pick, or revert; stash application and other unclassified conflicts remain intentionally generic.
-
-Selecting a supported content conflict opens its actual working-tree file so the host editor owns conflict markers and actions such as **Resolve in Merge Editor** or Cursor's **Resolve in Chat** when available. A configured Git mergetool is available as a secondary editor-title action before entering the Merge Editor. Modify/delete conflicts remain listed but are resolved from Source Control. GitAmida does not stage files or continue, abort, or otherwise complete the Git operation.
+When Git has unresolved index entries, GitAmida counts them, separates **Merge Changes** from **Changes**, and labels reliable in-progress merge, rebase, cherry-pick, and revert states. Unclassified sources such as stash application remain generic. Supported content conflicts open in the host editor's native resolution flow, with a configured Git mergetool available as a secondary choice before entering the Merge Editor. Modify/delete conflicts are resolved from Source Control. GitAmida does not stage files or complete the Git operation.
 
 ## Requirements
 
@@ -65,7 +59,7 @@ Selecting a supported content conflict opens its actual working-tree file so the
 - In a multi-root workspace, GitAmida uses the active editor's workspace folder, or the first folder when no editor is active
 - To inspect files inside a nested repository such as a submodule, open that repository as its own workspace; the parent repository still shows its submodule pointer history
 - Text blobs above the current `diffEditor.maxFileSize` setting and submodules remain visible but do not open as native comparisons
-- Modify/delete conflicts remain visible but are resolved from Source Control; when a Git mergetool is configured, its external action is limited to standard content-conflict editors with both index sides present and is hidden after entering the Merge Editor
+- Modify/delete conflicts are resolved from Source Control
 
 ## Privacy
 
