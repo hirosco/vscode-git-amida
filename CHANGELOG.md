@@ -2,6 +2,12 @@
 
 All notable changes to GitAmida will be documented in this file.
 
+## 0.0.5 - 2026-08-17
+
+### Changed
+
+- Refined the Marketplace description and README to present GitAmida's focused history-reading workflow more clearly
+
 ## 0.0.4 - 2026-08-16
 
 ### Added

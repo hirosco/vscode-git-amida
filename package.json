@@ -3,7 +3,7 @@
   "displayName": "GitAmida",
   "description": "Not a full Git client—just a clearer way to read history. See what changed across a range of commits in the bottom Panel.",
   "icon": "media/git-amida-marketplace.png",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "private": true,
   "publisher": "hirosco",
   "license": "SEE LICENSE IN LICENSE",
