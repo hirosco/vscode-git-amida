@@ -9,7 +9,7 @@ import { buildHistoryGraph } from "../dist/src/graph.js";
 
 if (process.argv[2] === undefined) {
   throw new Error(
-    "Usage: node scripts/validate-demo-repository.mjs /absolute/path/to/git-amida-demo",
+    "Usage: node scripts/validate-demo-repository.mjs /absolute/path/to/vscode-git-amida-demo",
   );
 }
 

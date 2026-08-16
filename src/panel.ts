@@ -11,6 +11,10 @@ import {
   GitBlobFileSystemProvider,
   GitContentProvider,
 } from "./contentProvider";
+import {
+  conflictStatusLabel,
+  conflictSupportsMergetool,
+} from "./conflicts";
 import { NativeDiffSessionRegistry } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
 import {
@@ -232,6 +236,12 @@ export class HistoryViewProvider
     if (file.content?.kind === "submodule") {
       await vscode.window.showInformationMessage(
         "GitAmida: Submodule comparisons cannot be opened in an external diff tool.",
+      );
+      return;
+    }
+    if (file.conflict !== undefined) {
+      await vscode.window.showInformationMessage(
+        "GitAmida: Open this conflict in the editor before using an external merge tool.",
       );
       return;
     }
@@ -1531,6 +1541,10 @@ export class HistoryViewProvider
     preview: boolean,
     signal: AbortSignal,
   ): Promise<void> {
+    if (file.conflict !== undefined) {
+      await this.openWorkingTreeConflict(file, repository, preview);
+      return;
+    }
     const textDiffMaxBytes = this.textDiffMaxBytes();
     const unsupportedMessage = fileContentMessage(
       file.content,
@@ -1645,6 +1659,43 @@ export class HistoryViewProvider
       );
     } catch (error) {
       if (isCancellation(error)) {
+        return;
+      }
+      await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);
+    }
+  }
+
+  private async openWorkingTreeConflict(
+    file: ChangedFile,
+    repository: string,
+    preview: boolean,
+  ): Promise<void> {
+    const conflict = file.conflict;
+    if (conflict === undefined) {
+      return;
+    }
+    if (!conflictSupportsMergetool(conflict)) {
+      if (!preview) {
+        const action = await vscode.window.showInformationMessage(
+          `GitAmida: Conflict status for "${file.path}": ${conflictStatusLabel(conflict)}. Resolve it from Source Control.`,
+          "Open Source Control",
+        );
+        if (action === "Open Source Control") {
+          await vscode.commands.executeCommand("workbench.view.scm");
+        }
+      }
+      return;
+    }
+    try {
+      const absolutePath = await resolveWorkingTreeFile(repository, file.path);
+      await vscode.window.showTextDocument(vscode.Uri.file(absolutePath), {
+        preview,
+      });
+    } catch (error) {
+      if (error instanceof WorkingTreeFileError) {
+        await vscode.window.showInformationMessage(
+          `GitAmida: "${file.path}" is no longer available as an unresolved working-tree file. Refresh and try again.`,
+        );
         return;
       }
       await vscode.window.showErrorMessage(`GitAmida: ${userMessage(error)}`);

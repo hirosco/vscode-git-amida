@@ -12,6 +12,11 @@ import type {
   RepositoryViewStatePatch,
   WorkingTreeState,
 } from "../src/model";
+import {
+  conflictStatusLabel,
+  workingTreeConflictSummary,
+  workingTreeOperationLabel,
+} from "../src/conflicts.js";
 import type {
   HostToWebviewMessage,
   RepositoryStateKind,
@@ -760,14 +765,30 @@ function renderWorkingTreeRow(): boolean {
 
   const fileCount = workingTree.files.length;
   const label = `Uncommitted changes (${fileCount})`;
+  const operation = workingTreeConflictSummary(workingTree);
   if (existing !== null) {
     const subject = existing.querySelector<HTMLElement>(".subject");
     if (subject !== null) {
       subject.textContent = label;
     }
+    const currentOperation = existing.querySelector<HTMLElement>(
+      ".working-tree-operation",
+    );
+    if (operation === undefined) {
+      currentOperation?.remove();
+    } else if (currentOperation === null) {
+      const operationLabel = span("working-tree-operation", operation);
+      operationLabel.title = operation;
+      existing
+        .querySelector<HTMLElement>(".working-tree-cell")
+        ?.append(operationLabel);
+    } else {
+      currentOperation.textContent = operation;
+      currentOperation.title = operation;
+    }
     existing.setAttribute(
       "aria-label",
-      `${label}, saved working tree compared with HEAD`,
+      `${label}${operation === undefined ? "" : `, ${operation}`}, saved working tree compared with HEAD`,
     );
     return false;
   }
@@ -782,10 +803,15 @@ function renderWorkingTreeRow(): boolean {
   button.setAttribute("role", "option");
   button.setAttribute(
     "aria-label",
-    `${label}, saved working tree compared with HEAD`,
+    `${label}${operation === undefined ? "" : `, ${operation}`}, saved working tree compared with HEAD`,
   );
   const commitCell = span("commit-cell working-tree-cell", "");
   commitCell.append(span("subject", label));
+  if (operation !== undefined) {
+    const operationLabel = span("working-tree-operation", operation);
+    operationLabel.title = operation;
+    commitCell.append(operationLabel);
+  }
   button.append(createWorkingTreeMarker(), commitCell, span("date", ""));
   button.addEventListener("click", () => selectWorkingTree());
   button.addEventListener("keydown", (event) => {
@@ -1137,13 +1163,28 @@ function renderFiles(): void {
     return;
   }
 
+  const groupedWorkingTree =
+    selection?.mode === "workingTree" &&
+    currentFiles.some((file) => file.conflict !== undefined);
   if (fileViewMode === "flat") {
     elements.files.setAttribute("role", "listbox");
+  } else {
+    elements.files.setAttribute("role", "tree");
+  }
+  if (groupedWorkingTree) {
+    renderWorkingTreeFileGroup(
+      "Merge Changes",
+      currentFiles.filter((file) => file.conflict !== undefined),
+    );
+    renderWorkingTreeFileGroup(
+      "Changes",
+      currentFiles.filter((file) => file.conflict === undefined),
+    );
+  } else if (fileViewMode === "flat") {
     for (const file of currentFiles) {
       elements.files.append(createFileRow(file, fileDisplayPath(file)));
     }
   } else {
-    elements.files.setAttribute("role", "tree");
     renderTreeNodes(currentTree, elements.files);
   }
   updateFileSelection();
@@ -1151,10 +1192,64 @@ function renderFiles(): void {
     selection?.mode === "single"
       ? ""
       : ` across ${selectionScope()}`;
+  const conflictCount = currentFiles.filter(
+    (file) => file.conflict !== undefined,
+  ).length;
   setStatus(
-    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${scope}. ` +
+    `${currentFiles.length} changed file${currentFiles.length === 1 ? "" : "s"}${scope}.` +
+      (conflictCount === 0
+        ? " "
+        : ` ${conflictCount} conflict${conflictCount === 1 ? "" : "s"}. `) +
       "Click to preview; double-click or press Enter to keep a diff open.",
   );
+}
+
+function renderWorkingTreeFileGroup(
+  label: string,
+  files: ChangedFile[],
+): void {
+  const group = document.createElement("section");
+  group.className = "file-group";
+  group.setAttribute("role", "group");
+  group.setAttribute("aria-label", `${label}, ${files.length}`);
+  const heading = document.createElement("div");
+  heading.className = "file-group-heading";
+  heading.append(
+    span("file-group-label", label),
+    span("file-group-count", String(files.length)),
+  );
+  group.append(heading);
+  if (fileViewMode === "flat") {
+    for (const file of files) {
+      group.append(createFileRow(file, fileDisplayPath(file)));
+    }
+  } else {
+    renderTreeNodes(
+      filterFileTree(currentTree, new Set(files.map((file) => file.path))),
+      group,
+    );
+  }
+  elements.files.append(group);
+}
+
+function filterFileTree(
+  nodes: FileTreeNode[],
+  paths: ReadonlySet<string>,
+): FileTreeNode[] {
+  const filtered: FileTreeNode[] = [];
+  for (const node of nodes) {
+    if (node.kind === "file") {
+      if (paths.has(node.file.path)) {
+        filtered.push(node);
+      }
+      continue;
+    }
+    const children = filterFileTree(node.children, paths);
+    if (children.length > 0) {
+      filtered.push({ ...node, children });
+    }
+  }
+  return filtered;
 }
 
 function restoreFilesScroll(): void {
@@ -1291,6 +1386,7 @@ function createFileRow(
     gitAmidaCanRestoreFile: canRestoreBefore || canRestoreAfter,
     gitAmidaCanRestoreBeforeFile: canRestoreBefore,
     gitAmidaCanRestoreAfterFile: canRestoreAfter,
+    gitAmidaCanOpenDifftool: file.conflict === undefined,
   });
   button.setAttribute("role", tree ? "treeitem" : "option");
   const status = fileStatusLabel(file);
@@ -1304,7 +1400,9 @@ function createFileRow(
   const description =
     `${fileDisplayPath(file)} · ${status}` +
     (contributors === undefined ? "" : ` · commits ${contributors}`);
-  const statusClass = `status-${file.status[0] ?? "X"}`;
+  const statusClass = `status-${
+    file.conflict === undefined ? file.status[0] ?? "X" : "U"
+  }`;
   button.title = description;
   button.setAttribute("aria-label", description);
   const pathCell = span("file-path-cell", "");
@@ -1420,6 +1518,18 @@ function renderWorkingTreeDetails(
   list.className = "details-list";
   appendDetail(list, "Base HEAD", current.headHash);
   appendDetail(list, "Files", String(workingTree?.files.length ?? 0));
+  const conflictCount =
+    workingTree?.files.filter((file) => file.conflict !== undefined).length ?? 0;
+  if (workingTree?.operation !== undefined) {
+    appendDetail(
+      list,
+      "Operation",
+      `${workingTreeOperationLabel(workingTree.operation)} in progress`,
+    );
+  }
+  if (workingTree?.operation !== undefined || conflictCount > 0) {
+    appendDetail(list, "Conflicts", String(conflictCount));
+  }
   appendDetail(list, "Comparison", "HEAD → saved working tree");
   appendDetail(list, "Unsaved editors", "Excluded until saved");
   elements.details.append(heading, subject, list);
@@ -2280,7 +2390,11 @@ function fileStatusLabel(file: ChangedFile): string {
       labels.push(`${count} selected commits`, "endpoint diff");
     }
   } else {
-    labels.push(statusLabel(file.status));
+    labels.push(
+      file.conflict === undefined
+        ? statusLabel(file.status)
+        : conflictStatusLabel(file.conflict),
+    );
   }
   if (file.content !== undefined) {
     labels.push(contentLabel(file));
@@ -2300,7 +2414,9 @@ function fileStatusDisplayLabel(file: ChangedFile): string {
     const changeStatus = file.selection.changes[0]?.status ?? file.status;
     return statusLabel(changeStatus);
   }
-  return statusLabel(file.status);
+  return file.conflict === undefined
+    ? statusLabel(file.status)
+    : conflictStatusLabel(file.conflict);
 }
 
 function createFileTags(file: ChangedFile): HTMLElement[] {

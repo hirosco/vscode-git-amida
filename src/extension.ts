@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 
+import { ActiveConflictTracker } from "./activeConflict";
 import { BranchMutationService } from "./branchSwitcher";
 import {
   GitBlobFileSystemProvider,
@@ -12,6 +13,7 @@ import {
   NativeDiffSessionRegistry,
 } from "./diffSessions";
 import { ExternalDifftoolService } from "./externalDifftool";
+import { ExternalMergetoolService } from "./externalMergetool";
 import { FileRestoreService } from "./fileRestorer";
 import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
@@ -37,6 +39,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const blobProvider = new GitBlobFileSystemProvider();
   const diffSessions = new NativeDiffSessionRegistry();
   const externalDifftool = new ExternalDifftoolService();
+  const externalMergetool = new ExternalMergetoolService();
+  const activeConflict = new ActiveConflictTracker(
+    git,
+    async (repository) =>
+      (await externalMergetool.configuredTool(repository)) !== undefined,
+  );
   const fileRestorer = new FileRestoreService();
   const pendingDiffReleases = new Set<ReturnType<typeof setTimeout>>();
   const historyProvider = new HistoryViewProvider(
@@ -181,6 +189,73 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
     vscode.commands.registerCommand(
+      "gitAmida.openInMergetool",
+      async () => {
+        try {
+          await activeConflict.refresh();
+          const conflict = activeConflict.current;
+          if (conflict === undefined) {
+            await vscode.window.showInformationMessage(
+              "GitAmida: Open a content conflict in the editor before using an external merge tool.",
+            );
+            return;
+          }
+          if (hasUnsavedDocument(conflict.resource)) {
+            await vscode.window.showWarningMessage(
+              "GitAmida: Save or discard the unsaved conflict editor before opening an external merge tool.",
+            );
+            return;
+          }
+          const tool = await externalMergetool.configuredTool(
+            conflict.repository,
+          );
+          if (tool === undefined) {
+            await vscode.window.showInformationMessage(
+              "GitAmida: No Git merge tool is configured. Configure merge.tool or merge.guitool and try again.",
+            );
+            return;
+          }
+          const action = await vscode.window.showWarningMessage(
+            `GitAmida will open "${conflict.path}" in ${tool.name}. The merge tool may modify and stage the file, and Git may create a backup file.`,
+            { modal: true },
+            "Open Git Mergetool",
+          );
+          if (action !== "Open Git Mergetool") {
+            return;
+          }
+          await activeConflict.refresh();
+          const current = activeConflict.current;
+          if (
+            current === undefined ||
+            current.repository !== conflict.repository ||
+            current.path !== conflict.path
+          ) {
+            await vscode.window.showInformationMessage(
+              "GitAmida: The active conflict changed. Open the intended conflict and try again.",
+            );
+            return;
+          }
+          if (hasUnsavedDocument(current.resource)) {
+            await vscode.window.showWarningMessage(
+              "GitAmida: Save or discard the unsaved conflict editor before opening an external merge tool.",
+            );
+            return;
+          }
+          await externalMergetool.open({
+            repository: current.repository,
+            path: current.path,
+            conflict: current.conflict,
+          });
+          await historyProvider.refresh(false);
+          await activeConflict.refresh();
+        } catch (error) {
+          await vscode.window.showErrorMessage(
+            `GitAmida: ${userMessage(error)}`,
+          );
+        }
+      },
+    ),
+    vscode.commands.registerCommand(
       "gitAmida.openInDifftoolFromChangedFile",
       async (contextValue?: unknown) => {
         await vscode.commands.executeCommand(
@@ -246,16 +321,25 @@ export function activate(context: vscode.ExtensionContext): void {
     blobProvider,
     diffSessions,
     externalDifftool,
+    activeConflict,
     historyProvider,
   );
   void observeGitRepositories(
     context.subscriptions,
     (repository, scope) => {
       historyProvider.scheduleRefresh(scope, repository);
+      void activeConflict.refresh();
     },
   ).catch((error: unknown) => {
     console.warn("GitAmida: automatic Git refresh is unavailable.", error);
   });
+}
+
+function hasUnsavedDocument(resource: vscode.Uri): boolean {
+  const identity = resource.toString();
+  return vscode.workspace.textDocuments.some(
+    (document) => document.isDirty && document.uri.toString() === identity,
+  );
 }
 
 export function deactivate(): void {}

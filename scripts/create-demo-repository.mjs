@@ -14,7 +14,7 @@ import { basename, dirname, relative, resolve, sep } from "node:path";
 
 if (process.argv[2] === undefined) {
   throw new Error(
-    "Usage: node scripts/create-demo-repository.mjs /absolute/path/to/git-amida-demo",
+    "Usage: node scripts/create-demo-repository.mjs /absolute/path/to/vscode-git-amida-demo",
   );
 }
 
@@ -657,7 +657,12 @@ for (let index = 1; index <= 110; index += 1) {
 }
 
 switchTo(target, "main");
-git(target, ["remote", "add", "origin", "https://example.invalid/git-amida-demo.git"]);
+git(target, [
+  "remote",
+  "add",
+  "origin",
+  `https://example.invalid/${basename(target)}.git`,
+]);
 git(target, ["update-ref", "refs/remotes/origin/main", cleanupHash]);
 git(target, ["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"]);
 git(target, ["branch", "release/preview", cleanupHash]);

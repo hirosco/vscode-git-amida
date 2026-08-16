@@ -2,6 +2,20 @@
 
 All notable changes to GitAmida will be documented in this file.
 
+## 0.0.4 - 2026-08-16
+
+### Added
+
+- Conflict-aware **Uncommitted changes** summaries and separate **Merge Changes** and **Changes** groups
+- In-progress merge, rebase, cherry-pick, and revert labels, with generic conflict reporting for stash application and other unclassified sources
+- Native host-editor opening for supported content conflicts, including optional Merge Editor and host-specific resolution actions
+- An explicitly confirmed **GitAmida: Open in Git Mergetool** editor action when a compatible conflict and configured external tool are available
+
+### Changed
+
+- Count unresolved index paths even when the saved working-tree file matches `HEAD`
+- Keep modify/delete conflicts visible while directing their explicit resolution to Source Control
+
 ## 0.0.3 - 2026-08-16
 
 ### Added

@@ -2,7 +2,11 @@
 
 > Follow the line through your Git history.
 
-GitAmida keeps repository and file history connected in the bottom Panel while opening exact changes in the native diff editor in Cursor and VS Code.
+A commit graph needs width. A wide sidebar takes that space from your editor. GitAmida gives the graph room in the bottom Panel: repository history, changed files, and commit details stay side by side, while supported comparisons open in the editor's native diff view.
+
+**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
+
+![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
 
 ## Install
 
@@ -13,27 +17,20 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
 - Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
-- Opens several independent File History tabs, marks Large, Submodule, and LFS revisions, and returns from a revision to its commit in Repository History
-- Previews text and supported image changes in the native editor, with the editor's standard fallback for other binary files
-- Resolves historical Git LFS content for native diffs and external difftools, fetching only missing selected endpoints with cancellable progress
-- Reopens one comparison in the configured Git difftool using exact before and after endpoint copies
-- Opens the current working-tree file or copies its file name or repository-relative path from Changed files
-- Restores one historical file version or switches to a named local branch only after explicit safety checks and confirmation
-- Keeps repository navigation and open File History tabs transient to the current editor session
+- Keeps several File History investigations open and returns any revision to its commit in Repository History
+- Previews supported text and image changes in the native editor, resolving only the selected historical Git LFS content when needed
+- Surfaces conflicts from merges, rebases, cherry-picks, reverts, and stash application, then hands supported files to the host editor's native resolution flow
+- Keeps optional tools and mutations explicit: external diff and merge tools, safety-checked file restoration, and named branch switching
 
-## Screenshots
-
-**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
-
-![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
-
-**Selected commits** — Review one explainable file comparison across a continuous range or explicit commit selection.
-
-![GitAmida showing three selected commits, their changed files, and a native text diff](./assets/marketplace/selected-commits-diff.png)
+## More screenshots
 
 **File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
 
 ![GitAmida File History tabs with a native image comparison](./assets/marketplace/file-history-image-diff.png)
+
+**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
+
+![GitAmida showing an in-progress merge, two unresolved files, and VS Code's native conflict editor](./assets/marketplace/conflict-resolution.png)
 
 ## Getting started
 
@@ -43,6 +40,10 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 4. Shift-select a visible interval, or use Cmd/Ctrl+click to include individual commits.
 5. Select a changed file to preview its comparison; press Enter, double-click, or choose **Open Changes** to pin it.
 6. Use the Changed-files context menu for File History, the current working-tree file, path copying, an external difftool, or safe file restoration.
+
+## Conflict workflow
+
+When Git has unresolved index entries, GitAmida counts them, separates **Merge Changes** from **Changes**, and labels reliable in-progress merge, rebase, cherry-pick, and revert states. Unclassified sources such as stash application remain generic. Supported content conflicts open in the host editor's native resolution flow, with a configured Git mergetool available as a secondary choice before entering the Merge Editor. Modify/delete conflicts are resolved from Source Control. GitAmida does not stage files or complete the Git operation.
 
 ## Requirements
 
@@ -58,10 +59,11 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 - In a multi-root workspace, GitAmida uses the active editor's workspace folder, or the first folder when no editor is active
 - To inspect files inside a nested repository such as a submodule, open that repository as its own workspace; the parent repository still shows its submodule pointer history
 - Text blobs above the current `diffEditor.maxFileSize` setting and submodules remain visible but do not open as native comparisons
+- Modify/delete conflicts are resolved from Source Control
 
 ## Privacy
 
-GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. When selected historical Git LFS content is missing locally, GitAmida fetches only those exact endpoints from the repository's configured LFS remote with cancellable progress. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
+GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. When selected historical Git LFS content is missing locally, GitAmida fetches only those exact endpoints from the repository's configured LFS remote with cancellable progress. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action. An explicitly invoked Git mergetool operates on the live conflicted file and may modify or stage it according to Git and tool configuration.
 
 ## Support
 

@@ -11,7 +11,7 @@ import { basename, dirname, resolve, sep } from "node:path";
 
 if (process.argv[2] === undefined) {
   throw new Error(
-    "Usage: node scripts/create-ai-parallel-repository.mjs /absolute/path/to/git-amida-ai-parallel-demo",
+    "Usage: node scripts/create-ai-parallel-repository.mjs /absolute/path/to/vscode-git-amida-ai-parallel-demo",
   );
 }
 
@@ -160,7 +160,7 @@ git(target, ["config", "commit.gpgsign", "false"]);
 write(target, ".gitignore", ".DS_Store\n");
 write(target, "README.md", repositoryReadme());
 write(target, "VALIDATION.md", validationGuide());
-write(target, "src/platform.ts", "export const platform = 'git-amida-demo';\n");
+write(target, "src/platform.ts", "export const platform = 'vscode-git-amida-demo';\n");
 commit(target, "chore: initialize parallel workspace", utcDay(1));
 
 write(target, "src/history.ts", "export const historyPageSize = 100;\n");
