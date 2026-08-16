@@ -2,7 +2,11 @@
 
 > Follow the line through your Git history.
 
-GitAmida keeps repository and file history connected in the bottom Panel while opening exact changes in the native diff editor in Cursor and VS Code.
+A commit graph needs width. A wide sidebar takes that space from your editor. GitAmida gives the graph room in the bottom Panel: repository history, changed files, and commit details stay side by side, while supported comparisons open in the editor's native diff view.
+
+**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
+
+![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
 
 ## Install
 
@@ -22,15 +26,11 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 - Restores one historical file version or switches to a named local branch only after explicit safety checks and confirmation
 - Keeps repository navigation and open File History tabs transient to the current editor session
 
-## Screenshots
+## More screenshots
 
-**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
+**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
 
-![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
-
-**Selected commits** — Review one explainable file comparison across a continuous range or explicit commit selection.
-
-![GitAmida showing three selected commits, their changed files, and a native text diff](./assets/marketplace/selected-commits-diff.png)
+![GitAmida showing an in-progress merge, two unresolved files, and VS Code's native conflict editor](./assets/marketplace/conflict-resolution.png)
 
 **File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
 
@@ -44,6 +44,12 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 4. Shift-select a visible interval, or use Cmd/Ctrl+click to include individual commits.
 5. Select a changed file to preview its comparison; press Enter, double-click, or choose **Open Changes** to pin it.
 6. Use the Changed-files context menu for File History, the current working-tree file, path copying, an external difftool, or safe file restoration.
+
+## Conflict workflow
+
+When Git has unresolved index entries, GitAmida keeps **Uncommitted changes (N)** above the history, adds the conflict count, and separates **Merge Changes** from ordinary **Changes**. Reliable Git markers identify an in-progress merge, rebase, cherry-pick, or revert; stash application and other unclassified conflicts remain intentionally generic.
+
+Selecting a supported content conflict opens its actual working-tree file so the host editor owns conflict markers and actions such as **Resolve in Merge Editor** or Cursor's **Resolve in Chat** when available. A configured Git mergetool is available as a secondary editor-title action before entering the Merge Editor. Modify/delete conflicts remain listed but are resolved from Source Control. GitAmida does not stage files or continue, abort, or otherwise complete the Git operation.
 
 ## Requirements
 

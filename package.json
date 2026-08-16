@@ -1,9 +1,9 @@
 {
   "name": "git-amida",
   "displayName": "GitAmida",
-  "description": "Browse the commit graph and file history in the Panel, and open changes in native diffs.",
+  "description": "A minimal Git history navigator. Commit graph and file history in the bottom Panel; comparisons in native diffs.",
   "icon": "media/git-amida-marketplace.png",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "publisher": "hirosco",
   "license": "SEE LICENSE IN LICENSE",

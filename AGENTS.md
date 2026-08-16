@@ -109,6 +109,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 - Do not approve an install script broadly. Add an exact package version to `allowScripts` only after review.
 - Do not run untrusted scripts with broad access to credentials, the home directory, synced storage, or external storage.
 - Use `npm run package:inspect` to review the exact VSIX contents and `npm run package:vsix` to create the unsigned local evaluation package.
+- For a release VSIX, create and push its immutable `v<version>` tag first, then pass `--baseImagesUrl https://raw.githubusercontent.com/hirosco/vscode-git-amida/v<version>` so packaged README images never follow `HEAD`.
 - Keep VSIX contents behind the `package.json#files` allowlist. Do not add a competing `.vscodeignore` strategy.
 - Keep the MIT license in the VSIX and do not bypass `vsce` license validation.
 
