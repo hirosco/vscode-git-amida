@@ -26,13 +26,13 @@ your place. Comparisons open in the editor's native diff view, not a custom one.
 
 ## More screenshots
 
-**File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
-
 ![GitAmida File History tabs with a native image comparison](./assets/marketplace/file-history-image-diff.png)
 
-**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
+**File History** — Keep several file investigations open and preview supported image revisions in the native diff editor.
 
 ![GitAmida showing an in-progress merge, two unresolved files, and VS Code's native conflict editor](./assets/marketplace/conflict-resolution.png)
+
+**Conflict resolution** — Inspect unresolved paths in GitAmida, then continue in the host editor's native conflict flow.
 
 ## Getting started
 
