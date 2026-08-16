@@ -10,6 +10,10 @@ import {
 } from "node:path";
 import { promisify } from "node:util";
 
+import {
+  parseUnmergedIndex,
+  type UnmergedIndexEntry,
+} from "./conflicts";
 import { buildHistoryGraph, type HistoryGraphState } from "./graph";
 import type {
   ChangedFile,
@@ -17,6 +21,7 @@ import type {
   CommitFileChange,
   CommitRef,
   CommitWorktree,
+  FileConflict,
   FileRevision,
   HistoryResult,
   RepositoryInfo,
@@ -444,7 +449,13 @@ export class GitClient {
     maxTextBlobBytes = Number.POSITIVE_INFINITY,
     signal?: AbortSignal,
   ): Promise<WorkingTreeState> {
-    const [rawOutput, numStatOutput, untrackedOutput] = await Promise.all([
+    const [
+      rawOutput,
+      numStatOutput,
+      untrackedOutput,
+      unmergedOutput,
+      operation,
+    ] = await Promise.all([
       this.run(
         repository,
         [
@@ -497,19 +508,34 @@ export class GitClient {
           signal,
         },
       ),
+      this.run(
+        repository,
+        ["ls-files", "--unmerged", "-z", "--"],
+        {
+          operation: "Unmerged-index discovery",
+          maxBuffer: CHANGED_FILES_BUFFER,
+          signal,
+        },
+      ),
+      this.inProgressWorkingTreeOperation(repository, signal),
     ]);
     const trackedEntries = parseRawDiff(rawOutput);
     const untrackedPaths = parseNulPaths(untrackedOutput);
+    const unmergedEntries = parseUnmergedIndex(unmergedOutput);
+    const unmergedPaths = new Set(unmergedEntries.map((entry) => entry.path));
     const entries: RawDiffEntry[] = [
-      ...trackedEntries,
-      ...untrackedPaths.map((path) => ({
-        status: "A",
-        path,
-        oldMode: "000000",
-        newMode: "100644",
-        oldObject: "0000000000000000000000000000000000000000",
-        newObject: "0000000000000000000000000000000000000000",
-      })),
+      ...trackedEntries.filter((entry) => !unmergedPaths.has(entry.path)),
+      ...unmergedEntries.map(rawDiffEntryFromConflict),
+      ...untrackedPaths
+        .filter((path) => !unmergedPaths.has(path))
+        .map((path) => ({
+          status: "A",
+          path,
+          oldMode: "000000",
+          newMode: "100644",
+          oldObject: "0000000000000000000000000000000000000000",
+          newObject: "0000000000000000000000000000000000000000",
+        })),
     ];
     const [objectInfo, workingFileInfo] = await Promise.all([
       this.loadObjectInfo(
@@ -544,7 +570,27 @@ export class GitClient {
     return {
       headHash,
       files,
+      ...(operation === undefined ? {} : { operation }),
     };
+  }
+
+  public async conflictAtPath(
+    repository: string,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<FileConflict | undefined> {
+    resolveWorkingPath(repository, path);
+    const output = await this.run(
+      repository,
+      ["ls-files", "--unmerged", "-z", "--", path],
+      {
+        operation: "Unmerged-file inspection",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    return parseUnmergedIndex(output).find((entry) => entry.path === path)
+      ?.conflict;
   }
 
   public async changedFilesBetween(
@@ -929,6 +975,43 @@ export class GitClient {
       },
     );
     return parseObjectInfo(output);
+  }
+
+  private async inProgressWorkingTreeOperation(
+    repository: string,
+    signal?: AbortSignal,
+  ): Promise<WorkingTreeState["operation"]> {
+    const output = await this.run(
+      repository,
+      [
+        "rev-parse",
+        "--git-path",
+        "MERGE_HEAD",
+        "--git-path",
+        "rebase-merge",
+        "--git-path",
+        "rebase-apply",
+      ],
+      {
+        operation: "Git operation discovery",
+        maxBuffer: METADATA_BUFFER,
+        signal,
+      },
+    );
+    const paths = output
+      .toString("utf8")
+      .trim()
+      .split(/\r?\n/)
+      .map((path) => (isAbsolute(path) ? path : resolve(repository, path)));
+    const [merge, rebaseMerge, rebaseApply] = await Promise.all(
+      paths.map(pathExists),
+    );
+    if (merge === true) {
+      return "merge";
+    }
+    return rebaseMerge === true || rebaseApply === true
+      ? "rebase"
+      : undefined;
   }
 
   private async loadGitLfsObjectHashes(
@@ -1858,7 +1941,36 @@ function changedFileFromEntry(entry: RawDiffEntry): ChangedFile {
     ...(entry.oldPath === undefined ? {} : { oldPath: entry.oldPath }),
     ...(entry.content === undefined ? {} : { content: entry.content }),
     ...(entry.oldLfs === true || entry.newLfs === true ? { lfs: true } : {}),
+    ...(entry.conflict === undefined ? {} : { conflict: entry.conflict }),
   };
+}
+
+function rawDiffEntryFromConflict(entry: UnmergedIndexEntry): RawDiffEntry {
+  const base = entry.stages.get(1);
+  const ours = entry.stages.get(2);
+  const theirs = entry.stages.get(3);
+  const before = ours ?? base ?? theirs;
+  const after = theirs ?? ours ?? base;
+  return {
+    status: "U",
+    path: entry.path,
+    oldMode: before?.mode ?? "000000",
+    newMode: after?.mode ?? "000000",
+    oldObject:
+      before?.object ?? "0000000000000000000000000000000000000000",
+    newObject:
+      after?.object ?? "0000000000000000000000000000000000000000",
+    conflict: entry.conflict,
+  };
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function withGitLfsEndpoints(

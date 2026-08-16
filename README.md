@@ -12,6 +12,7 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 ## Highlights
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
+- Identifies in-progress merges and rebases, counts every unresolved index path, and opens supported content conflicts in the host editor's native resolution flow
 - Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
 - Opens several independent File History tabs, marks Large, Submodule, and LFS revisions, and returns from a revision to its commit in Repository History
 - Previews text and supported image changes in the native editor, with the editor's standard fallback for other binary files
@@ -58,10 +59,11 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 - In a multi-root workspace, GitAmida uses the active editor's workspace folder, or the first folder when no editor is active
 - To inspect files inside a nested repository such as a submodule, open that repository as its own workspace; the parent repository still shows its submodule pointer history
 - Text blobs above the current `diffEditor.maxFileSize` setting and submodules remain visible but do not open as native comparisons
+- Modify/delete conflicts remain visible but are resolved from Source Control; when a Git mergetool is configured, its external action is limited to standard content-conflict editors with both index sides present and is hidden after entering the Merge Editor
 
 ## Privacy
 
-GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. When selected historical Git LFS content is missing locally, GitAmida fetches only those exact endpoints from the repository's configured LFS remote with cancellable progress. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action.
+GitAmida reads repository contents and metadata locally to render history and prepare diffs. It does not collect telemetry or analytics, and it does not transmit repository contents or personal information to a GitAmida-operated service. When selected historical Git LFS content is missing locally, GitAmida fetches only those exact endpoints from the repository's configured LFS remote with cancellable progress. An external difftool receives local temporary endpoint copies only after the user explicitly invokes that action. An explicitly invoked Git mergetool operates on the live conflicted file and may modify or stage it according to Git and tool configuration.
 
 ## Support
 

@@ -553,6 +553,35 @@ h2 {
   padding: 2px 8px;
 }
 
+.file-group {
+  display: block;
+}
+
+.file-group-heading {
+  display: flex;
+  min-height: 25px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 8px;
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBarSectionHeader-background);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.file-group-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 10px;
+  color: var(--vscode-badge-foreground);
+  text-align: center;
+  background: var(--vscode-badge-background);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
 .file-revision-row {
   padding: 2px 8px;
   overflow: hidden;
@@ -644,6 +673,17 @@ h2 {
 
 .working-tree-cell .subject {
   font-weight: 600;
+}
+
+.working-tree-operation {
+  min-width: 0;
+  max-width: 48%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .history-row:hover .graph-head-node {
@@ -947,7 +987,8 @@ code {
 .status-M,
 .status-R,
 .status-C,
-.status-T {
+.status-T,
+.status-U {
   color: var(--vscode-gitDecoration-modifiedResourceForeground);
 }
 

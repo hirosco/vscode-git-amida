@@ -11,7 +11,7 @@ import { dirname, resolve, sep } from "node:path";
 
 if (process.argv[2] === undefined) {
   throw new Error(
-    "Usage: node scripts/create-graph-stress-repository.mjs /absolute/path/to/git-amida-graph-stress-demo",
+    "Usage: node scripts/create-graph-stress-repository.mjs /absolute/path/to/vscode-git-amida-graph-stress-demo",
   );
 }
 

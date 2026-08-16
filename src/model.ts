@@ -63,7 +63,14 @@ export interface ChangedFile {
   oldPath?: string;
   content?: ChangedFileContent;
   lfs?: boolean;
+  conflict?: FileConflict;
   selection?: SelectionFileSummary;
+}
+
+export type ConflictStatus = "AA" | "AU" | "DD" | "DU" | "UA" | "UD" | "UU";
+
+export interface FileConflict {
+  status: ConflictStatus;
 }
 
 export interface ChangedFileContent {
@@ -117,6 +124,7 @@ export interface HistoryResult {
 export interface WorkingTreeState {
   headHash: string;
   files: ChangedFile[];
+  operation?: "merge" | "rebase";
 }
 
 export interface WorkingTreeSelection {

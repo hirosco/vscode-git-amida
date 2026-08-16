@@ -105,6 +105,11 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "gitAmida.openInMergetool",
+        "title": "GitAmida: Open in Git Mergetool",
+        "icon": "$(tools)"
+      },
+      {
         "command": "gitAmida.openInDifftoolFromChangedFile",
         "title": "Open in Git Difftool",
         "category": "GitAmida"
@@ -203,6 +208,11 @@
           "command": "gitAmida.openInDifftool",
           "when": "resourceScheme =~ /^git-amida$|^git-amida-blob$/",
           "group": "navigation@10"
+        },
+        {
+          "command": "gitAmida.openInMergetool",
+          "when": "gitAmida.activeConflictSupportsMergetool",
+          "group": "navigation@11"
         }
       ],
       "view/title": [
@@ -225,7 +235,7 @@
         },
         {
           "command": "gitAmida.openInDifftoolFromChangedFile",
-          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+          "when": "webviewId == 'gitAmida.history' && webviewSection == 'changedFile' && gitAmidaCanOpenDifftool",
           "group": "navigation@4"
         },
         {
@@ -268,6 +278,10 @@
         },
         {
           "command": "gitAmida.openInDifftoolFromChangedFile",
+          "when": "false"
+        },
+        {
+          "command": "gitAmida.openInMergetool",
           "when": "false"
         },
         {

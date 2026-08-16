@@ -9,7 +9,7 @@ import { buildHistoryGraph } from "../dist/src/graph.js";
 
 if (process.argv[2] === undefined) {
   throw new Error(
-    "Usage: node scripts/validate-ai-parallel-repository.mjs /absolute/path/to/git-amida-ai-parallel-demo",
+    "Usage: node scripts/validate-ai-parallel-repository.mjs /absolute/path/to/vscode-git-amida-ai-parallel-demo",
   );
 }
 

@@ -123,11 +123,43 @@ test("native diffs identify GitAmida while Changed Files keeps a short action", 
   });
   assert.deepEqual(contextAction, {
     command: "gitAmida.openInDifftoolFromChangedFile",
-    when: "webviewId == 'gitAmida.history' && webviewSection == 'changedFile'",
+    when:
+      "webviewId == 'gitAmida.history' && webviewSection == 'changedFile' && gitAmidaCanOpenDifftool",
     group: "navigation@4",
   });
   assert.deepEqual(paletteAction, {
     command: "gitAmida.openInDifftoolFromChangedFile",
+    when: "false",
+  });
+});
+
+test("Git mergetool is contributed only to the eligible active editor context", () => {
+  const command = manifest.contributes.commands.find(
+    ({ command: id }) => id === "gitAmida.openInMergetool",
+  );
+  const editorAction = manifest.contributes.menus["editor/title"]?.find(
+    ({ command: id }) => id === "gitAmida.openInMergetool",
+  );
+  const contextAction = manifest.contributes.menus["webview/context"]?.find(
+    ({ command: id }) => id === "gitAmida.openInMergetool",
+  );
+  const paletteAction = manifest.contributes.menus.commandPalette?.find(
+    ({ command: id }) => id === "gitAmida.openInMergetool",
+  );
+
+  assert.deepEqual(command, {
+    command: "gitAmida.openInMergetool",
+    title: "GitAmida: Open in Git Mergetool",
+    icon: "$(tools)",
+  });
+  assert.deepEqual(editorAction, {
+    command: "gitAmida.openInMergetool",
+    when: "gitAmida.activeConflictSupportsMergetool",
+    group: "navigation@11",
+  });
+  assert.equal(contextAction, undefined);
+  assert.deepEqual(paletteAction, {
+    command: "gitAmida.openInMergetool",
     when: "false",
   });
 });
