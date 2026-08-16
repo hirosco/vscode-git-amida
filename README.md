@@ -1,8 +1,12 @@
 # GitAmida
 
-> Follow the line through your Git history.
+GitAmida does one thing: make Git history readable. It is not a full Git client
+and does not replace the editor's built-in Source Control view.
 
-A commit graph needs width. A wide sidebar takes that space from your editor. GitAmida gives the graph room in the bottom Panel: repository history, changed files, and commit details stay side by side, while supported comparisons open in the editor's native diff view.
+Select a range of commits and see what changed across the whole range in one
+view. Keep your code open in the editor while you follow its history in the
+bottom Panel, moving between repository history and file history without losing
+your place. Comparisons open in the editor's native diff view, not a custom one.
 
 **Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
 
@@ -16,7 +20,7 @@ A commit graph needs width. A wide sidebar takes that space from your editor. Gi
 ## Highlights
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
-- Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
+- Explains the real Git endpoints used for each changed file in both continuous ranges and explicit commit selections
 - Keeps several File History investigations open and returns any revision to its commit in Repository History
 - Previews supported text and image changes in the native editor, resolving only the selected historical Git LFS content when needed
 - Surfaces conflicts from merges, rebases, cherry-picks, reverts, and stash application, then hands supported files to the host editor's native resolution flow

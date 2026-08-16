@@ -1,7 +1,7 @@
 {
   "name": "git-amida",
   "displayName": "GitAmida",
-  "description": "A minimal Git history navigator. Commit graph and file history in the bottom Panel; comparisons in native diffs.",
+  "description": "Not a full Git client—just a clearer way to read history. See what changed across a range of commits in the bottom Panel.",
   "icon": "media/git-amida-marketplace.png",
   "version": "0.0.4",
   "private": true,
