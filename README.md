@@ -1,5 +1,7 @@
 # GitAmida
 
+![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
+
 GitAmida does one thing: make Git history readable. It is not a full Git client
 and does not replace the editor's built-in Source Control view.
 
@@ -8,10 +10,6 @@ view. Keep your code open in the editor while you follow its history in the
 bottom Panel, moving between repository history and file history without losing
 your place. Comparisons open in the editor's native diff view, not a custom one.
 
-**Repository History** — Navigate the commit graph and inspect changed files and commit details without leaving the Panel.
-
-![GitAmida Repository History with a commit graph, changed-file tree, and commit details](./assets/marketplace/repository-history.png)
-
 ## Install
 
 - **Cursor:** Search Extensions for `GitAmida`, or [open the Open VSX listing](https://open-vsx.org/extension/hirosco/git-amida)
@@ -19,7 +17,7 @@ your place. Comparisons open in the editor's native diff view, not a custom one.
 
 ## Highlights
 
-- Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
+- Makes Repository History scannable with a compact, theme-aware commit graph, branches, tags, linked worktree locations, commit details, and saved working-tree changes
 - Explains the real Git endpoints used for each changed file in both continuous ranges and explicit commit selections
 - Keeps several File History investigations open and returns any revision to its commit in Repository History
 - Previews supported text and image changes in the native editor, resolving only the selected historical Git LFS content when needed
