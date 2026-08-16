@@ -991,6 +991,10 @@ export class GitClient {
         "rebase-merge",
         "--git-path",
         "rebase-apply",
+        "--git-path",
+        "CHERRY_PICK_HEAD",
+        "--git-path",
+        "REVERT_HEAD",
       ],
       {
         operation: "Git operation discovery",
@@ -1003,15 +1007,18 @@ export class GitClient {
       .trim()
       .split(/\r?\n/)
       .map((path) => (isAbsolute(path) ? path : resolve(repository, path)));
-    const [merge, rebaseMerge, rebaseApply] = await Promise.all(
-      paths.map(pathExists),
-    );
+    const [merge, rebaseMerge, rebaseApply, cherryPick, revert] =
+      await Promise.all(paths.map(pathExists));
     if (merge === true) {
       return "merge";
     }
-    return rebaseMerge === true || rebaseApply === true
-      ? "rebase"
-      : undefined;
+    if (rebaseMerge === true || rebaseApply === true) {
+      return "rebase";
+    }
+    if (cherryPick === true) {
+      return "cherry-pick";
+    }
+    return revert === true ? "revert" : undefined;
   }
 
   private async loadGitLfsObjectHashes(

@@ -68,7 +68,7 @@ When saved uncommitted changes exist, show one visually distinct **Uncommitted c
 - Compare a tracked path from HEAD to its current saved filesystem content; compare untracked files from an empty before-state
 - Keep the working tree out of Shift ranges and Cmd/Ctrl explicit commit selections
 
-Read unresolved index stages separately from the HEAD-to-filesystem snapshot so modify/delete conflicts cannot disappear when the retained working file matches HEAD. Keep the history row as **Uncommitted changes (N)** using unique changed paths, and add **Merge in progress** or **Rebase in progress** with the unresolved count. While either operation is active, split the inspection list into **Merge Changes** and **Changes** groups. Use complete conflict wording such as **Both modified**, **Deleted by us**, and **Deleted by them** while retaining one row per path.
+Read unresolved index stages separately from the HEAD-to-filesystem snapshot so modify/delete conflicts cannot disappear when the retained working file matches HEAD. Keep the history row as **Uncommitted changes (N)** using unique changed paths, and always add the unresolved count when conflicts exist. Prefix that count with **Merge in progress**, **Rebase in progress**, **Cherry-pick in progress**, or **Revert in progress** only when the corresponding reliable Git marker exists; leave stash application and other unclassified conflicts generic rather than guessing their origin. Whenever the index is unmerged, split the inspection list into **Merge Changes** and **Changes** groups. Use complete conflict wording such as **Both modified**, **Deleted by us**, and **Deleted by them** while retaining one row per path.
 
 ### Changed files and commit details
 

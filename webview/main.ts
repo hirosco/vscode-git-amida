@@ -12,7 +12,11 @@ import type {
   RepositoryViewStatePatch,
   WorkingTreeState,
 } from "../src/model";
-import { conflictStatusLabel } from "../src/conflicts.js";
+import {
+  conflictStatusLabel,
+  workingTreeConflictSummary,
+  workingTreeOperationLabel,
+} from "../src/conflicts.js";
 import type {
   HostToWebviewMessage,
   RepositoryStateKind,
@@ -761,7 +765,7 @@ function renderWorkingTreeRow(): boolean {
 
   const fileCount = workingTree.files.length;
   const label = `Uncommitted changes (${fileCount})`;
-  const operation = workingTreeOperationSummary(workingTree);
+  const operation = workingTreeConflictSummary(workingTree);
   if (existing !== null) {
     const subject = existing.querySelector<HTMLElement>(".subject");
     if (subject !== null) {
@@ -820,19 +824,6 @@ function renderWorkingTreeRow(): boolean {
     elements.history.scrollTop = scrollTop + rowHeight;
   }
   return false;
-}
-
-function workingTreeOperationSummary(
-  state: WorkingTreeState,
-): string | undefined {
-  if (state.operation === undefined) {
-    return undefined;
-  }
-  const conflictCount = state.files.filter(
-    (file) => file.conflict !== undefined,
-  ).length;
-  const operation = state.operation === "merge" ? "Merge" : "Rebase";
-  return `${operation} in progress · ${conflictCount} conflict${conflictCount === 1 ? "" : "s"}`;
 }
 
 function createWorkingTreeMarker(): SVGSVGElement {
@@ -1173,7 +1164,8 @@ function renderFiles(): void {
   }
 
   const groupedWorkingTree =
-    selection?.mode === "workingTree" && workingTree?.operation !== undefined;
+    selection?.mode === "workingTree" &&
+    currentFiles.some((file) => file.conflict !== undefined);
   if (fileViewMode === "flat") {
     elements.files.setAttribute("role", "listbox");
   } else {
@@ -1526,19 +1518,17 @@ function renderWorkingTreeDetails(
   list.className = "details-list";
   appendDetail(list, "Base HEAD", current.headHash);
   appendDetail(list, "Files", String(workingTree?.files.length ?? 0));
+  const conflictCount =
+    workingTree?.files.filter((file) => file.conflict !== undefined).length ?? 0;
   if (workingTree?.operation !== undefined) {
     appendDetail(
       list,
       "Operation",
-      workingTree.operation === "merge" ? "Merge in progress" : "Rebase in progress",
+      `${workingTreeOperationLabel(workingTree.operation)} in progress`,
     );
-    appendDetail(
-      list,
-      "Conflicts",
-      String(
-        workingTree.files.filter((file) => file.conflict !== undefined).length,
-      ),
-    );
+  }
+  if (workingTree?.operation !== undefined || conflictCount > 0) {
+    appendDetail(list, "Conflicts", String(conflictCount));
   }
   appendDetail(list, "Comparison", "HEAD → saved working tree");
   appendDetail(list, "Unsaved editors", "Excluded until saved");

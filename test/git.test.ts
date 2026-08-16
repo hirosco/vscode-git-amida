@@ -569,6 +569,93 @@ test("GitClient identifies an in-progress rebase", async (context) => {
   assert.deepEqual(state.files.map((file) => file.conflict?.status), ["UU"]);
 });
 
+test("GitClient identifies conflicts during a cherry-pick", async (context) => {
+  const repository = mkdtempSync(
+    join(tmpdir(), "git-amida-cherry-pick-conflict-test-"),
+  );
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q", "-b", "main");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "config", "rerere.enabled", "false");
+
+  writeFileSync(join(repository, "content.txt"), "base\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "base");
+  git(repository, "switch", "-q", "-c", "topic");
+  writeFileSync(join(repository, "content.txt"), "picked change\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "picked change");
+  const pickedCommit = git(repository, "rev-parse", "HEAD").trim();
+  git(repository, "switch", "-q", "main");
+  writeFileSync(join(repository, "content.txt"), "current change\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "current change");
+
+  gitFails(repository, "cherry-pick", pickedCommit);
+  const headHash = git(repository, "rev-parse", "HEAD").trim();
+  const state = await new GitClient().workingTreeChanges(repository, headHash);
+
+  assert.equal(state.operation, "cherry-pick");
+  assert.deepEqual(state.files.map((file) => file.conflict?.status), ["UU"]);
+});
+
+test("GitClient identifies conflicts during a revert", async (context) => {
+  const repository = mkdtempSync(
+    join(tmpdir(), "git-amida-revert-conflict-test-"),
+  );
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q", "-b", "main");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "config", "rerere.enabled", "false");
+
+  writeFileSync(join(repository, "content.txt"), "base\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "base");
+  writeFileSync(join(repository, "content.txt"), "change to revert\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "change to revert");
+  const revertedCommit = git(repository, "rev-parse", "HEAD").trim();
+  writeFileSync(join(repository, "content.txt"), "later change\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "later change");
+
+  gitFails(repository, "revert", "--no-edit", revertedCommit);
+  const headHash = git(repository, "rev-parse", "HEAD").trim();
+  const state = await new GitClient().workingTreeChanges(repository, headHash);
+
+  assert.equal(state.operation, "revert");
+  assert.deepEqual(state.files.map((file) => file.conflict?.status), ["UU"]);
+});
+
+test("GitClient keeps stash-apply conflicts visible without guessing an operation", async (context) => {
+  const repository = mkdtempSync(
+    join(tmpdir(), "git-amida-stash-conflict-test-"),
+  );
+  context.after(() => rmSync(repository, { recursive: true, force: true }));
+  git(repository, "init", "-q", "-b", "main");
+  git(repository, "config", "user.name", "GitAmida Test");
+  git(repository, "config", "user.email", "test@example.invalid");
+  git(repository, "config", "rerere.enabled", "false");
+
+  writeFileSync(join(repository, "content.txt"), "base\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "base");
+  writeFileSync(join(repository, "content.txt"), "stashed change\n");
+  git(repository, "stash", "push", "-q", "-m", "conflicting stash");
+  writeFileSync(join(repository, "content.txt"), "current change\n");
+  git(repository, "add", "--", "content.txt");
+  git(repository, "commit", "-q", "-m", "current change");
+
+  gitFails(repository, "stash", "apply", "stash@{0}");
+  const headHash = git(repository, "rev-parse", "HEAD").trim();
+  const state = await new GitClient().workingTreeChanges(repository, headHash);
+
+  assert.equal(state.operation, undefined);
+  assert.deepEqual(state.files.map((file) => file.conflict?.status), ["UU"]);
+});
+
 test("GitClient fingerprints only history-affecting repository state", async (context) => {
   const repository = mkdtempSync(join(tmpdir(), "git-amida-refresh-test-"));
   context.after(() => rmSync(repository, { recursive: true, force: true }));

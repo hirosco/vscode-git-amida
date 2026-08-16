@@ -5,6 +5,7 @@ import {
   conflictStatusLabel,
   conflictSupportsMergetool,
   parseUnmergedIndex,
+  workingTreeConflictSummary,
 } from "../src/conflicts";
 
 test("parseUnmergedIndex derives every unmerged status from index stages", () => {
@@ -56,6 +57,42 @@ test("parseUnmergedIndex preserves spaces, tabs, and non-ASCII paths", () => {
 
   assert.equal(parsed[0]?.path, path);
   assert.equal(parsed[0]?.conflict.status, "UD");
+});
+
+test("workingTreeConflictSummary labels known and unclassified conflicts", () => {
+  const conflictedFile = {
+    status: "U",
+    path: "content.txt",
+    conflict: { status: "UU" as const },
+  };
+
+  assert.equal(
+    workingTreeConflictSummary({
+      headHash: "head",
+      files: [conflictedFile],
+      operation: "cherry-pick",
+    }),
+    "Cherry-pick in progress · 1 conflict",
+  );
+  assert.equal(
+    workingTreeConflictSummary({
+      headHash: "head",
+      files: [conflictedFile],
+    }),
+    "1 conflict",
+  );
+  assert.equal(
+    workingTreeConflictSummary({
+      headHash: "head",
+      files: [],
+      operation: "revert",
+    }),
+    "Revert in progress · 0 conflicts",
+  );
+  assert.equal(
+    workingTreeConflictSummary({ headHash: "head", files: [] }),
+    undefined,
+  );
 });
 
 function record(path: string, stage: 1 | 2 | 3): string {

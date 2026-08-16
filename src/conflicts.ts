@@ -1,4 +1,8 @@
-import type { ConflictStatus, FileConflict } from "./model";
+import type {
+  ConflictStatus,
+  FileConflict,
+  WorkingTreeState,
+} from "./model";
 
 export interface UnmergedIndexStage {
   mode: string;
@@ -30,6 +34,16 @@ const CONFLICT_STATUS_BY_STAGES: Record<string, ConflictStatus> = {
   "1,3": "DU",
   "2,3": "AA",
   "1,2,3": "UU",
+};
+
+const OPERATION_LABELS: Record<
+  NonNullable<WorkingTreeState["operation"]>,
+  string
+> = {
+  merge: "Merge",
+  rebase: "Rebase",
+  "cherry-pick": "Cherry-pick",
+  revert: "Revert",
 };
 
 export function parseUnmergedIndex(output: Uint8Array): UnmergedIndexEntry[] {
@@ -79,4 +93,24 @@ export function conflictStatusLabel(conflict: FileConflict): string {
 
 export function conflictSupportsMergetool(conflict: FileConflict): boolean {
   return conflict.status === "AA" || conflict.status === "UU";
+}
+
+export function workingTreeOperationLabel(
+  operation: NonNullable<WorkingTreeState["operation"]>,
+): string {
+  return OPERATION_LABELS[operation];
+}
+
+export function workingTreeConflictSummary(
+  state: WorkingTreeState,
+): string | undefined {
+  const conflictCount = state.files.filter(
+    (file) => file.conflict !== undefined,
+  ).length;
+  const conflicts = `${conflictCount} conflict${conflictCount === 1 ? "" : "s"}`;
+  return state.operation === undefined
+    ? conflictCount === 0
+      ? undefined
+      : conflicts
+    : `${workingTreeOperationLabel(state.operation)} in progress · ${conflicts}`;
 }

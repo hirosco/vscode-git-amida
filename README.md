@@ -12,7 +12,7 @@ GitAmida keeps repository and file history connected in the bottom Panel while o
 ## Highlights
 
 - Shows a compact, theme-aware commit graph with branches, tags, linked worktree locations, commit details, and saved working-tree changes
-- Identifies in-progress merges and rebases, counts every unresolved index path, and opens supported content conflicts in the host editor's native resolution flow
+- Identifies in-progress merges, rebases, cherry-picks, and reverts; counts unresolved index paths from any source, including stash application; and opens supported content conflicts in the host editor's native resolution flow
 - Selects a continuous Range with Shift or an explicit Selection with Cmd/Ctrl, then explains the real Git endpoints used for each changed file
 - Opens several independent File History tabs, marks Large, Submodule, and LFS revisions, and returns from a revision to its commit in Repository History
 - Previews text and supported image changes in the native editor, with the editor's standard fallback for other binary files

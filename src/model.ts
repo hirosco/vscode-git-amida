@@ -124,7 +124,7 @@ export interface HistoryResult {
 export interface WorkingTreeState {
   headHash: string;
   files: ChangedFile[];
-  operation?: "merge" | "rebase";
+  operation?: "merge" | "rebase" | "cherry-pick" | "revert";
 }
 
 export interface WorkingTreeSelection {
