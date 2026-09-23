@@ -18,6 +18,8 @@ import {
 } from "node:path";
 import { promisify } from "node:util";
 
+import { type GitExecutable, gitFromPath } from "./gitExecutable";
+
 const execFileAsync = promisify(execFile);
 const MAX_METADATA_BUFFER = 4 * 1024 * 1024;
 const MIN_BLOB_BUFFER = 4 * 1024 * 1024;
@@ -73,6 +75,10 @@ export class FileRestoreError extends Error {
 }
 
 export class FileRestoreService {
+  public constructor(
+    private readonly gitExecutable: GitExecutable = gitFromPath,
+  ) {}
+
   public async preflight(
     request: FileRestoreRequest,
   ): Promise<FileRestorePlan> {
@@ -340,7 +346,7 @@ export class FileRestoreService {
   ): Promise<Buffer> {
     try {
       const { stdout } = await execFileAsync(
-        "git",
+        await this.gitExecutable(),
         commandArgs(repository, args),
         {
           encoding: "buffer",

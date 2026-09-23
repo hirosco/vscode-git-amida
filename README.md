@@ -50,9 +50,11 @@ When Git has unresolved index entries, GitAmida counts them, separates **Merge C
 ## Requirements
 
 - VS Code 1.100.0 or later, or a compatible Cursor desktop build
-- A file-system workspace with the Git CLI available as `git` in the Extension Host environment
+- A file-system workspace with Git installed and detected by the editor's built-in Git extension (including installations configured through `git.path`)
 - Git LFS when a selected historical LFS object is not already available in the repository's local LFS storage
 - A trusted workspace; GitAmida is disabled in Restricted Mode because it invokes Git and offers explicitly requested repository and file mutations
+
+GitAmida uses the same Git executable as the editor's built-in Git extension. If Git is not detected, install Git or set `git.path` in User Settings, ensure Git is enabled, and reload the window.
 
 ## Current limitations
 

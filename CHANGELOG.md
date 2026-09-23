@@ -2,6 +2,12 @@
 
 All notable changes to GitAmida will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- Use the editor's detected Git executable across history, file restoration, branch switching, and external tools, including installations outside PATH and `git.path` overrides
+
 ## 0.0.5 - 2026-08-17
 
 ### Changed
