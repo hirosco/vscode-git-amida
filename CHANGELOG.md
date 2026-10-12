@@ -2,7 +2,7 @@
 
 All notable changes to GitAmida will be documented in this file.
 
-## Unreleased
+## 0.0.6 - 2026-10-12
 
 ### Fixed
 
