@@ -17,12 +17,16 @@ import { ExternalMergetoolService } from "./externalMergetool";
 import { FileRestoreService } from "./fileRestorer";
 import { GitClient } from "./git";
 import { observeGitRepositories } from "./gitEvents";
+import { editorGitExecutable, type GitExecutableExtension } from "./gitExecutable";
 import { HistoryViewProvider } from "./panel";
 
 const DIFF_TAB_REPLACEMENT_GRACE_MS = 1_000;
 
 export function activate(context: vscode.ExtensionContext): void {
   const diagnosticOutput = vscode.window.createOutputChannel("GitAmida");
+  const gitExecutable = editorGitExecutable(
+    vscode.extensions.getExtension<GitExecutableExtension>("vscode.git"),
+  );
   const git = new GitClient((event) => {
     if (
       (event.status === "completed" && event.durationMs < 1_000) ||
@@ -33,19 +37,19 @@ export function activate(context: vscode.ExtensionContext): void {
     diagnosticOutput.appendLine(
       `${event.operation}: ${event.status} in ${event.durationMs} ms${event.message === undefined ? "" : ` — ${event.message}`}`,
     );
-  });
-  const branchMutations = new BranchMutationService();
+  }, gitExecutable);
+  const branchMutations = new BranchMutationService(gitExecutable);
   const contentProvider = new GitContentProvider();
   const blobProvider = new GitBlobFileSystemProvider();
   const diffSessions = new NativeDiffSessionRegistry();
-  const externalDifftool = new ExternalDifftoolService();
-  const externalMergetool = new ExternalMergetoolService();
+  const externalDifftool = new ExternalDifftoolService(undefined, gitExecutable);
+  const externalMergetool = new ExternalMergetoolService(undefined, gitExecutable);
   const activeConflict = new ActiveConflictTracker(
     git,
     async (repository) =>
       (await externalMergetool.configuredTool(repository)) !== undefined,
   );
-  const fileRestorer = new FileRestoreService();
+  const fileRestorer = new FileRestoreService(gitExecutable);
   const pendingDiffReleases = new Set<ReturnType<typeof setTimeout>>();
   const historyProvider = new HistoryViewProvider(
     context.extensionUri,

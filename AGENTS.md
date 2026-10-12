@@ -115,6 +115,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 ## Git CLI handling
 
+- In the Extension Host, use the Git executable detected by the built-in Git extension for every Git subprocess, including mutations and external tools. Keep standalone adapters injectable and do not introduce a separate Git-path setting or runtime PATH fallback.
 - Use `execFile` with an executable and argument array. Never construct a shell command.
 - Put `--` before path arguments when the Git command accepts it.
 - Disable color, pagers, and external diffs for parsed output.

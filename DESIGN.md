@@ -281,6 +281,8 @@ Use a Webview View because a topology graph, compact data grid, resizable detail
 
 Invoke the locally installed Git CLI from the Extension Host instead of parsing `.git` directly.
 
+Resolve the executable through the built-in Git extension's public `getAPI(1).git.path`, waiting briefly for its detection to finish. Supply this resolver to history queries, branch switching, file restoration, and external diff/merge tools so installations outside PATH work consistently with the editor, including `git.path` overrides. Report unavailable Git with setup guidance instead of silently using a different executable from PATH. Keep the resolver injectable so the adapters remain independent of VS Code; standalone tests and fixture scripts default to `git` from their own environment.
+
 - Run `execFile` with an argument array and never use a shell
 - Disable color, pagers, and external diff behavior for parsed output; invoke a configured difftool only across the separate explicit opener boundary
 - Use NUL-delimited output for paths

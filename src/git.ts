@@ -14,6 +14,7 @@ import {
   parseUnmergedIndex,
   type UnmergedIndexEntry,
 } from "./conflicts";
+import { type GitExecutable, gitFromPath } from "./gitExecutable";
 import { buildHistoryGraph, type HistoryGraphState } from "./graph";
 import type {
   ChangedFile,
@@ -184,6 +185,7 @@ export class NotGitRepositoryError extends GitError {
 export class GitClient {
   public constructor(
     private readonly reportDiagnostic?: (event: GitDiagnosticEvent) => void,
+    private readonly gitExecutable: GitExecutable = gitFromPath,
   ) {}
 
   public async resolveRepository(
@@ -1255,7 +1257,9 @@ export class GitClient {
 
     try {
       throwIfAborted(options.signal, options.operation);
-      const { stdout } = await execFileAsync("git", gitArgs, {
+      const executable = await this.gitExecutable(options.signal);
+      throwIfAborted(options.signal, options.operation);
+      const { stdout } = await execFileAsync(executable, gitArgs, {
         encoding: "buffer",
         maxBuffer,
         timeout,
@@ -1315,29 +1319,34 @@ export class GitClient {
         reject(failure);
       };
 
-      try {
-        throwIfAborted(options.signal, options.operation);
-        const child = execFile(
-          "git",
-          commandArgs(directory, args),
-          {
-            encoding: "buffer",
-            maxBuffer: options.maxBuffer ?? MAX_BUFFER,
-            timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-            signal: options.signal,
-            env: commandEnvironment(),
-          },
-          (error, stdout, stderr) => {
-            finish(error ?? undefined, stdout, stderr);
-          },
-        );
-        child.stdin?.once("error", (error) => {
+      const start = async (): Promise<void> => {
+        try {
+          throwIfAborted(options.signal, options.operation);
+          const executable = await this.gitExecutable(options.signal);
+          throwIfAborted(options.signal, options.operation);
+          const child = execFile(
+            executable,
+            commandArgs(directory, args),
+            {
+              encoding: "buffer",
+              maxBuffer: options.maxBuffer ?? MAX_BUFFER,
+              timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+              signal: options.signal,
+              env: commandEnvironment(),
+            },
+            (error, stdout, stderr) => {
+              finish(error ?? undefined, stdout, stderr);
+            },
+          );
+          child.stdin?.once("error", (error) => {
+            finish(error);
+          });
+          child.stdin?.end(input);
+        } catch (error) {
           finish(error);
-        });
-        child.stdin?.end(input);
-      } catch (error) {
-        finish(error);
-      }
+        }
+      };
+      void start();
     });
   }
 

@@ -3,6 +3,7 @@ import { lstat } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 
+import { type GitExecutable, gitFromPath } from "./gitExecutable";
 import { parseGitWorktrees } from "./worktrees";
 
 const execFileAsync = promisify(execFile);
@@ -26,6 +27,10 @@ export class BranchSwitchError extends Error {
 }
 
 export class BranchMutationService {
+  public constructor(
+    private readonly gitExecutable: GitExecutable = gitFromPath,
+  ) {}
+
   public async localBranchesAtCommit(
     repository: string,
     commitHash: string,
@@ -229,7 +234,7 @@ export class BranchMutationService {
   ): Promise<Buffer> {
     try {
       const { stdout } = await execFileAsync(
-        "git",
+        await this.gitExecutable(),
         commandArgs(repository, args),
         {
           encoding: "buffer",

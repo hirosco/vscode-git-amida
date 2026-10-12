@@ -1,5 +1,7 @@
 import * as vscode from "vscode";
 
+import { type GitExecutableExtension, waitForGitExtension } from "./gitExecutable";
+
 interface GitRef {
   type: number;
   name?: string;
@@ -18,12 +20,13 @@ interface GitRepository {
 }
 
 interface GitApi {
+  readonly git: { readonly path: string };
   repositories: GitRepository[];
   onDidOpenRepository: vscode.Event<GitRepository>;
   onDidCloseRepository: vscode.Event<GitRepository>;
 }
 
-interface GitExtensionExports {
+interface GitExtensionExports extends GitExecutableExtension {
   getAPI(version: 1): GitApi;
 }
 
@@ -43,6 +46,7 @@ export async function observeGitRepositories(
   const exports = extension.isActive
     ? extension.exports
     : await extension.activate();
+  await waitForGitExtension(exports);
   const api = exports.getAPI(1);
   const repositorySubscriptions = new Map<string, vscode.Disposable>();
 

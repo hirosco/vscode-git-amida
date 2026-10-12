@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 
 import { conflictSupportsMergetool } from "./conflicts";
+import { type GitExecutable, gitFromPath } from "./gitExecutable";
 import type { FileConflict } from "./model";
 
 const MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -28,7 +29,13 @@ export interface ExternalMergeRequest {
 }
 
 export class ExternalMergetoolService {
-  public constructor(private readonly runGit: RunGit = executeGit) {}
+  private readonly runGit: RunGit;
+
+  public constructor(runGit?: RunGit, gitExecutable: GitExecutable = gitFromPath) {
+    this.runGit = runGit ?? (async (repository, args) =>
+      executeGit(await gitExecutable(), repository, args)
+    );
+  }
 
   public async configuredTool(
     repository: string,
@@ -82,12 +89,13 @@ export class ExternalMergetoolService {
 }
 
 function executeGit(
+  executable: string,
   repository: string,
   args: readonly string[],
 ): Promise<GitResult> {
   return new Promise((resolve, reject) => {
     execFile(
-      "git",
+      executable,
       ["-C", repository, ...args],
       {
         encoding: "utf8",
