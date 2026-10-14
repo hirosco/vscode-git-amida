@@ -16,7 +16,7 @@ Do not create append-only completion histories, ADR directories, or per-feature 
 
 ## Language policy
 
-- Keep canonical repository documentation, code, identifiers, comments, and commit messages in English.
+- Keep canonical repository documentation, code, identifiers, and comments in English.
 - Communicate progress, reviews, explanations, and handoffs to the project owner in Japanese unless requested otherwise.
 - When changing English documentation, summarize the material changes and rationale in Japanese.
 - Do not maintain complete translated copies of canonical documents.
@@ -207,7 +207,7 @@ Do not introduce a framework, bundler, domain package, or nested extension works
 
 ## Git workflow
 
-- Write commit messages in English and follow Conventional Commits.
+- Follow Conventional Commits for commit messages.
 - Use `feature/<topic>` for new branches by default.
 - Use `git switch` to change branches and `git restore` to restore files.
 - Preserve existing user changes and do not mix unrelated work into the task.
